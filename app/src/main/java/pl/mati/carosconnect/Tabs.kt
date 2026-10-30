@@ -41,6 +41,12 @@ import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -106,6 +112,13 @@ private fun thousands(v: Int): String = "%,d".format(v).replace(',', ' ')
 fun CarTab(actions: Actions) {
     val st by CarData.status.collectAsState()
     val pairing by Store.pairing.collectAsState()
+    // zakładka otwarta → co 20 s sprawdzaj zmiany z radia (np. serwis zmieniony w aucie)
+    LaunchedEffect(pairing) {
+        while (pairing != null) {
+            delay(20_000)
+            actions.refreshFromCar()
+        }
+    }
     if (pairing == null) {
         Card {
             Text("Połącz z CAR OS", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
@@ -121,32 +134,54 @@ fun CarTab(actions: Actions) {
             Text("Włącz radio z CAR OS (z internetem) i pociągnij ekran w dół, żeby odświeżyć.", fontSize = 15.sp, color = C.Muted)
         }
     } else {
+        var editOdo by remember { mutableStateOf(false) }
+        var editItem by remember { mutableStateOf<CarData.SvcItem?>(null) }
+        val editable = s.items.isNotEmpty()
         Card {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(enabled = editable) { editOdo = true },
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
                 Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(C.Accent.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
                     Icon(Icons.Rounded.DirectionsCar, null, tint = C.Accent, modifier = Modifier.size(30.dp))
                 }
                 Column(Modifier.weight(1f)) {
                     Text("PRZEBIEG", fontSize = 12.sp, letterSpacing = 1.5.sp, color = C.Muted, fontWeight = FontWeight.SemiBold)
-                    Text(s.odo?.let { "${thousands(it)} km" } ?: "nie ustawiono", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = C.Text)
+                    Text(if (s.odoSet && s.odo != null) "${thousands(s.odo)} km" else "nie ustawiono", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = C.Text)
                 }
+                if (editable) Icon(Icons.Rounded.Edit, "Zmień przebieg", tint = C.Muted, modifier = Modifier.size(22.dp))
             }
             Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 StatBox("Dziś", km(s.todayM), Modifier.weight(1f))
                 StatBox("Tydzień", km(s.weekM), Modifier.weight(1f))
                 StatBox("Miesiąc", km(s.monthM), Modifier.weight(1f))
             }
-            Text("Dane z auta: ${whenText(s.time)}" + (if (s.version.isNotBlank()) " · CAR OS ${s.version}" else ""), fontSize = 12.sp, color = C.Muted)
+            if (s.pending) {
+                Text("Zmiany czekają na radio – zapiszą się, gdy CAR OS będzie online", fontSize = 12.sp, color = C.Orange)
+            } else {
+                Text("Dane z auta: ${whenText(s.time)}" + (if (s.version.isNotBlank()) " · CAR OS ${s.version}" else ""), fontSize = 12.sp, color = C.Muted)
+            }
         }
 
-        Label("Serwis")
-        val known = s.service.filter { it.known }
-        if (known.isEmpty()) {
-            Card { Text("Brak danych serwisowych – uzupełnij w radiu: Serwis → kiedy ostatnio.", fontSize = 15.sp, color = C.Muted) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Label("Serwis", Modifier.weight(1f))
+            if (editable) Text("dotknij, aby zmienić", fontSize = 12.sp, color = C.Muted)
         }
-        known.forEach { ServiceRow(it) }
-        val unknown = s.service.size - known.size
-        if (unknown > 0) Text("$unknown poz. bez danych – uzupełnij w radiu", fontSize = 13.sp, color = C.Muted)
+        if (editable) {
+            val rows = s.items.map { it to ServiceCalc.due(it, s.odo, s.odoSet) }
+                .sortedWith(compareByDescending<Pair<CarData.SvcItem, CarData.Service>> { it.second.overdue }
+                    .thenByDescending { it.second.soon }.thenByDescending { it.second.known }.thenByDescending { it.second.fraction })
+            rows.forEach { (item, due) -> ServiceRow(due) { editItem = item } }
+        } else {
+            val known = s.service.filter { it.known }
+            if (known.isEmpty()) {
+                Card { Text("Brak danych serwisowych – uzupełnij w radiu: Serwis → kiedy ostatnio.", fontSize = 15.sp, color = C.Muted) }
+            }
+            known.forEach { ServiceRow(it, null) }
+            Text("Zaktualizuj CAR OS w radiu, żeby zmieniać serwis z telefonu", fontSize = 13.sp, color = C.Muted)
+        }
+        if (editOdo) OdoDialog(s.odo) { editOdo = false }
+        editItem?.let { ServiceEditDialog(it) { editItem = null } }
     }
 
     Label("Wyślij cel do auta", Modifier.padding(top = 6.dp))
@@ -169,8 +204,9 @@ private fun StatBox(label: String, value: String, modifier: Modifier) {
 }
 
 @Composable
-private fun ServiceRow(s: CarData.Service) {
+private fun ServiceRow(s: CarData.Service, onClick: (() -> Unit)?) {
     val col = when {
+        !s.known -> C.Muted
         s.overdue -> Color(0xFFFF5A5F)
         s.soon -> C.Orange
         else -> C.Green
@@ -178,12 +214,14 @@ private fun ServiceRow(s: CarData.Service) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card)
             .border(1.dp, if (s.overdue) col.copy(alpha = 0.6f) else C.Border, RoundedCornerShape(16.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(Icons.Rounded.Build, null, tint = col, modifier = Modifier.size(20.dp))
             Text(s.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Text, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (onClick != null) Icon(Icons.Rounded.Edit, null, tint = C.Muted, modifier = Modifier.size(18.dp))
         }
         Text(s.text, fontSize = 14.sp, color = if (s.overdue || s.soon) col else C.Muted)
         LinearProgressIndicator(
@@ -768,4 +806,142 @@ private fun ToggleRow(title: String, sub: String, on: Boolean, onChange: (Boolea
             colors = SwitchDefaults.colors(checkedTrackColor = C.Accent, checkedThumbColor = C.Bg),
         )
     }
+}
+
+
+// ======================= SERWIS: edycja z telefonu =======================
+
+private val DATE = SimpleDateFormat("dd.MM.yyyy", PL)
+
+/** Wysyła zmianę serwisu do radia, potem po chwili pobiera potwierdzony stan. */
+private suspend fun sendSvc(ctx: android.content.Context, o: JSONObject) {
+    val p = Store.pairing.value ?: return
+    val ok = withContext(Dispatchers.IO) { try { Link.send(p, o); true } catch (_: Exception) { false } }
+    Toast.makeText(
+        ctx,
+        if (ok) "Zapisano – zmiana trafi do radia" else "Zapisano w telefonie – wyślę, gdy będzie internet",
+        Toast.LENGTH_SHORT,
+    ).show()
+    if (ok) Sync.later(ctx, 8000)
+}
+
+@Composable
+private fun NumField(label: String, value: String, onChange: (String) -> Unit, hint: String, modifier: Modifier = Modifier) {
+    OutlinedTextField(
+        value = value, onValueChange = { v -> onChange(v.filter(Char::isDigit).take(7)) },
+        label = { Text(label) },
+        placeholder = { Text(hint) },
+        singleLine = true,
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = C.Accent, unfocusedBorderColor = C.Border,
+            focusedTextColor = C.Text, unfocusedTextColor = C.Text, cursorColor = C.Accent,
+            focusedLabelColor = C.Accent, unfocusedLabelColor = C.Muted,
+        ),
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ServiceEditDialog(item: CarData.SvcItem, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var lastKm by remember { mutableStateOf(if (item.lastKm >= 0) item.lastKm.toString() else "") }
+    var lastDate by remember { mutableLongStateOf(item.lastDate) }
+    var iKm by remember { mutableStateOf(if (item.intervalKm > 0) item.intervalKm.toString() else "") }
+    var iMo by remember { mutableStateOf(if (item.intervalMonths > 0) item.intervalMonths.toString() else "") }
+    var pickDate by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = C.Card,
+        title = { Text(item.name, color = C.Text) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    NumField("Ostatnio (km)", lastKm, { lastKm = it }, "np. 230000", Modifier.weight(1f))
+                    Column(
+                        Modifier.weight(1f).height(64.dp).padding(top = 8.dp).clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, C.Border, RoundedCornerShape(12.dp)).clickable { pickDate = true }
+                            .padding(horizontal = 12.dp),
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Text("Ostatnio dnia", fontSize = 12.sp, color = C.Muted)
+                        Text(if (lastDate > 0) DATE.format(Date(lastDate)) else "wybierz", fontSize = 16.sp, color = C.Text)
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    NumField("Co ile km", iKm, { iKm = it.take(6) }, "0 = brak", Modifier.weight(1f))
+                    NumField("Co ile mies.", iMo, { iMo = it.take(3) }, "0 = brak", Modifier.weight(1f))
+                }
+                SecondaryButton("Wykonano dziś", Icons.Rounded.Build, Modifier.fillMaxWidth()) {
+                    CarData.markDoneLocal(item.id)
+                    scope.launch { sendSvc(ctx, JSONObject().put("type", "svc_done").put("id", item.id)) }
+                    onDismiss()
+                }
+                Text("„Wykonano dziś” zapisze dzisiejszą datę i aktualny przebieg z radia.", fontSize = 12.sp, color = C.Muted)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val n = item.copy(
+                    lastKm = lastKm.toIntOrNull() ?: -1,
+                    lastDate = lastDate,
+                    intervalKm = iKm.toIntOrNull() ?: 0,
+                    intervalMonths = iMo.toIntOrNull() ?: 0,
+                )
+                CarData.editItemLocal(n)
+                scope.launch { sendSvc(ctx, JSONObject().put("type", "svc_item").put("item", n.toJson())) }
+                onDismiss()
+            }) { Text("Zapisz") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Anuluj") } },
+    )
+
+    if (pickDate) {
+        val st = rememberDatePickerState(initialSelectedDateMillis = if (lastDate > 0) lastDate else System.currentTimeMillis())
+        DatePickerDialog(
+            onDismissRequest = { pickDate = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    st.selectedDateMillis?.let { lastDate = it + 12 * 3_600_000L } // południe – bez przesunięć strefy czasowej
+                    pickDate = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { lastDate = 0L; pickDate = false }) { Text("Wyczyść") }
+            },
+        ) { DatePicker(state = st) }
+    }
+}
+
+@Composable
+private fun OdoDialog(current: Int?, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var v by remember { mutableStateOf(current?.toString() ?: "") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = C.Card,
+        title = { Text("Przebieg auta", color = C.Text) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                NumField("Aktualny przebieg (km)", v, { v = it }, "np. 231500", Modifier.fillMaxWidth())
+                Text("Radio dalej liczy kilometry samo z GPS.", fontSize = 12.sp, color = C.Muted)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val km = v.toIntOrNull()
+                if (km != null && km > 0) {
+                    CarData.setOdoLocal(km)
+                    scope.launch { sendSvc(ctx, JSONObject().put("type", "svc_odo").put("km", km)) }
+                }
+                onDismiss()
+            }) { Text("Zapisz") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Anuluj") } },
+    )
 }

@@ -3,6 +3,7 @@ package pl.mati.carosconnect
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -12,6 +13,17 @@ import java.util.Locale
 
 /** Synchronizacja z CAR OS + pogoda przy aucie + przypomnienia (aplikacja i praca w tle). */
 object Sync {
+
+    private val bg = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main)
+
+    /** Pobranie danych z radia po chwili (po wysłaniu zmiany – radio zdąży odpowiedzieć). */
+    fun later(ctx: Context, delayMs: Long) {
+        val app = ctx.applicationContext
+        bg.launch {
+            delay(delayMs)
+            try { run(app, ask = false) } catch (_: Exception) {}
+        }
+    }
 
     /**
      * @param ask true = poproś radio o świeże dane (pociągnięcie w dół); radio odpowiada w kilka sekund, jeśli jest włączone.
@@ -88,7 +100,7 @@ object Sync {
     fun checkService(ctx: Context) {
         if (!CarData.notifService.value) return
         val st = CarData.status.value ?: return
-        val urgent = st.service.filter { it.known && (it.overdue || it.soon) }
+        val urgent = st.serviceList.filter { it.known && (it.overdue || it.soon) }
         if (urgent.isEmpty()) return
         val sp = CarData.prefs ?: return
         val now = System.currentTimeMillis()

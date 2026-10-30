@@ -17,11 +17,31 @@ object CarData {
 
     data class Place(val name: String, val detail: String, val lat: Double, val lon: Double)
 
+    /** Pozycja serwisowa (surowe dane z radia – do edycji). */
+    data class SvcItem(
+        val id: String, val name: String,
+        val intervalKm: Int,      // 0 = bez limitu km
+        val intervalMonths: Int,  // 0 = bez limitu czasu
+        val lastKm: Int,          // -1 = nieznane
+        val lastDate: Long,       // 0 = nieznane
+    ) {
+        fun toJson(): JSONObject = JSONObject().put("id", id).put("n", name).put("ik", intervalKm)
+            .put("im", intervalMonths).put("lk", lastKm).put("ld", lastDate)
+    }
+
     data class Status(
         val time: Long, val car: String, val driver: String, val odo: Int?,
         val todayM: Double, val weekM: Double, val monthM: Double,
         val service: List<Service>, val favs: List<Place>, val version: String,
-    )
+        val items: List<SvcItem> = emptyList(),
+        val odoSet: Boolean = odo != null,
+        /** Zmiany z telefonu, których radio jeszcze nie potwierdziło. */
+        val pending: Boolean = false,
+    ) {
+        /** Lista serwisowa: liczona w telefonie z surowych danych (od razu po edycji), inaczej z radia. */
+        val serviceList: List<Service>
+            get() = if (items.isEmpty()) service else ServiceCalc.list(items, odo, odoSet)
+    }
 
     data class Trip(
         val start: Long, val end: Long, val distanceM: Double, val movingS: Long, val maxSpeed: Int, val path: String?,
@@ -95,6 +115,39 @@ object CarData {
         } catch (_: Exception) {}
     }
 
+    /**
+     * Edycja serwisu w telefonie: zmiana od razu widoczna (i zapamiętana), oznaczona jako „czeka na radio”.
+     * Nowszy stan z radia (po zastosowaniu zmiany) ją zastąpi.
+     */
+    fun editLocal(change: (JSONObject) -> Unit) {
+        val raw = sp?.getString("status", null) ?: return
+        try {
+            val o = JSONObject(raw)
+            change(o)
+            o.put("t", System.currentTimeMillis()).put("pending", true)
+            val str = o.toString()
+            status.value = parseStatus(str) ?: return
+            sp?.edit()?.putString("status", str)?.apply()
+        } catch (_: Exception) {
+        }
+    }
+
+    fun editItemLocal(item: SvcItem) = editLocal { o ->
+        val a = o.optJSONArray("items") ?: return@editLocal
+        for (i in 0 until a.length()) if (a.getJSONObject(i).getString("id") == item.id) a.put(i, item.toJson())
+    }
+
+    fun markDoneLocal(id: String) = editLocal { o ->
+        val a = o.optJSONArray("items") ?: return@editLocal
+        val km = if (o.isNull("odo")) -1 else o.optInt("odo", -1)
+        for (i in 0 until a.length()) {
+            val x = a.getJSONObject(i)
+            if (x.getString("id") == id) x.put("lk", km).put("ld", System.currentTimeMillis())
+        }
+    }
+
+    fun setOdoLocal(km: Int) = editLocal { o -> o.put("odo", km).put("odoSet", true) }
+
     /** Ulubione usunięte w telefonie – od razu znikają z listy (radio potwierdzi w następnym statusie). */
     fun removeFavLocal(p: Place) {
         val s = status.value ?: return
@@ -133,6 +186,14 @@ object CarData {
                 Place(f.optString("n"), f.optString("d"), f.getDouble("lat"), f.getDouble("lon"))
             },
             version = o.optString("ver"),
+            items = (o.optJSONArray("items") ?: JSONArray()).let { a ->
+                (0 until a.length()).map { i ->
+                    val x = a.getJSONObject(i)
+                    SvcItem(x.getString("id"), x.optString("n"), x.optInt("ik"), x.optInt("im"), x.optInt("lk", -1), x.optLong("ld"))
+                }
+            },
+            odoSet = if (o.has("odoSet")) o.optBoolean("odoSet") else !o.isNull("odo"),
+            pending = o.optBoolean("pending"),
         )
     } catch (_: Exception) {
         null
