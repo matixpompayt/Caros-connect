@@ -69,6 +69,9 @@ class MainActivity : ComponentActivity(), Actions {
             osmdroidBasePath = File(cacheDir, "osmdroid")
             osmdroidTileCache = File(osmdroidBasePath, "tiles")
         }
+        CarData.init(this)
+        SyncWorker.schedule(this)
+        if (savedInstanceState == null) handleShare(intent)
         setContent { ParkApp(perms.value, this) }
     }
 
@@ -109,20 +112,24 @@ class MainActivity : ComponentActivity(), Actions {
         matchCarByName()
         startIfCarConnected()
         Updater.check(silent = true)
-        val p = Store.pairing.value ?: return "Odświeżono"
-        val before = Store.spot.value?.time
-        val s = withContext(Dispatchers.IO) { try { Link.fetchCarSpot(p) } catch (_: Exception) { null } }
-            ?: return "Odświeżono – brak nowych danych z CAR OS"
-        Store.offerCarSpot(this, s)
-        return if (Store.spot.value?.time != before) "Pobrano nowe miejsce z CAR OS" else "Odświeżono – miejsce aktualne"
+        return Sync.run(this, ask = true)
     }
 
-    /** Pobiera z przekaźnika ostatnie miejsce parkowania wysłane przez radio. */
+    /** Dane z CAR OS (miejsce, stan auta, trasy, kopia) – bez pytania radia. */
     override fun refreshFromCar() {
-        val p = Store.pairing.value ?: return
-        lifecycleScope.launch {
-            val s = withContext(Dispatchers.IO) { try { Link.fetchCarSpot(p) } catch (_: Exception) { null } }
-            if (s != null) Store.offerCarSpot(this@MainActivity, s)
+        lifecycleScope.launch { try { Sync.run(this@MainActivity, ask = false) } catch (_: Exception) {} }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleShare(intent)
+    }
+
+    /** „Udostępnij → Wyślij do auta” (tekst z Map Google) albo adres geo:. */
+    private fun handleShare(i: Intent?) {
+        when (i?.action) {
+            Intent.ACTION_SEND -> i.getStringExtra(Intent.EXTRA_TEXT)?.let { Share.incoming.value = it to null }
+            Intent.ACTION_VIEW -> i.data?.takeIf { it.scheme == "geo" }?.let { Share.incoming.value = null to it }
         }
     }
 

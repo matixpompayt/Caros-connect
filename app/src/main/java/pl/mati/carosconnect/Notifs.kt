@@ -13,8 +13,14 @@ import java.util.Locale
 object Notifs {
     const val CH_DRIVE = "drive"
     const val CH_PARK = "park"
+    const val CH_SERVICE = "service"
+    const val CH_WEATHER = "weather"
+    const val CH_METER = "meter"
     const val ID_DRIVE = 1
     const val ID_PARK = 2
+    const val ID_SERVICE = 3
+    const val ID_WEATHER = 4
+    const val ID_METER = 5
 
     fun channels(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
@@ -27,6 +33,22 @@ object Notifs {
         nm.createNotificationChannel(
             NotificationChannel(CH_PARK, "Zaparkowano", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "Gdzie zostawiłeś auto"
+            },
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CH_SERVICE, "Serwis auta", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Przypomnienia z CAR OS: olej, przegląd, ubezpieczenie…"
+            },
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CH_WEATHER, "Mróz i szron", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Poranne ostrzeżenie o oblodzonych szybach"
+            },
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CH_METER, "Płatne parkowanie", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Koniec opłaconego czasu parkowania"
+                enableVibration(true)
             },
         )
     }
@@ -68,4 +90,27 @@ object Notifs {
             .build()
         try { nm.notify(ID_PARK, n) } catch (_: SecurityException) {}
     }
+
+    private fun simple(ctx: Context, ch: String, id: Int, icon: Int, title: String, text: String) {
+        channels(ctx)
+        val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
+        val n = Notification.Builder(ctx, ch)
+            .setSmallIcon(icon)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setContentIntent(openApp(ctx))
+            .setAutoCancel(true)
+            .build()
+        try { nm.notify(id, n) } catch (_: SecurityException) {}
+    }
+
+    fun service(ctx: Context, title: String, text: String) =
+        simple(ctx, CH_SERVICE, ID_SERVICE, android.R.drawable.ic_dialog_info, title, text)
+
+    fun weather(ctx: Context, title: String, text: String) =
+        simple(ctx, CH_WEATHER, ID_WEATHER, android.R.drawable.ic_dialog_alert, title, text)
+
+    fun meter(ctx: Context, title: String, text: String) =
+        simple(ctx, CH_METER, ID_METER, android.R.drawable.ic_lock_idle_alarm, title, text)
 }
