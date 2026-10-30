@@ -48,6 +48,8 @@ interface Actions {
     fun refresh()
     fun scanQr()
     fun refreshFromCar()
+    /** Pełne odświeżenie (pociągnięcie w dół). Zwraca krótki komunikat dla użytkownika. */
+    suspend fun syncNow(): String
 }
 
 class MainActivity : ComponentActivity(), Actions {
@@ -100,6 +102,19 @@ class MainActivity : ComponentActivity(), Actions {
         matchCarByName()
         Toast.makeText(this, "Połączono z ${p.car ?: "CAR OS"}", Toast.LENGTH_LONG).show()
         refreshFromCar()
+    }
+
+    override suspend fun syncNow(): String {
+        refresh()
+        matchCarByName()
+        startIfCarConnected()
+        Updater.check(silent = true)
+        val p = Store.pairing.value ?: return "Odświeżono"
+        val before = Store.spot.value?.time
+        val s = withContext(Dispatchers.IO) { try { Link.fetchCarSpot(p) } catch (_: Exception) { null } }
+            ?: return "Odświeżono – brak nowych danych z CAR OS"
+        Store.offerCarSpot(this, s)
+        return if (Store.spot.value?.time != before) "Pobrano nowe miejsce z CAR OS" else "Odświeżono – miejsce aktualne"
     }
 
     /** Pobiera z przekaźnika ostatnie miejsce parkowania wysłane przez radio. */

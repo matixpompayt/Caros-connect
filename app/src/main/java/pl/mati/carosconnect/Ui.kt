@@ -59,6 +59,10 @@ import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.LocalParking
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -139,6 +143,7 @@ fun whenText(t: Long): String {
 
 fun distText(m: Float): String = if (m >= 1000) String.format(Locale("pl"), "%.1f km", m / 1000) else "${(m / 5).roundToInt() * 5} m"
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ParkApp(perms: Perms, actions: Actions) {
     MaterialTheme(colorScheme = darkColorScheme(primary = C.Accent, background = C.Bg, surface = C.Card)) {
@@ -163,115 +168,135 @@ fun ParkApp(perms: Perms, actions: Actions) {
         val me = rememberPhoneLocation(perms.loc)
         val azimuth = rememberAzimuth(me)
 
-        Column(
-            Modifier.fillMaxSize().background(C.Bg).statusBarsPadding().navigationBarsPadding()
-                .verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            // nagłówek
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("CAR OS CONNECT", fontSize = 13.sp, color = C.Accent, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
-                    Text(pairing?.car ?: "Moje auto", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    pairing?.driver?.let { Text("Cześć, $it", fontSize = 15.sp, color = C.Muted) }
-                }
-                StatusPill(driving, car)
+        // pociągnij w dół = odśwież (pozycja z CAR OS, uprawnienia, Bluetooth, aktualizacje)
+        val pull = rememberPullToRefreshState()
+        if (pull.isRefreshing) {
+            LaunchedEffect(true) {
+                val t0 = System.currentTimeMillis()
+                val msg = try { actions.syncNow() } catch (_: Exception) { "Nie udało się odświeżyć" }
+                val wait = 700 - (System.currentTimeMillis() - t0)
+                if (wait > 0) delay(wait)
+                pull.endRefresh()
+                Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
             }
-
-            if (!perms.allOk || car == null) SetupCard(perms, actions, car) { picker = true }
-
-            val s = spot
-            if (s == null) {
-                Card {
-                    Text("Brak zapisanego miejsca", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
-                    Text(
-                        "Gdy zgasisz auto i telefon rozłączy się z radiem, aplikacja sama zapisze, gdzie stoi auto. Możesz też zapisać miejsce ręcznie.",
-                        fontSize = 15.sp, color = C.Muted,
-                    )
-                }
-            } else {
-                ParkMap(s, Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(24.dp)).border(1.dp, C.Border, RoundedCornerShape(24.dp)))
-                Card {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Box(Modifier.size(44.dp).clip(CircleShape).background(C.Accent), contentAlignment = Alignment.Center) {
-                            Text("P", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = C.Bg)
-                        }
-                        Column(Modifier.weight(1f)) {
-                            Text(s.address ?: s.coords, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = C.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            val accTxt = if (s.accuracy > 0) " · ±${s.accuracy.roundToInt()} m" else ""
-                            Text("${whenText(s.time)} · ${agoText(s.time + 0 * tick)}$accTxt", fontSize = 14.sp, color = C.Muted)
-                        }
-                    }
-                    Text(
-                        if (s.src == Store.SRC_CAR) "Zapisane przez CAR OS w aucie" else if (s.manual) "Zapisane ręcznie w telefonie" else "Zapisane przez telefon po zgaszeniu auta",
-                        fontSize = 13.sp, color = C.Muted,
-                    )
-                    if (driving) Text("Jesteś teraz w aucie – to poprzednie miejsce parkowania.", fontSize = 13.sp, color = C.Orange)
-                }
-                FinderCard(s, me, azimuth)
-                PrimaryButton("Prowadź do auta", Icons.Rounded.DirectionsWalk) {
-                    try { ctx.startActivity(Notifs.walkIntent(s)) } catch (_: Exception) {
-                        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(s.mapsUrl)))
-                    }
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                SecondaryButton("Zapisz tutaj", Icons.Rounded.LocationOn, Modifier.weight(1f)) {
-                    if (!perms.loc) { actions.requestLoc(); return@SecondaryButton }
-                    Toast.makeText(ctx, "Ustalam pozycję…", Toast.LENGTH_SHORT).show()
-                    scope.launch {
-                        val l = withContext(Dispatchers.IO) { Locator.freshFix(ctx, 15) }
-                        if (l == null) {
-                            Toast.makeText(ctx, "Brak sygnału GPS – spróbuj na zewnątrz", Toast.LENGTH_LONG).show()
-                        } else {
-                            Store.saveSpot(ctx, Store.Spot(l.latitude, l.longitude, System.currentTimeMillis(), l.accuracy, manual = true))
-                            Toast.makeText(ctx, "Zapisano miejsce", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                }
-                if (s != null) SecondaryButton("Udostępnij", Icons.Rounded.Share, Modifier.weight(1f)) {
-                    val txt = "Moje auto stoi tu: ${s.address ?: s.coords}\n${s.mapsUrl}"
-                    ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, txt), "Udostępnij miejsce"))
-                }
-            }
-
-            // historia
-            val older = history.filter { it.time != s?.time }
-            if (older.isNotEmpty()) {
+        }
+        Box(Modifier.fillMaxSize().background(C.Bg).nestedScroll(pull.nestedScrollConnection)) {
+            Column(
+                Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()
+                    .verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                // nagłówek
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Label("Poprzednie miejsca", Modifier.weight(1f))
-                    Text("Wyczyść", fontSize = 14.sp, color = C.Muted, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { Store.clearHistory() }.padding(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("CAR OS CONNECT", fontSize = 13.sp, color = C.Accent, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
+                        Text(pairing?.car ?: "Moje auto", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        pairing?.driver?.let { Text("Cześć, $it", fontSize = 15.sp, color = C.Muted) }
+                    }
+                    StatusPill(driving, car)
                 }
-                older.take(8).forEach { h ->
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card)
-                            .clickable { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(h.mapsUrl))) }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Icon(Icons.Rounded.History, null, tint = C.Muted, modifier = Modifier.size(22.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(h.address ?: h.coords, fontSize = 16.sp, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(whenText(h.time), fontSize = 13.sp, color = C.Muted)
+
+                if (!perms.allOk || car == null) SetupCard(perms, actions, car) { picker = true }
+
+                val s = spot
+                if (s == null) {
+                    Card {
+                        Text("Brak zapisanego miejsca", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+                        Text(
+                            "Gdy zgasisz auto i telefon rozłączy się z radiem, aplikacja sama zapisze, gdzie stoi auto. Możesz też zapisać miejsce ręcznie.",
+                            fontSize = 15.sp, color = C.Muted,
+                        )
+                    }
+                } else {
+                    ParkMap(s, Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(24.dp)).border(1.dp, C.Border, RoundedCornerShape(24.dp)))
+                    Card {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(Modifier.size(44.dp).clip(CircleShape).background(C.Accent), contentAlignment = Alignment.Center) {
+                                Text("P", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = C.Bg)
+                            }
+                            Column(Modifier.weight(1f)) {
+                                Text(s.address ?: s.coords, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = C.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                val accTxt = if (s.accuracy > 0) " · ±${s.accuracy.roundToInt()} m" else ""
+                                Text("${whenText(s.time)} · ${agoText(s.time + 0 * tick)}$accTxt", fontSize = 14.sp, color = C.Muted)
+                            }
                         }
-                        Icon(Icons.Rounded.ChevronRight, null, tint = C.Muted, modifier = Modifier.size(22.dp))
+                        Text(
+                            if (s.src == Store.SRC_CAR) "Zapisane przez CAR OS w aucie" else if (s.manual) "Zapisane ręcznie w telefonie" else "Zapisane przez telefon po zgaszeniu auta",
+                            fontSize = 13.sp, color = C.Muted,
+                        )
+                        if (driving) Text("Jesteś teraz w aucie – to poprzednie miejsce parkowania.", fontSize = 13.sp, color = C.Orange)
+                    }
+                    FinderCard(s, me, azimuth)
+                    PrimaryButton("Prowadź do auta", Icons.Rounded.DirectionsWalk) {
+                        try { ctx.startActivity(Notifs.walkIntent(s)) } catch (_: Exception) {
+                            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(s.mapsUrl)))
+                        }
                     }
                 }
-            }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SecondaryButton("Zapisz tutaj", Icons.Rounded.LocationOn, Modifier.weight(1f)) {
+                        if (!perms.loc) { actions.requestLoc(); return@SecondaryButton }
+                        Toast.makeText(ctx, "Ustalam pozycję…", Toast.LENGTH_SHORT).show()
+                        scope.launch {
+                            val l = withContext(Dispatchers.IO) { Locator.freshFix(ctx, 15) }
+                            if (l == null) {
+                                Toast.makeText(ctx, "Brak sygnału GPS – spróbuj na zewnątrz", Toast.LENGTH_LONG).show()
+                            } else {
+                                Store.saveSpot(ctx, Store.Spot(l.latitude, l.longitude, System.currentTimeMillis(), l.accuracy, manual = true))
+                                Toast.makeText(ctx, "Zapisano miejsce", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    if (s != null) SecondaryButton("Udostępnij", Icons.Rounded.Share, Modifier.weight(1f)) {
+                        val txt = "Moje auto stoi tu: ${s.address ?: s.coords}\n${s.mapsUrl}"
+                        ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, txt), "Udostępnij miejsce"))
+                    }
+                }
 
-            // ustawienia
-            Label("Ustawienia", Modifier.padding(top = 8.dp))
-            SettingItem(
-                Icons.Rounded.QrCode2, "Połączenie z CAR OS",
-                pairing?.let { "Połączono: ${it.car ?: "CAR OS"} – dotknij, aby rozłączyć" } ?: "Niepołączono – zeskanuj kod z radia",
-            ) { if (pairing != null) unpairAsk = true else actions.scanQr() }
-            SettingItem(Icons.Rounded.DirectionsCar, "Auto (Bluetooth radia)", car ?: "Nie wybrano") {
-                if (!perms.bt) actions.requestBt() else picker = true
+                // historia
+                val older = history.filter { it.time != s?.time }
+                if (older.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Label("Poprzednie miejsca", Modifier.weight(1f))
+                        Text("Wyczyść", fontSize = 14.sp, color = C.Muted, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { Store.clearHistory() }.padding(8.dp))
+                    }
+                    older.take(8).forEach { h ->
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card)
+                                .clickable { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(h.mapsUrl))) }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Icon(Icons.Rounded.History, null, tint = C.Muted, modifier = Modifier.size(22.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(h.address ?: h.coords, fontSize = 16.sp, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(whenText(h.time), fontSize = 13.sp, color = C.Muted)
+                            }
+                            Icon(Icons.Rounded.ChevronRight, null, tint = C.Muted, modifier = Modifier.size(22.dp))
+                        }
+                    }
+                }
+
+                // ustawienia
+                Label("Ustawienia", Modifier.padding(top = 8.dp))
+                SettingItem(
+                    Icons.Rounded.QrCode2, "Połączenie z CAR OS",
+                    pairing?.let { "Połączono: ${it.car ?: "CAR OS"} – dotknij, aby rozłączyć" } ?: "Niepołączono – zeskanuj kod z radia",
+                ) { if (pairing != null) unpairAsk = true else actions.scanQr() }
+                SettingItem(Icons.Rounded.DirectionsCar, "Auto (Bluetooth radia)", car ?: "Nie wybrano") {
+                    if (!perms.bt) actions.requestBt() else picker = true
+                }
+                SettingItem(Icons.Rounded.PlayCircle, "Autostart (Xiaomi)", "Włącz, żeby aplikacja budziła się po połączeniu z autem") { actions.openAutostart() }
+                UpdateItem()
+                Text("CAR OS Connect ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = C.Muted, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
             }
-            SettingItem(Icons.Rounded.PlayCircle, "Autostart (Xiaomi)", "Włącz, żeby aplikacja budziła się po połączeniu z autem") { actions.openAutostart() }
-            UpdateItem()
-            Text("CAR OS Connect ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = C.Muted, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
+            PullToRefreshContainer(
+                state = pull,
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding(),
+                containerColor = C.Raised,
+                contentColor = C.Accent,
+            )
         }
 
         if (picker) DevicePicker(actions, onDismiss = { picker = false })
