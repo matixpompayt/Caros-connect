@@ -32,9 +32,11 @@ jobs:
             exit 1
           fi
           mkdir -p out
-          VER=$(grep "^connectVersion=" gradle.properties | cut -d= -f2)
+          MAJOR=$(grep "^connectVersion=" gradle.properties | cut -d= -f2)
+          BASE=$(grep "^connectBase=" gradle.properties | cut -d= -f2)
+          VER="$MAJOR.$((BUILD_NUMBER - BASE))"
           echo "VER=$VER" >> "$GITHUB_ENV"
-          cp app/build/outputs/apk/release/app-release.apk "out/CarOS-Connect-$VER.${BUILD_NUMBER}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "out/CarOS-Connect-$VER.apk"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -42,12 +44,13 @@ jobs:
           path: out/*.apk
 
       # Każdy build na main = nowe wydanie. Aplikacja sprawdza /releases/latest i aktualizuje się online.
+      # Tag kończy się numerem builda (= versionCode) – po nim aplikacja poznaje, że jest nowsza wersja.
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           MSG=$(git log -1 --pretty=%B | head -c 1500)
-          gh release create "v${VER}.${BUILD_NUMBER}" out/*.apk \
-            --title "CAR OS Connect ${VER}.${BUILD_NUMBER}" \
+          gh release create "v${VER}-b${BUILD_NUMBER}" out/*.apk \
+            --title "CAR OS Connect ${VER}" \
             --notes "$MSG" \
             --latest

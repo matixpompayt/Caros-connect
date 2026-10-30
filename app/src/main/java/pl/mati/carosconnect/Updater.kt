@@ -56,7 +56,8 @@ object Updater {
                     val a = assets.getJSONObject(i)
                     if (a.optString("name").startsWith("CarOS-Connect") && a.optString("name").endsWith(".apk")) url = a.optString("browser_download_url")
                 }
-                state.value = if (url != null && code > BuildConfig.VERSION_CODE) State.Available(tag.removePrefix("v"), url) else State.UpToDate
+                val name = json.optString("name").removePrefix("CAR OS Connect").trim().ifBlank { tag.removePrefix("v") }
+                state.value = if (url != null && code > BuildConfig.VERSION_CODE) State.Available(name, url) else State.UpToDate
             } catch (e: Exception) {
                 state.value = if (silent) State.Idle else State.Error(e.message ?: "Brak połączenia")
             }

@@ -5,7 +5,8 @@ plugins {
 
 // Numer builda z GitHub Actions (github.run_number). Lokalnie = 1.
 val buildNumber = (System.getenv("BUILD_NUMBER") ?: "1").toInt()
-val connectVersion = (project.findProperty("connectVersion") as String?) ?: "1.0"
+val connectVersion = (project.findProperty("connectVersion") as String?) ?: "1"
+val connectBase = ((project.findProperty("connectBase") as String?) ?: "0").toInt()
 
 android {
     namespace = "pl.mati.carosconnect"
@@ -16,7 +17,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = buildNumber
-        versionName = "$connectVersion.$buildNumber"
+        versionName = "$connectVersion.${buildNumber - connectBase}"
         buildConfigField("String", "UPDATE_REPO", "\"matixpompayt/Caros-connect\"")
     }
 
