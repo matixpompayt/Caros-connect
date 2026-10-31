@@ -24,7 +24,6 @@ import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.osmdroid.config.Configuration
 import java.io.File
 
 data class Perms(
@@ -64,11 +63,7 @@ class MainActivity : ComponentActivity(), Actions {
         super.onCreate(savedInstanceState)
         Store.init(this)
         Notifs.channels(this)
-        Configuration.getInstance().apply {
-            userAgentValue = packageName
-            osmdroidBasePath = File(cacheDir, "osmdroid")
-            osmdroidTileCache = File(osmdroidBasePath, "tiles")
-        }
+        org.maplibre.android.MapLibre.getInstance(this)
         CarData.init(this)
         SyncWorker.schedule(this)
         if (savedInstanceState == null) handleShare(intent)

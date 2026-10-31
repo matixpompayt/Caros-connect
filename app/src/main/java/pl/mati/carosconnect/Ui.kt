@@ -120,14 +120,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.CustomZoomButtonsController
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.TilesOverlay
-import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
-import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -668,61 +660,8 @@ fun SecondaryButton(text: String, icon: ImageVector, modifier: Modifier = Modifi
 
 // ---------- mapa ----------
 
-@Composable
-private fun ParkMap(s: Store.Spot, modifier: Modifier) {
-    val ctx = LocalContext.current
-    val holder = remember {
-        val map = MapView(ctx).apply {
-            setTileSource(TileSourceFactory.MAPNIK)
-            setMultiTouchControls(true)
-            isTilesScaledToDpi = true
-            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
-            overlayManager.tilesOverlay.setColorFilter(TilesOverlay.INVERT_COLORS)
-            overlayManager.tilesOverlay.setLoadingBackgroundColor(android.graphics.Color.rgb(17, 22, 28))
-            controller.setZoom(17.5)
-        }
-        val me = MyLocationNewOverlay(GpsMyLocationProvider(ctx), map)
-        try { me.enableMyLocation() } catch (_: Exception) {}
-        val marker = Marker(map).apply {
-            icon = BitmapDrawable(ctx.resources, carPin())
-            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-            title = "Moje auto"
-        }
-        map.overlays.add(me)
-        map.overlays.add(marker)
-        Triple(map, marker, me)
-    }
-    LaunchedEffect(s.lat, s.lon) {
-        val p = GeoPoint(s.lat, s.lon)
-        holder.second.position = p
-        holder.first.controller.setCenter(p)
-        holder.first.invalidate()
-    }
-    DisposableEffect(Unit) {
-        holder.first.onResume()
-        onDispose {
-            holder.third.disableMyLocation()
-            holder.first.onPause()
-            holder.first.onDetach()
-        }
-    }
-    Box(modifier) {
-        AndroidView(factory = { holder.first }, modifier = Modifier.fillMaxSize())
-        Box(
-            Modifier.align(Alignment.BottomEnd).padding(12.dp).size(44.dp).clip(CircleShape).background(Color(0xE60A0C0F))
-                .clickable { holder.first.controller.animateTo(GeoPoint(s.lat, s.lon)) },
-            contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Rounded.DirectionsCar, "Pokaż auto", tint = C.Text, modifier = Modifier.size(22.dp)) }
-        Box(
-            Modifier.align(Alignment.BottomStart).padding(12.dp).size(44.dp).clip(CircleShape).background(Color(0xE60A0C0F))
-                .clickable { holder.third.myLocation?.let { holder.first.controller.animateTo(it) } },
-            contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Rounded.MyLocation, "Moja pozycja", tint = C.Text, modifier = Modifier.size(22.dp)) }
-    }
-}
-
 /** Pinezka „P” w kolorze CAR OS. */
-private fun carPin(): Bitmap {
+fun carPin(): Bitmap {
     val w = 84
     val h = 104
     val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)

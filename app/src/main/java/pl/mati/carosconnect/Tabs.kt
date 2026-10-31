@@ -1,5 +1,6 @@
 package pl.mati.carosconnect
 
+import org.maplibre.android.geometry.LatLng
 import androidx.compose.ui.graphics.graphicsLayer
 import android.net.Uri
 import android.widget.Toast
@@ -85,13 +86,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
-import org.osmdroid.util.BoundingBox
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.CustomZoomButtonsController
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Polyline
-import org.osmdroid.views.overlay.TilesOverlay
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -519,59 +513,8 @@ private fun TripDetail(t: CarData.Trip, onBack: () -> Unit) {
     StatBox("Czas w ruchu", dur(t.movingS), Modifier.fillMaxWidth())
 }
 
-@Composable
-private fun TripMap(pts: List<GeoPoint>, modifier: Modifier) {
-    val ctx = LocalContext.current
-    val map = remember {
-        MapView(ctx).apply {
-            setTileSource(TileSourceFactory.MAPNIK)
-            setMultiTouchControls(true)
-            isTilesScaledToDpi = true
-            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
-            overlayManager.tilesOverlay.setColorFilter(TilesOverlay.INVERT_COLORS)
-            overlayManager.tilesOverlay.setLoadingBackgroundColor(android.graphics.Color.rgb(17, 22, 28))
-            val casing = Polyline(this).apply {
-                setPoints(pts)
-                outlinePaint.color = android.graphics.Color.rgb(10, 12, 15)
-                outlinePaint.strokeWidth = 16f
-                outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
-                outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
-            }
-            val line = Polyline(this).apply {
-                setPoints(pts)
-                outlinePaint.color = android.graphics.Color.rgb(47, 211, 240)
-                outlinePaint.strokeWidth = 9f
-                outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
-                outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
-                outlinePaint.isAntiAlias = true
-            }
-            val start = Polyline(this).apply {
-                setPoints(listOf(pts.first(), GeoPoint(pts.first().latitude + 0.000001, pts.first().longitude)))
-                outlinePaint.color = android.graphics.Color.rgb(124, 240, 107)
-                outlinePaint.strokeWidth = 26f
-                outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
-            }
-            val end = Polyline(this).apply {
-                setPoints(listOf(pts.last(), GeoPoint(pts.last().latitude + 0.000001, pts.last().longitude)))
-                outlinePaint.color = android.graphics.Color.WHITE
-                outlinePaint.strokeWidth = 26f
-                outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
-            }
-            overlays.add(casing); overlays.add(line); overlays.add(start); overlays.add(end)
-            addOnFirstLayoutListener { _, _, _, _, _ ->
-                try { zoomToBoundingBox(BoundingBox.fromGeoPoints(pts).increaseByScale(1.25f), false) } catch (_: Exception) {}
-            }
-        }
-    }
-    androidx.compose.runtime.DisposableEffect(Unit) {
-        map.onResume()
-        onDispose { map.onPause(); map.onDetach() }
-    }
-    AndroidView(factory = { map }, modifier = modifier)
-}
-
-fun decodePolyline(s: String): List<GeoPoint> {
-    val out = ArrayList<GeoPoint>()
+fun decodePolyline(s: String): List<LatLng> {
+    val out = ArrayList<LatLng>()
     var i = 0
     var lat = 0L
     var lon = 0L
@@ -589,7 +532,7 @@ fun decodePolyline(s: String): List<GeoPoint> {
                 val d = if (result and 1L != 0L) (result shr 1).inv() else result shr 1
                 if (k == 0) lat += d else lon += d
             }
-            out += GeoPoint(lat / 1e5, lon / 1e5)
+            out += LatLng(lat / 1e5, lon / 1e5)
         }
     } catch (_: Exception) {
     }
