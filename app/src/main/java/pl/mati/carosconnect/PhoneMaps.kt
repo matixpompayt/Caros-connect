@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -118,6 +119,13 @@ private fun rememberMapLifecycle(h: MapHolder) {
 
 private fun point(lat: Double, lon: Double) = Point.fromLngLat(lon, lat)
 
+/** Zaparkowane auto: ikona z CAR OS albo pinezka „P”, gdy radio jeszcze jej nie przysłało. */
+private fun parkedIcon(ctx: Context): android.graphics.Bitmap {
+    val st = CarData.status.value
+    return if (st?.body != null) CarIcon.bitmap(st.body, st.paint ?: CarIcon.DEFAULT_COLOR, (60 * ctx.resources.displayMetrics.density).toInt())
+    else carPin()
+}
+
 /** Mapa parkingu: ciemna, 3D, pinezka auta i Twoja pozycja. */
 @SuppressLint("MissingPermission")
 @Composable
@@ -128,12 +136,12 @@ fun ParkMap(s: Store.Spot, modifier: Modifier) {
         MapHolder(ctx) { m, st ->
             val below = CarMapStyle.firstSymbolId(st)
             CarMapStyle.add3dBuildings(st, below)
-            st.addImage("caros-car-pin", carPin())
+            st.addImage("caros-car-pin", parkedIcon(ctx))
             st.addSource(GeoJsonSource("caros-car"))
             st.addLayer(
                 SymbolLayer("caros-car-layer", "caros-car").withProperties(
                     PropertyFactory.iconImage("caros-car-pin"),
-                    PropertyFactory.iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+                    PropertyFactory.iconAnchor(if (CarData.status.value?.body != null) Property.ICON_ANCHOR_CENTER else Property.ICON_ANCHOR_BOTTOM),
                     PropertyFactory.iconAllowOverlap(true),
                     PropertyFactory.iconIgnorePlacement(true),
                     PropertyFactory.iconSize(0.9f),
@@ -158,6 +166,16 @@ fun ParkMap(s: Store.Spot, modifier: Modifier) {
         }
     }
     rememberMapLifecycle(h)
+
+    // ikona auta z CAR OS (typ nadwozia i kolor) – zmienia się razem z ustawieniem w radiu
+    val status by CarData.status.collectAsState()
+    LaunchedEffect(status?.body, status?.paint, h.ready) {
+        if (!h.ready) return@LaunchedEffect
+        h.style?.addImage("caros-car-pin", parkedIcon(ctx))
+        h.style?.getLayer("caros-car-layer")?.setProperties(
+            PropertyFactory.iconAnchor(if (status?.body != null) Property.ICON_ANCHOR_CENTER else Property.ICON_ANCHOR_BOTTOM),
+        )
+    }
 
     LaunchedEffect(s.lat, s.lon, h.ready) {
         if (!h.ready) return@LaunchedEffect

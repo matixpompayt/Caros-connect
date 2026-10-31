@@ -37,6 +37,9 @@ object CarData {
         val odoSet: Boolean = odo != null,
         /** Zmiany z telefonu, których radio jeszcze nie potwierdziło. */
         val pending: Boolean = false,
+        /** Ikona auta ustawiona w CAR OS (typ nadwozia, kolor). */
+        val body: String? = null,
+        val paint: Int? = null,
     ) {
         /** Lista serwisowa: liczona w telefonie z surowych danych (od razu po edycji), inaczej z radia. */
         val serviceList: List<Service>
@@ -194,6 +197,8 @@ object CarData {
             },
             odoSet = if (o.has("odoSet")) o.optBoolean("odoSet") else !o.isNull("odo"),
             pending = o.optBoolean("pending"),
+            body = o.optString("body").ifBlank { null },
+            paint = if (o.has("paint")) o.optInt("paint") else null,
         )
     } catch (_: Exception) {
         null
