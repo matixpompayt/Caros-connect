@@ -119,13 +119,9 @@ private fun rememberMapLifecycle(h: MapHolder) {
 
 private fun point(lat: Double, lon: Double) = Point.fromLngLat(lon, lat)
 
-/** Zaparkowane auto: model 3D z CAR OS (ten sam typ i kolor co w radiu) albo pinezka „P”, gdy radio jeszcze go nie przysłało. */
-private fun parkedIcon(ctx: Context): android.graphics.Bitmap {
-    val st = CarData.status.value
-    val d = ctx.resources.displayMetrics.density
-    return if (st?.body != null) Model3D.carIcon(st.body, st.paint ?: CarIcon.DEFAULT_COLOR, 35.0, 38.0, (96 * d).toInt())
-    else carPin()
-}
+/** Zaparkowane auto: model 3D z CAR OS (ten sam typ i kolor co w radiu). */
+private fun carModel(ctx: Context, body: String, paint: Int?): android.graphics.Bitmap =
+    Model3D.carIcon(body, paint ?: CarIcon.DEFAULT_COLOR, 35.0, 38.0, (96 * ctx.resources.displayMetrics.density).toInt())
 
 /** Ludzik 3D – Twoja pozycja. */
 private fun personBitmap(ctx: Context) = Model3D.personIcon(0xFF2FD3F0.toInt(), (64 * ctx.resources.displayMetrics.density).toInt())
@@ -140,12 +136,27 @@ fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier) {
         MapHolder(ctx) { m, st ->
             val below = CarMapStyle.firstSymbolId(st)
             CarMapStyle.add3dBuildings(st, below)
-            st.addImage("caros-car-pin", parkedIcon(ctx))
+            // auto 3D (jak w radiu) + pinezka „P” nad nim
+            st.addImage("caros-car-pin", carPin())
             st.addSource(GeoJsonSource("caros-car"))
+            CarData.carBody.value?.let { st.addImage("caros-car-3d", carModel(ctx, it, CarData.carPaint.value)) }
+            st.addLayer(
+                SymbolLayer("caros-car-3d-layer", "caros-car").withProperties(
+                    PropertyFactory.iconImage("caros-car-3d"),
+                    PropertyFactory.iconAnchor(Property.ICON_ANCHOR_CENTER),
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(true),
+                    PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
+                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
+                    PropertyFactory.visibility(if (CarData.carBody.value != null) Property.VISIBLE else Property.NONE),
+                ),
+            )
             st.addLayer(
                 SymbolLayer("caros-car-layer", "caros-car").withProperties(
                     PropertyFactory.iconImage("caros-car-pin"),
-                    PropertyFactory.iconAnchor(if (CarData.status.value?.body != null) Property.ICON_ANCHOR_CENTER else Property.ICON_ANCHOR_BOTTOM),
+                    PropertyFactory.iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+                    PropertyFactory.iconOffset(arrayOf(0f, if (CarData.carBody.value != null) -26f else 0f)),
+                    PropertyFactory.iconSize(0.8f),
                     PropertyFactory.iconAllowOverlap(true),
                     PropertyFactory.iconIgnorePlacement(true),
                     PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
@@ -170,14 +181,16 @@ fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier) {
     }
     rememberMapLifecycle(h)
 
-    // ikona auta z CAR OS (typ nadwozia i kolor) – zmienia się razem z ustawieniem w radiu
-    val status by CarData.status.collectAsState()
-    LaunchedEffect(status?.body, status?.paint, h.ready) {
+    // model auta z CAR OS (typ nadwozia i kolor) – zmienia się razem z ustawieniem w radiu
+    val carBody by CarData.carBody.collectAsState()
+    val carPaint by CarData.carPaint.collectAsState()
+    LaunchedEffect(carBody, carPaint, h.ready) {
         if (!h.ready) return@LaunchedEffect
-        h.style?.addImage("caros-car-pin", parkedIcon(ctx))
-        h.style?.getLayer("caros-car-layer")?.setProperties(
-            PropertyFactory.iconAnchor(if (status?.body != null) Property.ICON_ANCHOR_CENTER else Property.ICON_ANCHOR_BOTTOM),
-        )
+        val st = h.style ?: return@LaunchedEffect
+        val b = carBody
+        if (b != null) st.addImage("caros-car-3d", carModel(ctx, b, carPaint))
+        st.getLayer("caros-car-3d-layer")?.setProperties(PropertyFactory.visibility(if (b != null) Property.VISIBLE else Property.NONE))
+        st.getLayer("caros-car-layer")?.setProperties(PropertyFactory.iconOffset(arrayOf(0f, if (b != null) -26f else 0f)))
     }
 
     // pozycja telefonu → ludzik

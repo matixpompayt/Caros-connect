@@ -66,6 +66,10 @@ object CarData {
     val meterEnd = MutableStateFlow(0L)
     val meterStart = MutableStateFlow(0L)
 
+    /** Model auta z CAR OS (typ nadwozia i kolor) – ten sam co na mapie w radiu. */
+    val carBody = MutableStateFlow<String?>(null)
+    val carPaint = MutableStateFlow<Int?>(null)
+
     val notifService = MutableStateFlow(true)
     val notifFrost = MutableStateFlow(true)
     val frostHour = MutableStateFlow(6)
@@ -93,6 +97,8 @@ object CarData {
         notifService.value = p.getBoolean("n_service", true)
         notifFrost.value = p.getBoolean("n_frost", true)
         frostHour.value = p.getInt("frost_hour", 6)
+        carBody.value = p.getString("car_body", null)
+        carPaint.value = if (p.contains("car_paint")) p.getInt("car_paint", 0) else null
         p.getString("weather", null)?.let {
             try {
                 val o = JSONObject(it)
@@ -111,6 +117,7 @@ object CarData {
         if (cur != null && cur.time > s.time) return
         status.value = s
         sp?.edit()?.putString("status", raw)?.apply()
+        if (s.body != null) setCarIcon(s.body, s.paint)
         // trasy ze statusu (bez śladu) – uzupełniają dziennik
         try {
             val a = JSONObject(raw).optJSONArray("trips") ?: JSONArray()
@@ -254,6 +261,13 @@ object CarData {
             "weather",
             JSONObject().put("t", w.time).put("c", w.temp).put("m", w.minPast).put("h", w.humidity).put("f", w.frost).toString(),
         )?.apply()
+    }
+
+    fun setCarIcon(body: String, paint: Int?) {
+        if (carBody.value == body && carPaint.value == paint) return
+        carBody.value = body
+        carPaint.value = paint
+        sp?.edit()?.putString("car_body", body)?.apply { if (paint != null) putInt("car_paint", paint) }?.apply()
     }
 
     fun setLastSync(t: Long) {

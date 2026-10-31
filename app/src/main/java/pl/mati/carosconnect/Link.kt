@@ -32,6 +32,8 @@ object Link {
         val status: String?,
         val trips: List<CarData.Trip>,
         val backup: Triple<String, Long, String>?,
+        /** Model auta (typ, kolor) z ostatniej wiadomości o parkowaniu. */
+        val carIcon: Pair<String, Int?>? = null,
     )
 
     private const val PREFIX = "#caros1."
@@ -134,6 +136,7 @@ object Link {
         c.readTimeout = 20_000
         c.setRequestProperty("User-Agent", "CarOS-Connect")
         var park: Store.Spot? = null
+        var carIcon: Pair<String, Int?>? = null
         var status: String? = null
         var statusT = 0L
         val trips = ArrayList<CarData.Trip>()
@@ -154,7 +157,10 @@ object Link {
                                     m.getDouble("lat"), m.getDouble("lon"), m.getLong("t"), m.optDouble("acc", 0.0).toFloat(),
                                     m.optString("a").ifBlank { null }, src = Store.SRC_CAR,
                                 )
-                                if (park == null || s.time >= park!!.time) park = s
+                                if (park == null || s.time >= park!!.time) {
+                                    park = s
+                                    m.optString("body").ifBlank { null }?.let { b -> carIcon = b to (if (m.has("paint")) m.optInt("paint") else null) }
+                                }
                             }
                             "status" -> {
                                 val t = m.optLong("t")
@@ -190,6 +196,6 @@ object Link {
             } catch (_: Exception) {
             }
         }
-        return Inbox(park, status, trips, backup)
+        return Inbox(park, status, trips, backup, carIcon)
     }
 }

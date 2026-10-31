@@ -112,7 +112,11 @@ class MainActivity : ComponentActivity(), Actions {
 
     /** Dane z CAR OS (miejsce, stan auta, trasy, kopia) – bez pytania radia. */
     override fun refreshFromCar() {
-        lifecycleScope.launch { try { Sync.run(this@MainActivity, ask = false) } catch (_: Exception) {} }
+        lifecycleScope.launch {
+            // brak modelu auta z radia → poproś CAR OS o aktualne dane
+            val ask = Store.pairing.value != null && CarData.carBody.value == null
+            try { Sync.run(this@MainActivity, ask = ask) } catch (_: Exception) {}
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

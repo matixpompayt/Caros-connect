@@ -47,6 +47,7 @@ object Sync {
                 val beforeStatus = CarData.status.value?.time
                 val inbox = Link.fetchInbox(p)
                 inbox.park?.let { Store.offerCarSpot(ctx, it) }
+                inbox.carIcon?.let { (b, p) -> CarData.setCarIcon(b, p) }
                 inbox.status?.let { CarData.setStatusJson(it) }
                 CarData.mergeTrips(inbox.trips)
                 inbox.backup?.let { (text, created, car) -> CarData.setBackup(text, created, car) }
