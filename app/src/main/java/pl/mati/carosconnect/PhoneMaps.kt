@@ -119,17 +119,21 @@ private fun rememberMapLifecycle(h: MapHolder) {
 
 private fun point(lat: Double, lon: Double) = Point.fromLngLat(lon, lat)
 
-/** Zaparkowane auto: ikona z CAR OS albo pinezka „P”, gdy radio jeszcze jej nie przysłało. */
+/** Zaparkowane auto: model 3D z CAR OS (ten sam typ i kolor co w radiu) albo pinezka „P”, gdy radio jeszcze go nie przysłało. */
 private fun parkedIcon(ctx: Context): android.graphics.Bitmap {
     val st = CarData.status.value
-    return if (st?.body != null) CarIcon.bitmap(st.body, st.paint ?: CarIcon.DEFAULT_COLOR, (60 * ctx.resources.displayMetrics.density).toInt())
+    val d = ctx.resources.displayMetrics.density
+    return if (st?.body != null) Model3D.carIcon(st.body, st.paint ?: CarIcon.DEFAULT_COLOR, 35.0, 38.0, (96 * d).toInt())
     else carPin()
 }
+
+/** Ludzik 3D – Twoja pozycja. */
+private fun personBitmap(ctx: Context) = Model3D.personIcon(0xFF2FD3F0.toInt(), (64 * ctx.resources.displayMetrics.density).toInt())
 
 /** Mapa parkingu: ciemna, 3D, pinezka auta i Twoja pozycja. */
 @SuppressLint("MissingPermission")
 @Composable
-fun ParkMap(s: Store.Spot, modifier: Modifier) {
+fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier) {
     val ctx = LocalContext.current
     var is3d by remember { mutableStateOf(true) }
     val h = remember {
@@ -144,25 +148,24 @@ fun ParkMap(s: Store.Spot, modifier: Modifier) {
                     PropertyFactory.iconAnchor(if (CarData.status.value?.body != null) Property.ICON_ANCHOR_CENTER else Property.ICON_ANCHOR_BOTTOM),
                     PropertyFactory.iconAllowOverlap(true),
                     PropertyFactory.iconIgnorePlacement(true),
-                    PropertyFactory.iconSize(0.9f),
+                    PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
+                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
                 ),
             )
-            if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                try {
-                    val lc = m.locationComponent
-                    lc.activateLocationComponent(
-                        LocationComponentActivationOptions.builder(ctx, st)
-                            .useDefaultLocationEngine(true)
-                            .locationComponentOptions(
-                                LocationComponentOptions.builder(ctx).foregroundTintColor(0xFFEEF1F4.toInt()).accuracyAlpha(0.12f).build(),
-                            )
-                            .build(),
-                    )
-                    lc.isLocationComponentEnabled = true
-                    lc.renderMode = RenderMode.NORMAL
-                } catch (_: Exception) {
-                }
-            }
+            // Ty – ludzik 3D
+            st.addImage("caros-person", personBitmap(ctx))
+            st.addSource(GeoJsonSource("caros-me"))
+            st.addLayer(
+                SymbolLayer("caros-me-layer", "caros-me").withProperties(
+                    PropertyFactory.iconImage("caros-person"),
+                    PropertyFactory.iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+                    PropertyFactory.iconOffset(arrayOf(0f, 7f)),
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(true),
+                    PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
+                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
+                ),
+            )
         }
     }
     rememberMapLifecycle(h)
@@ -175,6 +178,14 @@ fun ParkMap(s: Store.Spot, modifier: Modifier) {
         h.style?.getLayer("caros-car-layer")?.setProperties(
             PropertyFactory.iconAnchor(if (status?.body != null) Property.ICON_ANCHOR_CENTER else Property.ICON_ANCHOR_BOTTOM),
         )
+    }
+
+    // pozycja telefonu → ludzik
+    LaunchedEffect(me?.latitude, me?.longitude, h.ready) {
+        if (!h.ready) return@LaunchedEffect
+        val src = h.style?.getSourceAs<GeoJsonSource>("caros-me") ?: return@LaunchedEffect
+        if (me == null) src.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+        else src.setGeoJson(Feature.fromGeometry(point(me.latitude, me.longitude)))
     }
 
     LaunchedEffect(s.lat, s.lon, h.ready) {
@@ -196,11 +207,7 @@ fun ParkMap(s: Store.Spot, modifier: Modifier) {
                 h.map?.animateCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(LatLng(s.lat, s.lon)).zoom(17.0).tilt(if (is3d) 50.0 else 0.0).build()), 700)
             }) { Icon(Icons.Rounded.DirectionsCar, "Pokaż auto", tint = C.Text, modifier = Modifier.size(22.dp)) }
             MapBtn({
-                try {
-                    h.map?.locationComponent?.lastKnownLocation?.let { l ->
-                        h.map?.animateCamera(CameraUpdateFactory.newLatLng(LatLng(l.latitude, l.longitude)), 700)
-                    }
-                } catch (_: Exception) {}
+                me?.let { l -> h.map?.animateCamera(CameraUpdateFactory.newLatLng(LatLng(l.latitude, l.longitude)), 700) }
             }) { Icon(Icons.Rounded.MyLocation, "Moja pozycja", tint = C.Text, modifier = Modifier.size(22.dp)) }
         }
     }

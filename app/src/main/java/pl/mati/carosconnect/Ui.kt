@@ -320,7 +320,7 @@ private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
                 )
             }
         } else {
-            ParkMap(s, Modifier.stagger().fillMaxWidth().height(300.dp).clip(RoundedCornerShape(24.dp)).border(1.dp, C.Border, RoundedCornerShape(24.dp)))
+            ParkMap(s, me, Modifier.stagger().fillMaxWidth().height(300.dp).clip(RoundedCornerShape(24.dp)).border(1.dp, C.Border, RoundedCornerShape(24.dp)))
             Card {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(Modifier.size(44.dp).clip(CircleShape).background(C.Accent), contentAlignment = Alignment.Center) {
