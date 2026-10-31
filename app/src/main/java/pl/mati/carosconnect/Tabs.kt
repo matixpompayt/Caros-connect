@@ -1,5 +1,6 @@
 package pl.mati.carosconnect
 
+import androidx.compose.ui.graphics.graphicsLayer
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -212,7 +213,7 @@ private fun ServiceRow(s: CarData.Service, onClick: (() -> Unit)?) {
         else -> C.Green
     }
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card)
+        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card)
             .border(1.dp, if (s.overdue) col.copy(alpha = 0.6f) else C.Border, RoundedCornerShape(16.dp))
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -301,7 +302,7 @@ private fun FavRow(f: CarData.Place) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card).padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card).padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -473,7 +474,7 @@ fun TripsTab(sel: CarData.Trip?, onSelect: (CarData.Trip?) -> Unit) {
             lastDay = day
         }
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card).clickable { onSelect(t) }
+            Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card).clickable { onSelect(t) }
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -618,7 +619,12 @@ fun MeterCard() {
             val left = (end - now) / 1000
             val txt = if (left >= 3600) String.format(PL, "%d:%02d:%02d", left / 3600, (left % 3600) / 60, left % 60)
             else String.format(PL, "%02d:%02d", left / 60, left % 60)
-            Text(txt, fontSize = 40.sp, fontWeight = FontWeight.Bold, color = if (left < Meter.WARN_MIN * 60) C.Orange else C.Text)
+            val ending = left < Meter.WARN_MIN * 60
+            val pulse = rememberPulse(ending, 0.45f, 600)
+            Text(
+                txt, fontSize = 40.sp, fontWeight = FontWeight.Bold, color = if (ending) C.Orange else C.Text,
+                modifier = Modifier.graphicsLayer { alpha = pulse },
+            )
             Text("do ${HM.format(Date(end))} · przypomnę ${Meter.WARN_MIN} min przed końcem", fontSize = 13.sp, color = C.Muted)
             if (end > start && start > 0) {
                 LinearProgressIndicator(
@@ -649,8 +655,10 @@ fun MeterCard() {
 
 @Composable
 private fun Chip(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Box(
-        modifier.height(42.dp).clip(RoundedCornerShape(12.dp)).background(C.Raised).clickable(onClick = onClick),
+        modifier.pressScale(src, 0.92f).height(42.dp).clip(RoundedCornerShape(12.dp)).background(C.Raised)
+            .clickable(interactionSource = src, indication = androidx.compose.foundation.LocalIndication.current, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Text(text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = C.Text, maxLines = 1) }
 }
@@ -662,7 +670,7 @@ fun CarWeatherCard() {
     val ww = w ?: return
     if (spot == null || System.currentTimeMillis() - ww.time > 3 * 3_600_000L) return
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp))
             .background(if (ww.frost) Color(0xFF15324A) else C.Card).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -792,7 +800,7 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
 @Composable
 private fun ToggleRow(title: String, sub: String, on: Boolean, onChange: (Boolean) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card).clickable { onChange(!on) }
+        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card).clickable { onChange(!on) }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),

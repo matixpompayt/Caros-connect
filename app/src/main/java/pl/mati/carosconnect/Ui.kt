@@ -1,5 +1,22 @@
 package pl.mati.carosconnect
 
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.AnimatedContent
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -199,11 +216,32 @@ fun ParkApp(perms: Perms, actions: Actions) {
                         }
                         StatusPill(driving, car)
                     }
-                    when (tab) {
-                        0 -> ParkingTab(perms, actions) { picker = true }
-                        1 -> CarTab(actions)
-                        2 -> TripsTab(trip) { trip = it }
-                        else -> SettingsTab(perms, actions, onPickCar = { picker = true }, onUnpair = { unpairAsk = true })
+                    AnimatedContent(
+                        targetState = tab to trip,
+                        transitionSpec = {
+                            val (t0, tr0) = initialState
+                            val (t1, tr1) = targetState
+                            // w prawo/lewo zgodnie z kolejnością zakładek; szczegóły trasy wjeżdżają z prawej
+                            val dir = when {
+                                t1 != t0 -> if (t1 > t0) 1 else -1
+                                tr1 != null && tr0 == null -> 1
+                                else -> -1
+                            }
+                            (fadeIn(tween(250, delayMillis = 60)) + slideInHorizontally(tween(320, easing = FastOutSlowInEasing)) { w -> dir * w / 6 }) togetherWith
+                                (fadeOut(tween(140)) + slideOutHorizontally(tween(220)) { w -> -dir * w / 8 })
+                        },
+                        label = "tab",
+                    ) { (t, tr) ->
+                        CompositionLocalProvider(LocalStagger provides remember { StaggerCounter() }) {
+                            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                when (t) {
+                                    0 -> ParkingTab(perms, actions) { picker = true }
+                                    1 -> CarTab(actions)
+                                    2 -> TripsTab(tr) { trip = it }
+                                    else -> SettingsTab(perms, actions, onPickCar = { picker = true }, onUnpair = { unpairAsk = true })
+                                }
+                            }
+                        }
                     }
                     Spacer(Modifier.height(8.dp))
                 }
@@ -243,15 +281,22 @@ private fun BottomBar(tab: Int, onTab: (Int) -> Unit) {
     ) {
         items.forEachIndexed { i, (icon, label) ->
             val on = i == tab
+            val src = remember { MutableInteractionSource() }
+            val pill by animateColorAsState(if (on) C.Accent.copy(alpha = 0.16f) else Color.Transparent, tween(250), label = "pill")
+            val tint by animateColorAsState(if (on) C.Accent else C.Muted, tween(250), label = "tint")
+            val padH by animateDpAsState(if (on) 20.dp else 12.dp, spring(dampingRatio = 0.6f, stiffness = 500f), label = "padH")
+            val iconScale by animateFloatAsState(if (on) 1.12f else 1f, spring(dampingRatio = 0.4f, stiffness = 450f), label = "iconScale")
             Column(
-                Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).clickable { onTab(i) }.padding(vertical = 6.dp),
+                Modifier.weight(1f).pressScale(src, 0.9f).clip(RoundedCornerShape(16.dp))
+                    .clickable(interactionSource = src, indication = null) { onTab(i) }.padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Box(
-                    Modifier.clip(RoundedCornerShape(50)).background(if (on) C.Accent.copy(alpha = 0.16f) else Color.Transparent)
-                        .padding(horizontal = 18.dp, vertical = 4.dp),
-                ) { Icon(icon, label, tint = if (on) C.Accent else C.Muted, modifier = Modifier.size(24.dp)) }
-                Text(label, fontSize = 12.sp, color = if (on) C.Accent else C.Muted, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                    Modifier.clip(RoundedCornerShape(50)).background(pill).padding(horizontal = padH, vertical = 4.dp),
+                ) {
+                    Icon(icon, label, tint = tint, modifier = Modifier.size(24.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale })
+                }
+                Text(label, fontSize = 12.sp, color = tint, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
             }
         }
     }
@@ -283,7 +328,7 @@ private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
                 )
             }
         } else {
-            ParkMap(s, Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(24.dp)).border(1.dp, C.Border, RoundedCornerShape(24.dp)))
+            ParkMap(s, Modifier.stagger().fillMaxWidth().height(300.dp).clip(RoundedCornerShape(24.dp)).border(1.dp, C.Border, RoundedCornerShape(24.dp)))
             Card {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(Modifier.size(44.dp).clip(CircleShape).background(C.Accent), contentAlignment = Alignment.Center) {
@@ -340,7 +385,7 @@ private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
             }
             older.take(8).forEach { h ->
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card)
+                    Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card)
                         .clickable { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(h.mapsUrl))) }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -360,6 +405,7 @@ private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
 /** Ekran powitalny: połączenie z CAR OS przez kod QR. */
 @Composable
 private fun WelcomeScreen(actions: Actions) {
+    CompositionLocalProvider(LocalStagger provides remember { StaggerCounter() }) {
     Column(
         Modifier.fillMaxSize().background(
             androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF0E2A33), C.Bg, C.Bg)),
@@ -368,7 +414,7 @@ private fun WelcomeScreen(actions: Actions) {
     ) {
         Spacer(Modifier.height(36.dp))
         Box(Modifier.size(132.dp).clip(CircleShape).background(C.Card).border(1.dp, C.Border, CircleShape), contentAlignment = Alignment.Center) {
-            Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_launcher_foreground), null, tint = Color.Unspecified, modifier = Modifier.size(150.dp))
+            AnimatedLogo(110.dp)
         }
         Spacer(Modifier.height(22.dp))
         Text("CAR OS", fontSize = 15.sp, color = C.Accent, fontWeight = FontWeight.Bold, letterSpacing = 4.sp)
@@ -396,6 +442,7 @@ private fun WelcomeScreen(actions: Actions) {
             modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { Store.skipPairing() }.padding(12.dp),
         )
     }
+}
 }
 
 @Composable
@@ -428,13 +475,15 @@ private fun StatusPill(driving: Boolean, car: String?) {
         driving -> "W trasie" to C.Green
         else -> "Zaparkowane" to C.Accent
     }
+    val c by animateColorAsState(col, tween(400), label = "pill")
+    val dot = rememberPulse(driving)
     Row(
-        Modifier.clip(RoundedCornerShape(50)).background(col.copy(alpha = 0.15f)).padding(horizontal = 12.dp, vertical = 6.dp),
+        Modifier.clip(RoundedCornerShape(50)).background(c.copy(alpha = 0.15f)).animateContentSize().padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(col))
-        Text(txt, fontSize = 13.sp, color = col, fontWeight = FontWeight.SemiBold)
+        Box(Modifier.size(8.dp).graphicsLayer { alpha = dot }.clip(CircleShape).background(c))
+        Text(txt, fontSize = 13.sp, color = c, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -558,9 +607,10 @@ fun UpdateItem() {
 
 @Composable
 fun SettingItem(icon: ImageVector, title: String, sub: String, highlight: Boolean = false, onClick: () -> Unit) {
+    val src = remember { MutableInteractionSource() }
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if (highlight) C.Accent.copy(alpha = 0.14f) else C.Card)
-            .clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        Modifier.stagger().pressScale(src, 0.98f).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if (highlight) C.Accent.copy(alpha = 0.14f) else C.Card)
+            .clickable(interactionSource = src, indication = LocalIndication.current, onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -576,20 +626,22 @@ fun SettingItem(icon: ImageVector, title: String, sub: String, highlight: Boolea
 @Composable
 fun Card(border: Color = C.Border, content: @Composable () -> Unit) {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(C.Card).border(1.dp, border, RoundedCornerShape(22.dp)).padding(18.dp),
+        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(C.Card).border(1.dp, border, RoundedCornerShape(22.dp)).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) { content() }
 }
 
 @Composable
 fun Label(text: String, modifier: Modifier = Modifier) {
-    Text(text.uppercase(), fontSize = 13.sp, letterSpacing = 1.5.sp, color = C.Muted, fontWeight = FontWeight.SemiBold, modifier = modifier)
+    Text(text.uppercase(), fontSize = 13.sp, letterSpacing = 1.5.sp, color = C.Muted, fontWeight = FontWeight.SemiBold, modifier = modifier.stagger())
 }
 
 @Composable
 fun PrimaryButton(text: String, icon: ImageVector, onClick: () -> Unit) {
+    val src = remember { MutableInteractionSource() }
     Row(
-        Modifier.fillMaxWidth().height(60.dp).clip(RoundedCornerShape(18.dp)).background(C.Accent).clickable(onClick = onClick),
+        Modifier.stagger().pressScale(src).fillMaxWidth().height(60.dp).clip(RoundedCornerShape(18.dp)).background(C.Accent)
+            .clickable(interactionSource = src, indication = LocalIndication.current, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
@@ -601,8 +653,10 @@ fun PrimaryButton(text: String, icon: ImageVector, onClick: () -> Unit) {
 
 @Composable
 fun SecondaryButton(text: String, icon: ImageVector, modifier: Modifier = Modifier, h: Dp = 54.dp, onClick: () -> Unit) {
+    val src = remember { MutableInteractionSource() }
     Row(
-        modifier.height(h).clip(RoundedCornerShape(16.dp)).background(C.Raised).clickable(onClick = onClick),
+        modifier.pressScale(src).height(h).clip(RoundedCornerShape(16.dp)).background(C.Raised)
+            .clickable(interactionSource = src, indication = LocalIndication.current, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
