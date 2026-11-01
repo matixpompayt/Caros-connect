@@ -2,6 +2,12 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Aktualizacja testowa
+- Sprawdzenie, jak wygląda okno „Nowość w wersji” po aktualizacji
+- Przed instalacją te zmiany widać w Ustawieniach pod „Aktualizacja”
+- Pełna lista zmian: Ustawienia → Co nowego
+
 ## 1.12 · 2026-11-01
 Lista zmian
 - Ustawienia → Co nowego: wszystkie zmiany w kolejnych wersjach
