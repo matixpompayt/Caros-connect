@@ -17,6 +17,12 @@ object CarData {
 
     data class Place(val name: String, val detail: String, val lat: Double, val lon: Double)
 
+    /** Dom / praca z CAR OS: adres + współrzędne (gdy znane). */
+    data class Addr(val address: String, val lat: Double?, val lon: Double?) {
+        val isSet get() = address.isNotBlank()
+        fun place(label: String) = if (lat != null && lon != null) Place(label, address, lat, lon) else null
+    }
+
     /** Pozycja serwisowa (surowe dane z radia – do edycji). */
     data class SvcItem(
         val id: String, val name: String,
@@ -40,6 +46,9 @@ object CarData {
         /** Ikona auta ustawiona w CAR OS (typ nadwozia, kolor). */
         val body: String? = null,
         val paint: Int? = null,
+        /** null = starszy CAR OS bez synchronizacji domu i pracy. */
+        val home: Addr? = null,
+        val work: Addr? = null,
     ) {
         /** Lista serwisowa: liczona w telefonie z surowych danych (od razu po edycji), inaczej z radia. */
         val serviceList: List<Service>
@@ -158,6 +167,21 @@ object CarData {
 
     fun setOdoLocal(km: Int) = editLocal { o -> o.put("odo", km).put("odoSet", true) }
 
+    fun setPlaceLocal(work: Boolean, a: Addr) = editLocal { o ->
+        o.put(if (work) "work" else "home", addrJson(a))
+    }
+
+    fun addrJson(a: Addr): JSONObject =
+        JSONObject().put("a", a.address).put("lat", a.lat ?: JSONObject.NULL).put("lon", a.lon ?: JSONObject.NULL)
+
+    private fun addrFrom(o: JSONObject?): Addr? = o?.let {
+        Addr(
+            it.optString("a"),
+            if (it.isNull("lat")) null else it.optDouble("lat"),
+            if (it.isNull("lon")) null else it.optDouble("lon"),
+        )
+    }
+
     /** Ulubione usunięte w telefonie – od razu znikają z listy (radio potwierdzi w następnym statusie). */
     fun removeFavLocal(p: Place) {
         val s = status.value ?: return
@@ -206,6 +230,8 @@ object CarData {
             pending = o.optBoolean("pending"),
             body = o.optString("body").ifBlank { null },
             paint = if (o.has("paint")) o.optInt("paint") else null,
+            home = addrFrom(o.optJSONObject("home")),
+            work = addrFrom(o.optJSONObject("work")),
         )
     } catch (_: Exception) {
         null

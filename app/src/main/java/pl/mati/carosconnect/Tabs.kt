@@ -48,6 +48,9 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.MyLocation
+import androidx.compose.material.icons.rounded.Work
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -182,6 +185,21 @@ fun CarTab(actions: Actions) {
     Label("Wyślij cel do auta", Modifier.padding(top = 6.dp))
     SendPlaceCard()
 
+    // dom i praca – te same co w CAR OS, zmiana w telefonie albo w radiu widoczna po obu stronach
+    if (s != null) {
+        Label("Dom i praca", Modifier.padding(top = 6.dp))
+        val home = s.home
+        if (home == null) {
+            Text("Zaktualizuj CAR OS w radiu, żeby zmieniać dom i pracę z telefonu", fontSize = 13.sp, color = C.Muted)
+        } else {
+            var editPlace by remember { mutableStateOf<Boolean?>(null) } // false = dom, true = praca
+            val work = s.work ?: CarData.Addr("", null, null)
+            HomeWorkRow(false, home) { editPlace = false }
+            HomeWorkRow(true, work) { editPlace = true }
+            editPlace?.let { w -> PlaceEditDialog(w, if (w) work else home) { editPlace = null } }
+        }
+    }
+
     val favs = s?.favs.orEmpty()
     Label("Ulubione w aucie", Modifier.padding(top = 6.dp))
     if (favs.isEmpty()) {
@@ -289,6 +307,190 @@ private fun SendPlaceCard() {
         }
     }
     chosen?.let { PlaceSheet(it, resolving = false, error = null) { chosen = null; results = emptyList(); q = "" } }
+}
+
+@Composable
+private fun HomeWorkRow(work: Boolean, a: CarData.Addr, onEdit: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val label = if (work) "Praca" else "Dom"
+    var busy by remember { mutableStateOf(false) }
+    Row(
+        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card).clickable(onClick = onEdit)
+            .padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(C.Accent.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+            Icon(if (work) Icons.Rounded.Work else Icons.Rounded.Home, null, tint = C.Accent, modifier = Modifier.size(24.dp))
+        }
+        Column(Modifier.weight(1f).padding(start = 6.dp)) {
+            Text(label, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+            Text(
+                if (a.isSet) a.address else "Nie ustawiono – dotknij, aby dodać",
+                fontSize = 13.sp, color = if (a.isSet) C.Muted else C.Accent, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (a.isSet) {
+            if (busy) Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+            } else IconBtn(Icons.Rounded.Navigation, "Nawiguj w aucie") {
+                busy = true
+                scope.launch {
+                    val p = a.place(label) ?: withContext(Dispatchers.IO) {
+                        try { Places.search(a.address, null).firstOrNull()?.copy(name = label, detail = a.address) } catch (_: Exception) { null }
+                    }
+                    if (p == null) Toast.makeText(ctx, "Nie znaleziono adresu – ustaw go ponownie", Toast.LENGTH_LONG).show()
+                    else sendToCar(ctx, "route", p)
+                    busy = false
+                }
+            }
+        }
+        IconBtn(Icons.Rounded.Edit, "Zmień adres", onEdit)
+    }
+}
+
+/** Zmiana adresu domu / pracy: wyszukiwarka, obecna lokalizacja telefonu albo usunięcie. */
+@Composable
+private fun PlaceEditDialog(work: Boolean, current: CarData.Addr, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val focus = LocalFocusManager.current
+    val scope = rememberCoroutineScope()
+    var q by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf<String?>(null) }
+    var results by remember { mutableStateOf<List<CarData.Place>>(emptyList()) }
+
+    fun save(a: CarData.Addr) {
+        val pairing = Store.pairing.value
+        if (pairing == null) {
+            Toast.makeText(ctx, "Najpierw połącz z CAR OS kodem QR", Toast.LENGTH_LONG).show()
+            return
+        }
+        busy = "Zapisuję…"
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                try {
+                    Link.send(
+                        pairing,
+                        JSONObject().put("type", "place_set").put("slot", if (work) "work" else "home")
+                            .put("a", a.address).put("lat", a.lat ?: JSONObject.NULL).put("lon", a.lon ?: JSONObject.NULL),
+                    )
+                    true
+                } catch (_: Exception) {
+                    false
+                }
+            }
+            busy = null
+            if (ok) {
+                CarData.setPlaceLocal(work, a)
+                Toast.makeText(
+                    ctx,
+                    if (a.isSet) "Zapisano – CAR OS w aucie zmieni adres, gdy będzie online" else "Usunięto – CAR OS zaktualizuje się, gdy będzie online",
+                    Toast.LENGTH_LONG,
+                ).show()
+                onDismiss()
+            } else {
+                Toast.makeText(ctx, "Nie udało się wysłać – sprawdź internet", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    fun search() {
+        if (q.isBlank()) return
+        focus.clearFocus()
+        busy = "Szukam…"
+        scope.launch {
+            results = withContext(Dispatchers.IO) { try { Places.search(q, Locator.lastKnown(ctx)) } catch (_: Exception) { emptyList() } }
+            busy = null
+            if (results.isEmpty()) Toast.makeText(ctx, "Nic nie znaleziono", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun pick(r: CarData.Place) {
+        busy = "Zapisuję…"
+        scope.launch {
+            // nazwa miejsca (miejscowość, ulica, firma) albo – dla samego numeru domu – czytelny adres
+            val text = if (r.name.any { it.isLetter() }) {
+                listOf(r.name, r.detail.split(", ").firstOrNull { it.isNotBlank() && it != r.name }.orEmpty())
+                    .filter { it.isNotBlank() }.joinToString(", ")
+            } else {
+                withContext(Dispatchers.IO) { try { Places.reverse(r.lat, r.lon) } catch (_: Exception) { null } }
+                    ?: listOf(r.name, r.detail).filter { it.isNotBlank() }.joinToString(", ")
+            }
+            save(CarData.Addr(text.take(100), r.lat, r.lon))
+        }
+    }
+
+    fun here() {
+        busy = "Ustalam lokalizację…"
+        scope.launch {
+            val loc = withContext(Dispatchers.IO) { try { Locator.freshFix(ctx, 20) } catch (_: Exception) { null } }
+            if (loc == null) {
+                busy = null
+                Toast.makeText(ctx, "Brak lokalizacji – włącz GPS i zezwól aplikacji na lokalizację", Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            val text = withContext(Dispatchers.IO) { try { Places.reverse(loc.latitude, loc.longitude) } catch (_: Exception) { null } }
+                ?: String.format(Locale.US, "%.5f, %.5f", loc.latitude, loc.longitude)
+            save(CarData.Addr(text.take(100), loc.latitude, loc.longitude))
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (busy == null) onDismiss() },
+        containerColor = C.Card,
+        title = { Text(if (work) "Adres pracy" else "Adres domu", color = C.Text) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (current.isSet) Text("Teraz: ${current.address}", fontSize = 14.sp, color = C.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = q, onValueChange = { q = it },
+                        placeholder = { Text("Adres lub miejscowość") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(14.dp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { search() }),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = C.Accent, unfocusedBorderColor = C.Border,
+                            focusedTextColor = C.Text, unfocusedTextColor = C.Text, cursorColor = C.Accent,
+                        ),
+                    )
+                    Box(
+                        Modifier.size(54.dp).clip(RoundedCornerShape(14.dp)).background(C.Accent).clickable(enabled = busy == null) { search() },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Rounded.Search, "Szukaj", tint = C.Bg, modifier = Modifier.size(26.dp)) }
+                }
+                results.take(6).forEach { r ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(enabled = busy == null) { pick(r) }.padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(if (work) Icons.Rounded.Work else Icons.Rounded.Home, null, tint = C.Accent, modifier = Modifier.size(20.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(r.name, fontSize = 15.sp, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (r.detail.isNotBlank()) Text(r.detail, fontSize = 12.sp, color = C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+                SecondaryButton("Moja obecna lokalizacja", Icons.Rounded.MyLocation, Modifier.fillMaxWidth()) {
+                    if (busy == null) here()
+                }
+                busy?.let { b ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                        Text(b, fontSize = 14.sp, color = C.Muted)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss, enabled = busy == null) { Text("Anuluj") } },
+        dismissButton = {
+            if (current.isSet) TextButton(onClick = { if (busy == null) save(CarData.Addr("", null, null)) }) { Text("Usuń adres", color = Color(0xFFFF5A5F)) }
+        },
+    )
 }
 
 @Composable

@@ -100,6 +100,31 @@ object Places {
             ?.let { it.copy(name = name) }
     }
 
+    /** Adres dla współrzędnych (Nominatim reverse): „ulica nr, miejscowość”. */
+    fun reverse(lat: Double, lon: Double): String? {
+        val url = String.format(Locale.US, "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&accept-language=pl&lat=%.6f&lon=%.6f", lat, lon)
+        val c = URL(url).openConnection() as HttpURLConnection
+        c.connectTimeout = 10_000
+        c.readTimeout = 15_000
+        c.setRequestProperty("User-Agent", UA)
+        return try {
+            if (c.responseCode !in 200..299) return null
+            val o = org.json.JSONObject(c.inputStream.bufferedReader().use { it.readText() })
+            val a = o.optJSONObject("address")
+            if (a != null) {
+                val street = listOf(a.optString("road"), a.optString("house_number")).filter { it.isNotBlank() }.joinToString(" ")
+                val town = listOf("city", "town", "village", "hamlet", "suburb").map { a.optString(it) }.firstOrNull { it.isNotBlank() }.orEmpty()
+                val s = listOf(street, town).filter { it.isNotBlank() }.joinToString(", ")
+                if (s.isNotBlank()) return s
+            }
+            o.optString("display_name").split(", ").take(3).joinToString(", ").ifBlank { null }
+        } catch (_: Exception) {
+            null
+        } finally {
+            c.disconnect()
+        }
+    }
+
     /** Wyszukiwarka OpenStreetMap (Nominatim), wyniki od najbliższych. */
     fun search(query: String, near: Location?): List<CarData.Place> {
         if (query.isBlank()) return emptyList()
