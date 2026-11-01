@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Service
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -92,6 +93,36 @@ class DriveService : Service(), LocationListener {
             ContextCompat.RECEIVER_EXPORTED,
         )
         startUpdates()
+        handler.postDelayed(watchdog, 90_000)
+    }
+
+    /**
+     * Zabezpieczenie: gdyby rozłączenie Bluetooth nie dotarło (telefon uśpiony, błąd systemu),
+     * co minutę sprawdzamy, czy radio dalej jest połączone. Dwa razy nie → koniec jazdy, GPS wyłączony.
+     */
+    private var misses = 0
+    private val watchdog = object : Runnable {
+        override fun run() {
+            if (parking || done) return
+            when (carConnected()) {
+                false -> misses++
+                true -> misses = 0
+                null -> Unit
+            }
+            if (misses >= 2) carGone() else handler.postDelayed(this, 60_000)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun carConnected(): Boolean? {
+        val mac = Store.carMac.value ?: return null
+        return try {
+            val d = getSystemService(BluetoothManager::class.java)?.adapter?.bondedDevices
+                ?.firstOrNull { it.address.equals(mac, true) } ?: return false
+            BluetoothDevice::class.java.getMethod("isConnected").invoke(d) as? Boolean
+        } catch (_: Exception) {
+            null
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -99,9 +130,10 @@ class DriveService : Service(), LocationListener {
         val m = getSystemService(LocationManager::class.java) ?: return
         lm = m
         last = Locator.lastKnown(this)
-        for (p in listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)) {
+        // w czasie jazdy wystarczy co 5 s / 10 m (ostatnia pozycja = miejsce parkowania)
+        for ((p, ms, m10) in listOf(Triple(LocationManager.GPS_PROVIDER, 5000L, 10f), Triple(LocationManager.NETWORK_PROVIDER, 20_000L, 25f))) {
             try {
-                if (m.isProviderEnabled(p)) m.requestLocationUpdates(p, 3000L, 0f, this, Looper.getMainLooper())
+                if (m.isProviderEnabled(p)) m.requestLocationUpdates(p, ms, m10, this, Looper.getMainLooper())
             } catch (e: Exception) {
                 Log.w(TAG, "requestLocationUpdates($p): $e")
             }

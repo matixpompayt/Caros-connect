@@ -305,8 +305,11 @@ private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
     val scope = rememberCoroutineScope()
     var tick by remember { mutableLongStateOf(0L) }
     LaunchedEffect(Unit) { while (true) { delay(30_000); tick++ } }
-    val me = rememberPhoneLocation(perms.loc)
-    val azimuth = rememberAzimuth(me)
+    // GPS i kompas tylko gdy aplikacja jest na ekranie i jest zapisane miejsce auta
+    val visible = rememberVisible()
+    val active = visible && spot != null
+    val me = rememberPhoneLocation(perms.loc && active)
+    val azimuth = rememberAzimuth(me, active)
 
         if (!perms.allOk || car == null) SetupCard(perms, actions, car) { onPickCar() }
 
@@ -688,6 +691,21 @@ fun carPin(): Bitmap {
 
 // ---------- pozycja i kompas ----------
 
+/** Czy aplikacja jest na ekranie (nie w tle). Kompozycja żyje też w tle, więc sprawdzamy cykl życia. */
+@Composable
+private fun rememberVisible(): Boolean {
+    val owner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    var v by remember { mutableStateOf(owner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) }
+    DisposableEffect(owner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, _ ->
+            v = owner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
+        }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs) }
+    }
+    return v
+}
+
 @SuppressLint("MissingPermission")
 @Composable
 private fun rememberPhoneLocation(enabled: Boolean): Location? {
@@ -707,9 +725,8 @@ private fun rememberPhoneLocation(enabled: Boolean): Location? {
             override fun onProviderEnabled(provider: String) {}
             override fun onProviderDisabled(provider: String) {}
         }
-        for (p in listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)) {
-            try { lm?.requestLocationUpdates(p, 1000L, 0f, l, Looper.getMainLooper()) } catch (_: Exception) {}
-        }
+        try { lm?.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, l, Looper.getMainLooper()) } catch (_: Exception) {}
+        try { lm?.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 10_000L, 0f, l, Looper.getMainLooper()) } catch (_: Exception) {}
         onDispose { try { lm?.removeUpdates(l) } catch (_: Exception) {} }
     }
     return loc
@@ -717,14 +734,15 @@ private fun rememberPhoneLocation(enabled: Boolean): Location? {
 
 /** Azymut telefonu (stopnie od północy geograficznej) z czujnika obrotu. */
 @Composable
-private fun rememberAzimuth(me: Location?): Float? {
+private fun rememberAzimuth(me: Location?, enabled: Boolean): Float? {
     val ctx = LocalContext.current
     var az by remember { mutableStateOf<Float?>(null) }
     var smooth by remember { mutableFloatStateOf(Float.NaN) }
     val declination = remember(me?.latitude?.toInt(), me?.longitude?.toInt()) {
         me?.let { GeomagneticField(it.latitude.toFloat(), it.longitude.toFloat(), it.altitude.toFloat(), System.currentTimeMillis()).declination } ?: 0f
     }
-    DisposableEffect(declination) {
+    DisposableEffect(declination, enabled) {
+        if (!enabled) return@DisposableEffect onDispose {}
         val sm = ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager
         val sensor = sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
         val rot = FloatArray(9)
