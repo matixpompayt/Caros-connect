@@ -25,6 +25,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Delete
@@ -913,6 +914,9 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
     }
 
     Label("Aplikacja", Modifier.padding(top = 6.dp))
+    var changelog by remember { mutableStateOf(false) }
+    SettingItem(Icons.Rounded.NewReleases, "Co nowego", "Lista zmian w kolejnych wersjach") { changelog = true }
+    if (changelog) ChangelogDialog { changelog = false }
     UpdateItem()
     Text("CAR OS Connect ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = C.Muted, modifier = Modifier.padding(top = 4.dp))
 

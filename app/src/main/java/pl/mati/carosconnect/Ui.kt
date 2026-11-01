@@ -257,6 +257,7 @@ fun ParkApp(perms: Perms, actions: Actions) {
             dismissButton = { TextButton(onClick = { unpairAsk = false }) { Text("Anuluj") } },
         )
         share?.let { ShareDialog(it, actions) { Share.incoming.value = null } }
+        WhatsNewDialog()
     }
 }
 
@@ -595,9 +596,99 @@ fun UpdateItem() {
     SettingItem(Icons.Rounded.SystemUpdate, "Aktualizacja", sub, highlight = st is Updater.State.Available) {
         if (st is Updater.State.Available) Updater.downloadAndInstall(ctx) else Updater.check(silent = false)
     }
+    // co nowego w dostępnej wersji – zanim zainstalujesz
+    (st as? Updater.State.Available)?.notes?.let { n ->
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card).padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text("Co nowego w ${n.version}", fontSize = 13.sp, color = C.Accent, fontWeight = FontWeight.SemiBold)
+            ChangelogBody(n)
+        }
+    }
     (st as? Updater.State.Downloading)?.let {
         LinearProgressIndicator(progress = { it.progress }, modifier = Modifier.fillMaxWidth(), color = C.Accent)
     }
+}
+
+/** Tytuł i punkty jednego wydania. */
+@Composable
+fun ChangelogBody(e: Changelog.Entry) {
+    e.title?.let { Text(it, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Text) }
+    e.points.forEach { p ->
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("•", fontSize = 14.sp, color = C.Accent)
+            Text(p, fontSize = 14.sp, color = C.Text2)
+        }
+    }
+}
+
+/** Pełna lista zmian. */
+@Composable
+fun ChangelogDialog(onDismiss: () -> Unit) {
+    val list by Changelog.entries.collectAsState()
+    val upd by Updater.state.collectAsState()
+    val next = (upd as? Updater.State.Available)?.notes
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = C.Card,
+        title = { Text("Co nowego", color = C.Text) },
+        text = {
+            Column(
+                Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                if (next != null && list.none { it.version == next.version }) {
+                    ChangelogVersion(next, "do pobrania", C.Orange)
+                }
+                list.forEach { e ->
+                    ChangelogVersion(e, if (e.version == BuildConfig.VERSION_NAME) "zainstalowana" else null, C.Accent)
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Zamknij") } },
+    )
+}
+
+@Composable
+private fun ChangelogVersion(e: Changelog.Entry, badge: String?, badgeColor: Color) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Wersja ${e.version}", fontSize = 13.sp, color = C.Muted, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
+            e.date?.let { Text(it, fontSize = 12.sp, color = C.Muted) }
+            badge?.let {
+                Text(
+                    it, fontSize = 11.sp, color = badgeColor, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(badgeColor.copy(alpha = 0.15f)).padding(horizontal = 8.dp, vertical = 2.dp),
+                )
+            }
+        }
+        ChangelogBody(e)
+    }
+}
+
+/** Okno po aktualizacji: co zostało wprowadzone w tej wersji. */
+@Composable
+fun WhatsNewDialog() {
+    val e by Changelog.whatsNew.collectAsState()
+    val entry = e ?: return
+    var all by remember { mutableStateOf(false) }
+    if (all) {
+        ChangelogDialog { all = false; Changelog.markSeen() }
+        return
+    }
+    AlertDialog(
+        onDismissRequest = { Changelog.markSeen() },
+        containerColor = C.Card,
+        title = { Text("Nowość w wersji ${entry.version}", color = C.Text) },
+        text = {
+            Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                ChangelogBody(entry)
+            }
+        },
+        confirmButton = { TextButton(onClick = { Changelog.markSeen() }) { Text("Super") } },
+        dismissButton = { TextButton(onClick = { all = true }) { Text("Wszystkie zmiany") } },
+    )
 }
 
 @Composable

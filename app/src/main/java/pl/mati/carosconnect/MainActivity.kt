@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity(), Actions {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Store.init(this)
+        Changelog.init(this)
         Notifs.channels(this)
         org.maplibre.android.MapLibre.getInstance(this)
         CarData.init(this)

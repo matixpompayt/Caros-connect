@@ -23,7 +23,7 @@ object Updater {
         object Idle : State()
         object Checking : State()
         object UpToDate : State()
-        data class Available(val name: String, val url: String) : State()
+        data class Available(val name: String, val url: String, val notes: Changelog.Entry? = null) : State()
         data class Downloading(val progress: Float) : State()
         data class Error(val msg: String) : State()
     }
@@ -57,7 +57,8 @@ object Updater {
                     if (a.optString("name").startsWith("CarOS-Connect") && a.optString("name").endsWith(".apk")) url = a.optString("browser_download_url")
                 }
                 val name = json.optString("name").removePrefix("CAR OS Connect").trim().ifBlank { tag.removePrefix("v") }
-                state.value = if (url != null && code > BuildConfig.VERSION_CODE) State.Available(name, url) else State.UpToDate
+                val notes = Changelog.fromBody(name, json.optString("body"))
+                state.value = if (url != null && code > BuildConfig.VERSION_CODE) State.Available(name, url, notes) else State.UpToDate
             } catch (e: Exception) {
                 state.value = if (silent) State.Idle else State.Error(e.message ?: "Brak połączenia")
             }

@@ -1,0 +1,88 @@
+# Lista zmian CAR OS Connect – najnowsze na górze.
+# "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
+# Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
+
+## next
+Lista zmian
+- Ustawienia → Co nowego: wszystkie zmiany w kolejnych wersjach
+- Po aktualizacji aplikacja sama pokazuje, co się zmieniło
+- Przy dostępnej aktualizacji widać, co nowego, zanim ją zainstalujesz
+
+## 1.11 · 2026-11-01
+Oszczędzanie baterii
+- GPS i kompas działają tylko, gdy aplikacja jest na ekranie
+- W czasie jazdy rzadszy odczyt GPS (co 5 s / 10 m)
+- Usługa jazdy sama się wyłącza, gdy telefon nie jest już połączony z autem
+
+## 1.10 · 2026-11-01
+Dom i praca
+- Zmiana adresu domu i pracy z telefonu: wyszukiwarka, obecna lokalizacja albo usunięcie
+- Synchronizacja w obie strony z CAR OS
+- Strzałka przy adresie wysyła trasę do auta
+
+## 1.9 · 2026-10-31
+Auto pod pinezką
+- Pod pinezką P stoi model 3D auta z CAR OS
+- Model auta zapamiętany w telefonie i pobierany z radia
+
+## 1.8 · 2026-10-31
+Modele 3D
+- Zaparkowane auto jako model 3D – taki sam jak w radiu
+- Twoja pozycja jako ludzik 3D
+
+## 1.7 · 2026-10-31
+Twoje auto na mapie
+- Zaparkowane auto z ikoną ustawioną w CAR OS (typ nadwozia i kolor)
+
+## 1.6 · 2026-10-31
+Mniejsza aplikacja
+- Mniejszy plik instalacyjny (tylko procesory ARM, skompresowane biblioteki mapy)
+
+## 1.5 · 2026-10-31
+Mapy 3D
+- Darmowe mapy MapLibre + OpenFreeMap (bez Google, bez opłat)
+- Ciemny styl jak w CAR OS i budynki 3D przy parkingu
+- Ślad przejazdu na mapie w dzienniku tras
+
+## 1.4 · 2026-10-31
+Animacje
+- Płynne przejścia między zakładkami
+- Karty pojawiają się po kolei, przyciski sprężyście reagują na dotyk
+- Animowany pasek zakładek, logo, status połączenia i parkometr
+
+## 1.3 · 2026-10-30
+Serwis z telefonu
+- Edycja przeglądów, wymian i przebiegu w telefonie
+- Synchronizacja w obie strony: zmiana w radiu widoczna w telefonie i odwrotnie
+
+## 1.2 · 2026-10-30
+Numery wersji
+- Kolejne wersje: 1.2, 1.3, 1.4…
+
+## 1.1.5 · 2026-10-30
+Porządki
+- Nowe numerowanie wersji
+
+## 1.0.4 · 2026-10-30
+Duża aktualizacja
+- Zakładki: Parking, Auto, Trasy, Ustawienia
+- Wysyłanie celu nawigacji i ulubionych miejsc do auta (także z Map Google: Udostępnij → CAR OS Connect)
+- Stan auta: przebieg, kilometry dziś / w tygodniu / w miesiącu, serwis
+- Dziennik tras z mapą przejazdu
+- Kopia ustawień CAR OS w telefonie i przywracanie
+- Parkometr z przypomnieniem
+- Ostrzeżenie o mrozie przy aucie
+- Widżet na ekran główny
+
+## 1.0.3 · 2026-10-30
+Nowa ikona
+- Ikona z zegarem CAR OS i telefonem – łatwo odróżnić od CAR OS
+
+## 1.0.2 · 2026-10-30
+Odświeżanie
+- Pociągnij ekran w dół, aby odświeżyć dane
+
+## 1.0.1 · 2026-10-30
+Pierwsza wersja CAR OS Connect
+- Parowanie z CAR OS w aucie kodem QR
+- Gdzie zaparkowałem: mapa z miejscem auta i prowadzenie do niego
