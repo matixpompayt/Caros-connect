@@ -40,6 +40,11 @@ object Store {
     val carName = MutableStateFlow<String?>(null)
     /** true = telefon jest połączony z autem i śledzi pozycję (usługa działa). */
     val driving = MutableStateFlow(false)
+    /** Wygląd: "auto" (jak telefon), "light", "dark". */
+    val theme = MutableStateFlow("auto")
+    /** Notatka i zdjęcie do bieżącego miejsca parkowania. */
+    val spotNote = MutableStateFlow("")
+    val spotPhoto = MutableStateFlow<String?>(null)
 
     private var sp: SharedPreferences? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -50,6 +55,9 @@ object Store {
         sp = p
         carMac.value = p.getString("car_mac", null)
         carName.value = p.getString("car_name", null)
+        theme.value = p.getString("theme", "auto") ?: "auto"
+        spotNote.value = p.getString("spot_note", "") ?: ""
+        spotPhoto.value = p.getString("spot_photo", null)
         skippedPairing.value = p.getBoolean("skip_pair", false)
         pairing.value = p.getString("pairing", null)?.let { raw ->
             try {
@@ -91,6 +99,53 @@ object Store {
         ed.apply()
     }
 
+    fun setTheme(v: String) {
+        theme.value = v
+        sp?.edit()?.putString("theme", v)?.apply()
+    }
+
+    fun setNote(text: String) {
+        spotNote.value = text
+        notesAt()?.putString("spot_note", text)?.apply()
+    }
+
+    fun setPhoto(path: String?) {
+        spotPhoto.value?.takeIf { it != path }?.let { try { java.io.File(it).delete() } catch (_: Exception) {} }
+        spotPhoto.value = path
+        notesAt()?.putString("spot_photo", path)?.apply()
+    }
+
+    /** Zapamiętuje, do którego miejsca (czas i pozycja) dodano notatkę / zdjęcie. */
+    private fun notesAt(): SharedPreferences.Editor? {
+        val s = spot.value
+        return sp?.edit()?.putLong("notes_for", s?.time ?: 0L)?.putLong("notes_at", System.currentTimeMillis())
+            ?.putString("notes_pos", s?.let { "${it.lat},${it.lon}" } ?: "")
+    }
+
+    /** Nowe miejsce parkowania → stara notatka i zdjęcie już nie pasują (chyba że to to samo miejsce). */
+    private fun clearNotesIfNew(s: Spot) {
+        val p = sp ?: return
+        val forT = p.getLong("notes_for", 0L)
+        if (forT == s.time) return
+        if (spotNote.value.isBlank() && spotPhoto.value == null) return
+        // to samo parkowanie zgłoszone drugi raz (np. przez radio) – zostaw notatkę
+        val pos = p.getString("notes_pos", "")?.split(",")?.mapNotNull { it.toDoubleOrNull() }
+        if (pos != null && pos.size == 2) {
+            val d = FloatArray(1)
+            android.location.Location.distanceBetween(pos[0], pos[1], s.lat, s.lon, d)
+            if (d[0] < 150 && kotlin.math.abs(s.time - forT) < 45 * 60_000L) {
+                p.edit().putLong("notes_for", s.time).apply()
+                return
+            }
+        }
+        // notatka dodana przed zapisem miejsca (np. ręcznie tuż przed) – zostaw, jeśli świeża
+        if (forT == 0L && System.currentTimeMillis() - p.getLong("notes_at", 0L) < 10 * 60_000L) return
+        spotPhoto.value?.let { try { java.io.File(it).delete() } catch (_: Exception) {} }
+        spotNote.value = ""
+        spotPhoto.value = null
+        p.edit().remove("spot_note").remove("spot_photo").putLong("notes_for", s.time).apply()
+    }
+
     fun skipPairing() {
         skippedPairing.value = true
         sp?.edit()?.putBoolean("skip_pair", true)?.apply()
@@ -101,6 +156,7 @@ object Store {
         val cur = spot.value
         if (cur != null && cur.time >= s.time) return
         if (cur != null && cur.src == SRC_CAR && cur.lat == s.lat && cur.lon == s.lon) return
+        clearNotesIfNew(s)
         spot.value = s
         history.value = (listOf(s) + history.value.filterNot { it.time == s.time }).take(20)
         persist()
@@ -112,6 +168,7 @@ object Store {
     /** Zapisuje nowe miejsce, dopisuje do historii i w tle ustala adres. */
     fun saveSpot(ctx: Context, s: Spot) {
         init(ctx)
+        clearNotesIfNew(s)
         spot.value = s
         history.value = (listOf(s) + history.value.filterNot { it.time == s.time }).take(20)
         persist()

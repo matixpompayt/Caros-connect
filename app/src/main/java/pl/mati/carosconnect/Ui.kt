@@ -70,6 +70,11 @@ import androidx.compose.material.icons.rounded.Navigation
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.PhotoCamera
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.QrCode2
 import androidx.compose.material.icons.rounded.QrCodeScanner
@@ -125,17 +130,56 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
+/** Kolory aplikacji: ciemne albo jasne (Ustawienia → Wygląd). */
+data class Pal(
+    val light: Boolean,
+    val bg: Color, val card: Color, val raised: Color, val border: Color,
+    val text: Color, val text2: Color, val muted: Color,
+    val accent: Color, val green: Color, val orange: Color, val hero: Color, val frost: Color,
+)
+
 object C {
-    val Bg = Color(0xFF0A0C0F)
-    val Card = Color(0xFF14181E)
-    val Raised = Color(0xFF1A1F26)
-    val Border = Color(0xFF1E232B)
-    val Text = Color(0xFFEEF1F4)
-    val Text2 = Color(0xFFC3C9D0)
-    val Muted = Color(0xFF9AA3AE)
-    val Accent = Color(0xFF2FD3F0)
-    val Green = Color(0xFF7CF06B)
-    val Orange = Color(0xFFFFB03A)
+    val DARK = Pal(
+        false, Color(0xFF0A0C0F), Color(0xFF14181E), Color(0xFF1A1F26), Color(0xFF1E232B),
+        Color(0xFFEEF1F4), Color(0xFFC3C9D0), Color(0xFF9AA3AE),
+        Color(0xFF2FD3F0), Color(0xFF7CF06B), Color(0xFFFFB03A), Color(0xFF0E2A33), Color(0xFF15324A),
+    )
+    val LIGHT = Pal(
+        true, Color(0xFFE9EDF1), Color(0xFFF8FAFC), Color(0xFFDFE5EB), Color(0xFFD2D9E0),
+        Color(0xFF12161B), Color(0xFF353D47), Color(0xFF66707C),
+        Color(0xFF0A97B4), Color(0xFF2E9440), Color(0xFFCC7A1E), Color(0xFFCDE9F0), Color(0xFFD3E6F5),
+    )
+    var pal by mutableStateOf(DARK)
+    val isLight get() = pal.light
+    val Bg get() = pal.bg
+    val Card get() = pal.card
+    val Raised get() = pal.raised
+    val Border get() = pal.border
+    val Text get() = pal.text
+    val Text2 get() = pal.text2
+    val Muted get() = pal.muted
+    val Accent get() = pal.accent
+    val Green get() = pal.green
+    val Orange get() = pal.orange
+    val Hero get() = pal.hero
+    val Frost get() = pal.frost
+}
+
+/** Wybór wyglądu: auto (jak telefon) / jasny / ciemny. */
+@Composable
+fun ThemeChooser() {
+    val mode by Store.theme.collectAsState()
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf("auto" to "Jak telefon", "light" to "Jasny", "dark" to "Ciemny").forEach { (k, label) ->
+            val on = mode == k
+            Box(
+                Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if (on) C.Accent.copy(alpha = 0.16f) else C.Card)
+                    .border(1.dp, if (on) C.Accent else C.Border, RoundedCornerShape(14.dp))
+                    .clickable { Store.setTheme(k) }.padding(vertical = 14.dp),
+                contentAlignment = Alignment.Center,
+            ) { Text(label, fontSize = 15.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, color = if (on) C.Accent else C.Text) }
+        }
+    }
 }
 
 private val TIME = SimpleDateFormat("HH:mm", Locale("pl"))
@@ -161,7 +205,22 @@ fun distText(m: Float): String = if (m >= 1000) String.format(Locale("pl"), "%.1
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ParkApp(perms: Perms, actions: Actions) {
-    MaterialTheme(colorScheme = darkColorScheme(primary = C.Accent, background = C.Bg, surface = C.Card)) {
+    val themeMode by Store.theme.collectAsState()
+    val sysDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val light = when (themeMode) { "light" -> true; "dark" -> false; else -> !sysDark }
+    if (C.pal.light != light) C.pal = if (light) C.LIGHT else C.DARK
+    val view = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.SideEffect {
+        (view.context as? android.app.Activity)?.window?.let { w ->
+            androidx.core.view.WindowCompat.getInsetsController(w, view).apply {
+                isAppearanceLightStatusBars = light
+                isAppearanceLightNavigationBars = light
+            }
+        }
+    }
+    val scheme = if (light) androidx.compose.material3.lightColorScheme(primary = C.Accent, background = C.Bg, surface = C.Card)
+    else darkColorScheme(primary = C.Accent, background = C.Bg, surface = C.Card)
+    MaterialTheme(colorScheme = scheme) {
         val ctx = LocalContext.current
         val driving by Store.driving.collectAsState()
         val car by Store.carName.collectAsState()
@@ -314,6 +373,19 @@ private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
 
         if (!perms.allOk || car == null) SetupCard(perms, actions, car) { onPickCar() }
 
+        // auto w drodze (ktoś jedzie autem) – pozycja co minutę z CAR OS
+        val live by CarData.live.collectAsState()
+        val lv = live
+        val liveActive = lv != null && lv.moving && System.currentTimeMillis() + 0 * tick - lv.time < 10 * 60_000L &&
+            (spot == null || lv.time > (spot?.time ?: 0L))
+        LaunchedEffect(liveActive, visible) {
+            while (liveActive && visible) {
+                delay(30_000)
+                actions.refreshFromCar()
+            }
+        }
+        if (liveActive && lv != null) LiveCard(lv, me)
+
         val s = spot
         if (s == null) {
             Card {
@@ -342,6 +414,7 @@ private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
                 )
                 if (driving) Text("Jesteś teraz w aucie – to poprzednie miejsce parkowania.", fontSize = 13.sp, color = C.Orange)
             }
+            NotePhotoCard()
             FinderCard(s, me, azimuth)
             PrimaryButton("Prowadź do auta", Icons.Rounded.DirectionsWalk) {
                 try { ctx.startActivity(Notifs.walkIntent(s)) } catch (_: Exception) {
@@ -363,10 +436,7 @@ private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
                     }
                 }
             }
-            if (s != null) SecondaryButton("Udostępnij", Icons.Rounded.Share, Modifier.weight(1f)) {
-                val txt = "Moje auto stoi tu: ${s.address ?: s.coords}\n${s.mapsUrl}"
-                ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, txt), "Udostępnij miejsce"))
-            }
+            if (s != null) SecondaryButton("Udostępnij", Icons.Rounded.Share, Modifier.weight(1f)) { shareSpot(ctx, s) }
         }
 
         CarWeatherCard()
@@ -398,13 +468,144 @@ private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
         }
 }
 
+/** Link do Map Google + notatka (+ zdjęcie, jeśli jest) – SMS, WhatsApp, Messenger… */
+fun shareSpot(ctx: android.content.Context, s: Store.Spot) {
+    val note = Store.spotNote.value
+    val txt = "Moje auto stoi tu: ${s.address ?: s.coords}" + (if (note.isNotBlank()) "\n$note" else "") + "\n${s.mapsUrl}"
+    val photo = Store.spotPhoto.value?.let { java.io.File(it) }?.takeIf { it.exists() }
+    val i = Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_TEXT, txt)
+    if (photo != null) {
+        val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", photo)
+        i.setType("image/jpeg").putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        i.clipData = android.content.ClipData.newRawUri("", uri)
+    } else {
+        i.setType("text/plain")
+    }
+    try { ctx.startActivity(Intent.createChooser(i, "Udostępnij miejsce auta")) } catch (_: Exception) {}
+}
+
+/** Auto w drodze: mapa z autem i prędkość. */
+@Composable
+private fun LiveCard(l: CarData.Live, me: android.location.Location?) {
+    val ctx = LocalContext.current
+    val spot = remember(l.time) { Store.Spot(l.lat, l.lon, l.time, 0f, src = Store.SRC_CAR) }
+    ParkMap(spot, me, Modifier.stagger().fillMaxWidth().height(260.dp).clip(RoundedCornerShape(24.dp)).border(1.dp, C.Border, RoundedCornerShape(24.dp)))
+    Card {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(Modifier.size(44.dp).clip(CircleShape).background(C.Green), contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.DirectionsCar, null, tint = C.Bg, modifier = Modifier.size(26.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text("Auto w drodze · ${l.speed} km/h", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+                Text("Pozycja ${agoText(l.time)} · odświeża się co pół minuty", fontSize = 14.sp, color = C.Muted)
+            }
+        }
+        SecondaryButton("Pokaż w Mapach", Icons.Rounded.Map, Modifier.fillMaxWidth()) {
+            try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(spot.mapsUrl))) } catch (_: Exception) {}
+        }
+    }
+}
+
+/** Notatka („poziom -2, miejsce 47”) i zdjęcie do miejsca parkowania. */
+@Composable
+private fun NotePhotoCard() {
+    val ctx = LocalContext.current
+    val note by Store.spotNote.collectAsState()
+    val photo by Store.spotPhoto.collectAsState()
+    var editNote by remember { mutableStateOf(false) }
+    var bigPhoto by remember { mutableStateOf(false) }
+    var pending by remember { mutableStateOf<java.io.File?>(null) }
+    val take = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { ok ->
+        val f = pending
+        if (ok && f != null && f.exists() && f.length() > 0) Store.setPhoto(f.absolutePath) else f?.delete()
+        pending = null
+    }
+    fun shoot() {
+        val dir = java.io.File(ctx.filesDir, "parking").apply { mkdirs() }
+        val f = java.io.File(dir, "spot_${System.currentTimeMillis()}.jpg")
+        pending = f
+        try {
+            take.launch(androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f))
+        } catch (_: Exception) {
+            Toast.makeText(ctx, "Nie mogę otworzyć aparatu", Toast.LENGTH_SHORT).show()
+        }
+    }
+    val camPerm = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) shoot() else Toast.makeText(ctx, "Bez zgody na aparat nie zrobię zdjęcia", Toast.LENGTH_SHORT).show()
+    }
+    val bmp = remember(photo) {
+        photo?.let { p ->
+            try {
+                val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeFile(p, o)
+                var sample = 1
+                while (o.outWidth / sample > 1200) sample *= 2
+                android.graphics.BitmapFactory.decodeFile(p, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+    Card {
+        Text("Notatka i zdjęcie", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+        if (note.isNotBlank()) Text(note, fontSize = 17.sp, color = C.Text2, modifier = Modifier.clickable { editNote = true })
+        else Text("Np. „poziom -2, miejsce 47” albo zdjęcie słupka na parkingu", fontSize = 14.sp, color = C.Muted)
+        bmp?.let { b ->
+            androidx.compose.foundation.Image(
+                b, "Zdjęcie miejsca", contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(16.dp)).clickable { bigPhoto = true },
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            SecondaryButton(if (note.isBlank()) "Notatka" else "Zmień", Icons.Rounded.Edit, Modifier.weight(1f)) { editNote = true }
+            SecondaryButton(if (photo == null) "Zdjęcie" else "Nowe zdjęcie", Icons.Rounded.PhotoCamera, Modifier.weight(1f)) {
+                val has = androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (has) shoot() else camPerm.launch(android.Manifest.permission.CAMERA)
+            }
+        }
+        if (photo != null) Text("Usuń zdjęcie", fontSize = 13.sp, color = C.Muted, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { Store.setPhoto(null) }.padding(6.dp))
+    }
+    if (editNote) {
+        var t by remember { mutableStateOf(note) }
+        AlertDialog(
+            onDismissRequest = { editNote = false },
+            containerColor = C.Card,
+            title = { Text("Notatka do parkowania", color = C.Text) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = t, onValueChange = { t = it.take(200) },
+                        placeholder = { Text("np. poziom -2, miejsce 47, przy windzie") },
+                        modifier = Modifier.fillMaxWidth(), minLines = 2,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = C.Accent, unfocusedBorderColor = C.Border,
+                            focusedTextColor = C.Text, unfocusedTextColor = C.Text, cursorColor = C.Accent,
+                        ),
+                    )
+                }
+            },
+            confirmButton = { TextButton(onClick = { Store.setNote(t.trim()); editNote = false }) { Text("Zapisz") } },
+            dismissButton = { TextButton(onClick = { editNote = false }) { Text("Anuluj") } },
+        )
+    }
+    if (bigPhoto && bmp != null) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { bigPhoto = false }) {
+            androidx.compose.foundation.Image(
+                bmp, "Zdjęcie miejsca", contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { bigPhoto = false },
+            )
+        }
+    }
+}
+
 /** Ekran powitalny: połączenie z CAR OS przez kod QR. */
 @Composable
 private fun WelcomeScreen(actions: Actions) {
     CompositionLocalProvider(LocalStagger provides remember { StaggerCounter() }) {
     Column(
         Modifier.fillMaxSize().background(
-            androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF0E2A33), C.Bg, C.Bg)),
+            androidx.compose.ui.graphics.Brush.verticalGradient(listOf(C.Hero, C.Bg, C.Bg)),
         ).statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

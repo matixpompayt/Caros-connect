@@ -46,6 +46,9 @@ object CarData {
         /** Ikona auta ustawiona w CAR OS (typ nadwozia, kolor). */
         val body: String? = null,
         val paint: Int? = null,
+        val shifts: List<Shift> = emptyList(),
+        val commuteS: Int? = null,
+        val fuel: Fuel? = null,
         /** null = starszy CAR OS bez synchronizacji domu i pracy. */
         val home: Addr? = null,
         val work: Addr? = null,
@@ -60,6 +63,27 @@ object CarData {
     ) {
         val durationS get() = (end - start) / 1000
         val avgKmh get() = if (movingS > 0) distanceM / movingS * 3.6 else 0.0
+    }
+
+    /** Auto w drodze: pozycja co minutę od CAR OS. */
+    data class Live(val lat: Double, val lon: Double, val speed: Int, val bearing: Int, val time: Long, val moving: Boolean)
+
+    /** Zmiana z grafiku (z radia) – do przypomnień. */
+    data class Shift(val start: Long, val end: Long, val name: String, val hours: String)
+
+    /** Tankowanie (te same dane co w radiu). */
+    data class Fill(val id: String, val time: Long, val odo: Int, val liters: Double, val cost: Double, val full: Boolean) {
+        fun toJson(): JSONObject = JSONObject().put("id", id).put("t", time).put("o", odo).put("l", liters).put("c", cost).put("f", full)
+    }
+
+    data class Fuel(val tank: Int, val fills: List<Fill>, val avg: Double?, val range: Double?, val costKm: Double?, val estimated: Boolean)
+
+    val live = MutableStateFlow<Live?>(null)
+
+    fun setLive(l: Live) {
+        val cur = live.value
+        if (cur != null && cur.time >= l.time) return
+        live.value = l
     }
 
     data class Weather(val time: Long, val temp: Double, val minPast: Double, val humidity: Int, val frost: Boolean)
@@ -81,6 +105,8 @@ object CarData {
 
     val notifService = MutableStateFlow(true)
     val notifFrost = MutableStateFlow(true)
+    val notifWork = MutableStateFlow(true)
+    val notifDepart = MutableStateFlow(true)
     val frostHour = MutableStateFlow(6)
 
     private var sp: SharedPreferences? = null
@@ -105,6 +131,8 @@ object CarData {
         meterStart.value = p.getLong("meter_start", 0L)
         notifService.value = p.getBoolean("n_service", true)
         notifFrost.value = p.getBoolean("n_frost", true)
+        notifWork.value = p.getBoolean("n_work", true)
+        notifDepart.value = p.getBoolean("n_depart", true)
         frostHour.value = p.getInt("frost_hour", 6)
         carBody.value = p.getString("car_body", null)
         carPaint.value = if (p.contains("car_paint")) p.getInt("car_paint", 0) else null
@@ -166,6 +194,22 @@ object CarData {
     }
 
     fun setOdoLocal(km: Int) = editLocal { o -> o.put("odo", km).put("odoSet", true) }
+
+    fun addFillLocal(f: Fill) = editLocal { o ->
+        val fuel = o.optJSONObject("fuel") ?: JSONObject().put("tank", 60).also { o.put("fuel", it) }
+        val a = fuel.optJSONArray("fills") ?: JSONArray()
+        val n = JSONArray().put(f.toJson())
+        for (i in 0 until a.length()) n.put(a.get(i))
+        fuel.put("fills", n)
+    }
+
+    fun removeFillLocal(id: String) = editLocal { o ->
+        val fuel = o.optJSONObject("fuel") ?: return@editLocal
+        val a = fuel.optJSONArray("fills") ?: return@editLocal
+        val n = JSONArray()
+        for (i in 0 until a.length()) if (a.getJSONObject(i).optString("id") != id) n.put(a.get(i))
+        fuel.put("fills", n)
+    }
 
     fun setPlaceLocal(work: Boolean, a: Addr) = editLocal { o ->
         o.put(if (work) "work" else "home", addrJson(a))
@@ -230,6 +274,27 @@ object CarData {
             pending = o.optBoolean("pending"),
             body = o.optString("body").ifBlank { null },
             paint = if (o.has("paint")) o.optInt("paint") else null,
+            shifts = (o.optJSONArray("shifts") ?: JSONArray()).let { a ->
+                (0 until a.length()).map { i ->
+                    val x = a.getJSONObject(i)
+                    Shift(x.getLong("s"), x.getLong("e"), x.optString("n"), x.optString("h"))
+                }
+            },
+            commuteS = if (o.isNull("commute") || !o.has("commute")) null else o.optInt("commute"),
+            fuel = o.optJSONObject("fuel")?.let { f ->
+                val a = f.optJSONArray("fills") ?: JSONArray()
+                Fuel(
+                    f.optInt("tank", 60),
+                    (0 until a.length()).map { i ->
+                        val x = a.getJSONObject(i)
+                        Fill(x.optString("id"), x.optLong("t"), x.optInt("o"), x.optDouble("l"), x.optDouble("c"), x.optBoolean("f", true))
+                    },
+                    if (f.isNull("avg")) null else f.optDouble("avg"),
+                    if (f.isNull("range")) null else f.optDouble("range"),
+                    if (f.isNull("ckm")) null else f.optDouble("ckm"),
+                    f.optBoolean("est", true),
+                )
+            },
             home = addrFrom(o.optJSONObject("home")),
             work = addrFrom(o.optJSONObject("work")),
         )
@@ -310,6 +375,8 @@ object CarData {
     }
 
     fun setNotifService(v: Boolean) { notifService.value = v; sp?.edit()?.putBoolean("n_service", v)?.apply() }
+    fun setNotifWork(v: Boolean) { notifWork.value = v; sp?.edit()?.putBoolean("n_work", v)?.apply() }
+    fun setNotifDepart(v: Boolean) { notifDepart.value = v; sp?.edit()?.putBoolean("n_depart", v)?.apply() }
     fun setNotifFrost(v: Boolean) { notifFrost.value = v; sp?.edit()?.putBoolean("n_frost", v)?.apply() }
     fun setFrostHour(v: Int) { frostHour.value = (v + 24) % 24; sp?.edit()?.putInt("frost_hour", frostHour.value)?.apply() }
 }

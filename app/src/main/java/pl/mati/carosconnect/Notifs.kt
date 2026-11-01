@@ -16,6 +16,8 @@ object Notifs {
     const val CH_SERVICE = "service"
     const val CH_WEATHER = "weather"
     const val CH_METER = "meter"
+    const val CH_WORK = "work"
+    const val ID_WORK = 6
     const val ID_DRIVE = 1
     const val ID_PARK = 2
     const val ID_SERVICE = 3
@@ -43,6 +45,11 @@ object Notifs {
         nm.createNotificationChannel(
             NotificationChannel(CH_WEATHER, "Mróz i szron", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "Poranne ostrzeżenie o oblodzonych szybach"
+            },
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CH_WORK, "Przed pracą", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Przypomnienie przed zmianą z grafiku w CAR OS i o godzinie wyjazdu"
             },
         )
         nm.createNotificationChannel(
@@ -110,6 +117,9 @@ object Notifs {
 
     fun weather(ctx: Context, title: String, text: String) =
         simple(ctx, CH_WEATHER, ID_WEATHER, android.R.drawable.ic_dialog_alert, title, text)
+
+    fun work(ctx: Context, title: String, text: String) =
+        simple(ctx, CH_WORK, ID_WORK, android.R.drawable.ic_lock_idle_alarm, title, text)
 
     fun meter(ctx: Context, title: String, text: String) =
         simple(ctx, CH_METER, ID_METER, android.R.drawable.ic_lock_idle_alarm, title, text)

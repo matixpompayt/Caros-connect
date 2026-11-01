@@ -84,7 +84,7 @@ private class MapHolder(ctx: Context, onStyle: (MapLibreMap, Style) -> Unit) {
                 setAttributionMargins((10 * density).toInt(), (10 * density).toInt(), 0, 0)
             }
             m.setStyle(Style.Builder().fromUri(CarMapStyle.STYLE_URL)) { st ->
-                CarMapStyle.applyDark(st)
+                CarMapStyle.apply(st, C.isLight)
                 onStyle(m, st)
                 style = st
                 ready = true
@@ -95,6 +95,9 @@ private class MapHolder(ctx: Context, onStyle: (MapLibreMap, Style) -> Unit) {
 
 @Composable
 private fun rememberMapLifecycle(h: MapHolder) {
+    // jasny / ciemny wygląd mapy razem z aplikacją
+    val light = C.isLight
+    LaunchedEffect(light, h.ready) { if (h.ready) h.style?.let { CarMapStyle.apply(it, light) } }
     val lifecycle = (LocalContext.current as? ComponentActivity)?.lifecycle
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, e ->

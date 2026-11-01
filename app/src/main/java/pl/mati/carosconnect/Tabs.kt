@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.NewReleases
+import androidx.compose.material.icons.rounded.LocalGasStation
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Delete
@@ -181,6 +182,8 @@ fun CarTab(actions: Actions) {
         }
         if (editOdo) OdoDialog(s.odo) { editOdo = false }
         editItem?.let { ServiceEditDialog(it) { editItem = null } }
+
+        FuelSection(s)
     }
 
     Label("Wyślij cel do auta", Modifier.padding(top = 6.dp))
@@ -308,6 +311,97 @@ private fun SendPlaceCard() {
         }
     }
     chosen?.let { PlaceSheet(it, resolving = false, error = null) { chosen = null; results = emptyList(); q = "" } }
+}
+
+/** Tankowania: spalanie, zasięg, koszt km, dodawanie (synchronizacja z CAR OS). */
+@Composable
+private fun FuelSection(s: CarData.Status) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var adding by remember { mutableStateOf(false) }
+    var del by remember { mutableStateOf<String?>(null) }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+        Label("Paliwo", Modifier.weight(1f))
+        if (s.fuel != null) Text("+ tankowanie", fontSize = 14.sp, color = C.Accent, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { adding = true }.padding(8.dp))
+    }
+    val f = s.fuel
+    if (f == null) {
+        Text("Zaktualizuj CAR OS w radiu, żeby zapisywać tankowania z telefonu", fontSize = 13.sp, color = C.Muted)
+        return
+    }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        StatBox("Spalanie", f.avg?.let { String.format(PL, "%.1f l/100", it) } ?: "—", Modifier.weight(1f))
+        StatBox(if (f.estimated) "Zasięg (szac.)" else "Zasięg", f.range?.let { "${it.roundToInt()} km" } ?: "—", Modifier.weight(1f))
+        StatBox("Koszt km", f.costKm?.let { String.format(PL, "%.0f gr", it * 100) } ?: "—", Modifier.weight(1f))
+    }
+    if (f.fills.isEmpty()) {
+        Card {
+            Text("Brak tankowań", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+            Text("Dodaj tankowanie (najlepiej do pełna) – CAR OS policzy spalanie i zasięg.", fontSize = 14.sp, color = C.Muted)
+            PrimaryButton("Dodaj tankowanie", Icons.Rounded.LocalGasStation) { adding = true }
+        }
+    }
+    f.fills.take(5).forEach { x ->
+        Row(
+            Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card).padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(Icons.Rounded.LocalGasStation, null, tint = C.Accent, modifier = Modifier.size(22.dp))
+            Column(Modifier.weight(1f)) {
+                Text(String.format(PL, "%.1f l · %.2f zł", x.liters, x.cost) + if (x.full) " · do pełna" else "", fontSize = 15.sp, color = C.Text)
+                Text("${whenText(x.time)} · ${thousands(x.odo)} km", fontSize = 12.sp, color = C.Muted)
+            }
+            if (del == x.id) {
+                Text("Usuń", fontSize = 14.sp, color = Color(0xFFFF5A5F), fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
+                        del = null
+                        CarData.removeFillLocal(x.id)
+                        scope.launch { sendSvc(ctx, JSONObject().put("type", "fuel_del").put("id", x.id)) }
+                    }.padding(10.dp))
+            } else IconBtn(Icons.Rounded.Delete, "Usuń tankowanie") { del = x.id }
+        }
+    }
+    if (adding) FuelDialog(s.odo) { adding = false }
+}
+
+@Composable
+private fun FuelDialog(odo: Int?, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var liters by remember { mutableStateOf("") }
+    var cost by remember { mutableStateOf("") }
+    var km by remember { mutableStateOf(odo?.toString() ?: "") }
+    var full by remember { mutableStateOf(true) }
+    fun num(t: String) = t.replace(',', '.').toDoubleOrNull()
+    val l = num(liters)
+    val c = num(cost)
+    val o = km.toIntOrNull()
+    val ok = l != null && l in 1.0..200.0 && c != null && c >= 0 && o != null && o > 0
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = C.Card,
+        title = { Text("Nowe tankowanie", color = C.Text) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                NumField("Litry", liters, { liters = it }, "np. 45,3", decimal = true)
+                NumField("Kwota (zł)", cost, { cost = it }, "np. 289,90", decimal = true)
+                NumField("Przebieg (km)", km, { km = it.filter(Char::isDigit).take(7) }, "z licznika")
+                ToggleRow("Do pełna", "Zatankowane do odbicia pistoletu", full) { full = it }
+                if (l != null && c != null && l > 0) Text(String.format(PL, "Cena: %.2f zł/l", c / l), fontSize = 14.sp, color = C.Muted)
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = ok, onClick = {
+                val fill = CarData.Fill(java.util.UUID.randomUUID().toString(), System.currentTimeMillis(), o!!, l!!, c!!, full)
+                CarData.addFillLocal(fill)
+                scope.launch { sendSvc(ctx, JSONObject().put("type", "fuel_add").put("fill", fill.toJson())) }
+                onDismiss()
+            }) { Text("Zapisz") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Anuluj") } },
+    )
 }
 
 @Composable
@@ -817,7 +911,7 @@ fun CarWeatherCard() {
     if (spot == null || System.currentTimeMillis() - ww.time > 3 * 3_600_000L) return
     Row(
         Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp))
-            .background(if (ww.frost) Color(0xFF15324A) else C.Card).padding(horizontal = 16.dp, vertical = 12.dp),
+            .background(if (ww.frost) C.Frost else C.Card).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -872,6 +966,29 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
             Chip("+", Modifier.size(width = 48.dp, height = 42.dp)) { CarData.setFrostHour(frostHour + 1) }
         }
     }
+    val nWork by CarData.notifWork.collectAsState()
+    val nDepart by CarData.notifDepart.collectAsState()
+    ToggleRow("Przypomnienie przed pracą", "2 h przed zmianą z grafiku w CAR OS, z godziną wyjazdu", nWork) {
+        CarData.setNotifWork(it); WorkReminder.schedule(ctx)
+    }
+    ToggleRow("Czas wyjeżdżać", "Powiadomienie, kiedy trzeba ruszać do pracy (wg czasu dojazdu)", nDepart) {
+        CarData.setNotifDepart(it); WorkReminder.schedule(ctx)
+    }
+    run {
+        val st by CarData.status.collectAsState()
+        val next = remember(st, nWork, nDepart) { st?.shifts?.firstOrNull { it.start > System.currentTimeMillis() } }
+        val txt = when {
+            st == null -> "Grafik pojawi się po połączeniu z CAR OS"
+            st?.shifts.isNullOrEmpty() -> "Brak zmian w grafiku – ustaw grafik w CAR OS (Autostart → Grafik pracy)"
+            next != null -> "Najbliższa zmiana: ${next.name.lowercase(PL)} ${whenText(next.start)}" +
+                (WorkReminder.departure(next)?.let { " · wyjazd ${SimpleDateFormat("H:mm", PL).format(Date(it))}" } ?: "")
+            else -> ""
+        }
+        if (txt.isNotBlank()) Text(txt, fontSize = 13.sp, color = C.Muted, modifier = Modifier.padding(horizontal = 4.dp))
+    }
+
+    Label("Wygląd", Modifier.padding(top = 6.dp))
+    ThemeChooser()
 
     Label("Kopia ustawień CAR OS", Modifier.padding(top = 6.dp))
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -983,15 +1100,15 @@ private suspend fun sendSvc(ctx: android.content.Context, o: JSONObject) {
 }
 
 @Composable
-private fun NumField(label: String, value: String, onChange: (String) -> Unit, hint: String, modifier: Modifier = Modifier) {
+private fun NumField(label: String, value: String, onChange: (String) -> Unit, hint: String, modifier: Modifier = Modifier, decimal: Boolean = false) {
     OutlinedTextField(
-        value = value, onValueChange = { v -> onChange(v.filter(Char::isDigit).take(7)) },
+        value = value, onValueChange = { v -> onChange(if (decimal) v.filter { it.isDigit() || it == ',' || it == '.' }.take(7) else v.filter(Char::isDigit).take(7)) },
         label = { Text(label) },
         placeholder = { Text(hint) },
         singleLine = true,
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardOptions = KeyboardOptions(keyboardType = if (decimal) KeyboardType.Decimal else KeyboardType.Number),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = C.Accent, unfocusedBorderColor = C.Border,
             focusedTextColor = C.Text, unfocusedTextColor = C.Text, cursorColor = C.Accent,

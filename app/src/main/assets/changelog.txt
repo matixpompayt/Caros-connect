@@ -2,6 +2,14 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Tryb jasny, tankowania, auto na żywo, przypomnienia przed pracą
+- Tryb jasny: Ustawienia → Wygląd (jak telefon / jasny / ciemny), także jasna mapa
+- Parking: notatka („poziom -2, miejsce 47”) i zdjęcie miejsca; udostępnianie z notatką i zdjęciem
+- Auto w drodze: gdy ktoś jedzie Twoim autem, widzisz je na mapie z prędkością (co minutę)
+- Przypomnienie 2 h przed zmianą z grafiku CAR OS z godziną wyjazdu oraz „Czas wyjeżdżać”
+- Paliwo: dodawanie tankowań, spalanie, zasięg i koszt km – synchronizacja z CAR OS
+
 ## 1.13 · 2026-11-01
 Aktualizacja testowa
 - Sprawdzenie, jak wygląda okno „Nowość w wersji” po aktualizacji

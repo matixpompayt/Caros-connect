@@ -49,6 +49,8 @@ object Sync {
                 inbox.park?.let { Store.offerCarSpot(ctx, it) }
                 inbox.carIcon?.let { (b, p) -> CarData.setCarIcon(b, p) }
                 inbox.status?.let { CarData.setStatusJson(it) }
+                inbox.live?.let { CarData.setLive(it) }
+                try { WorkReminder.schedule(ctx) } catch (_: Exception) {}
                 CarData.mergeTrips(inbox.trips)
                 inbox.backup?.let { (text, created, car) -> CarData.setBackup(text, created, car) }
                 CarData.setLastSync(System.currentTimeMillis())

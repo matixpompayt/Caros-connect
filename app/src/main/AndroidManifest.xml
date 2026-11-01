@@ -72,6 +72,10 @@
             android:name=".MeterReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".WorkReceiver"
+            android:exported="false" />
+
         <!-- Skaner kodu QR: pozwól na pionową orientację -->
         <activity
             android:name="com.journeyapps.barcodescanner.CaptureActivity"

@@ -34,6 +34,8 @@ object Link {
         val backup: Triple<String, Long, String>?,
         /** Model auta (typ, kolor) z ostatniej wiadomości o parkowaniu. */
         val carIcon: Pair<String, Int?>? = null,
+        /** Ostatnia pozycja auta w czasie jazdy. */
+        val live: CarData.Live? = null,
     )
 
     private const val PREFIX = "#caros1."
@@ -140,6 +142,7 @@ object Link {
         var status: String? = null
         var statusT = 0L
         val trips = ArrayList<CarData.Trip>()
+        var live: CarData.Live? = null
         val parts = HashMap<String, Array<String?>>()
         val meta = HashMap<String, Pair<Long, String>>()
         try {
@@ -167,6 +170,10 @@ object Link {
                                 if (t >= statusT) { statusT = t; status = plain }
                             }
                             "trip" -> trips += CarData.tripFrom(m)
+                            "live" -> {
+                                val l = CarData.Live(m.getDouble("lat"), m.getDouble("lon"), m.optInt("spd"), m.optInt("brg"), m.getLong("t"), m.optBoolean("m", true))
+                                if (live == null || l.time >= live!!.time) live = l
+                            }
                             "bk" -> {
                                 val id = m.getString("id")
                                 val n = m.getInt("n")
@@ -196,6 +203,6 @@ object Link {
             } catch (_: Exception) {
             }
         }
-        return Inbox(park, status, trips, backup, carIcon)
+        return Inbox(park, status, trips, backup, carIcon, live)
     }
 }
