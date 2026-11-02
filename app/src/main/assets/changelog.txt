@@ -2,6 +2,10 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Animacja startowa
+- Przy uruchomieniu aplikacji pojawia się animowane logo CAR OS Connect
+
 ## 1.14 · 2026-11-01
 Tryb jasny, tankowania, auto na żywo, przypomnienia przed pracą
 - Tryb jasny: Ustawienia → Wygląd (jak telefon / jasny / ciemny), także jasna mapa

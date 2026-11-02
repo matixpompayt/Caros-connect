@@ -68,7 +68,12 @@ class MainActivity : ComponentActivity(), Actions {
         CarData.init(this)
         SyncWorker.schedule(this)
         if (savedInstanceState == null) handleShare(intent)
-        setContent { ParkApp(perms.value, this) }
+        setContent {
+            androidx.compose.foundation.layout.Box {
+                ParkApp(perms.value, this@MainActivity)
+                SplashOverlay()
+            }
+        }
     }
 
     override fun onResume() {
