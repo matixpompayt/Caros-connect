@@ -2,6 +2,10 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Mapa nie przewija strony
+- Przesuwanie mapy jednym palcem rusza tylko mapę, a nie całą stronę
+
 ## 1.15 · 2026-11-02
 Animacja startowa
 - Przy uruchomieniu aplikacji pojawia się animowane logo CAR OS Connect

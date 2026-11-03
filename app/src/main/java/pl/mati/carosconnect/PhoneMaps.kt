@@ -75,6 +75,15 @@ private class MapHolder(ctx: Context, onStyle: (MapLibreMap, Style) -> Unit) {
         MapLibre.getInstance(ctx)
         view = MapView(ctx, MapLibreMapOptions.createFromAttributes(ctx, null).textureMode(true))
         view.onCreate(null)
+        // przeciąganie mapy jednym palcem nie przewija całej strony
+        @Suppress("ClickableViewAccessibility")
+        view.setOnTouchListener { v, e ->
+            when (e.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_MOVE -> v.parent?.requestDisallowInterceptTouchEvent(true)
+                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> v.parent?.requestDisallowInterceptTouchEvent(false)
+            }
+            false
+        }
         view.getMapAsync { m ->
             map = m
             m.uiSettings.apply {
