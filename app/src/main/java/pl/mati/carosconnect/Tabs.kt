@@ -184,6 +184,7 @@ fun CarTab(actions: Actions) {
         editItem?.let { ServiceEditDialog(it) { editItem = null } }
 
         FuelSection(s)
+        s.bat?.let { BatteryCard(it) }
     }
 
     Label("Wyślij cel do auta", Modifier.padding(top = 6.dp))
@@ -210,6 +211,28 @@ fun CarTab(actions: Actions) {
         Text("Brak – dodaj gwiazdką przy wyszukanym miejscu albo udostępniając miejsce z Map Google.", fontSize = 14.sp, color = C.Muted)
     }
     favs.forEach { f -> FavRow(f) }
+}
+
+@Composable
+private fun BatteryCard(b: CarData.Battery) {
+    Label("Akumulator", Modifier.padding(top = 6.dp))
+    val col = when (b.level) { 2 -> Color(0xFFE0262B); 1 -> C.Orange; else -> Color(0xFF34C759) }
+    Card(border = if (b.level > 0) col.copy(alpha = 0.6f) else C.Border) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Box(Modifier.size(14.dp).clip(RoundedCornerShape(7.dp)).background(col))
+            Column(Modifier.weight(1f)) {
+                Text(when (b.level) { 2 -> "Słaby akumulator"; 1 -> "Uwaga"; else -> "W porządku" }, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = C.Text)
+                Text(b.msg, fontSize = 14.sp, color = C.Muted)
+            }
+        }
+        fun f(v: Double?) = v?.let { String.format(PL, "%.1f V", it) } ?: "–"
+        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatBox("Spoczynkowe", f(b.rest), Modifier.weight(1f))
+            StatBox("Rozruch", f(b.crank), Modifier.weight(1f))
+            StatBox("Ładowanie", f(b.charge), Modifier.weight(1f))
+        }
+        Text("Pomiar przy uruchomieniu auta: ${whenText(b.time)}", fontSize = 12.sp, color = C.Muted)
+    }
 }
 
 @Composable
@@ -954,6 +977,8 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
 
     Label("Powiadomienia", Modifier.padding(top = 6.dp))
     ToggleRow("Przypomnienia serwisowe", "Olej, przegląd, ubezpieczenie – z danych CAR OS", nService) { CarData.setNotifService(it) }
+    val nBat by CarData.notifBattery.collectAsState()
+    ToggleRow("Słaby akumulator", "Gdy CAR OS zmierzy niskie napięcie albo słabe ładowanie", nBat) { CarData.setNotifBattery(it) }
     ToggleRow("Ostrzeżenie o mrozie", "Rano, gdy przy aucie może być szron", nFrost) { CarData.setNotifFrost(it) }
     if (nFrost) {
         Row(

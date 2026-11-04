@@ -17,6 +17,7 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
         val ctx = applicationContext
         try { Sync.run(ctx, ask = false) } catch (_: Exception) {}
         try { Sync.checkService(ctx) } catch (_: Exception) {}
+        try { Sync.checkBattery(ctx) } catch (_: Exception) {}
         try { Sync.checkFrost(ctx) } catch (_: Exception) {}
         return Result.success()
     }

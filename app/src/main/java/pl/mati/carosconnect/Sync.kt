@@ -49,6 +49,7 @@ object Sync {
                 inbox.park?.let { Store.offerCarSpot(ctx, it) }
                 inbox.carIcon?.let { (b, p) -> CarData.setCarIcon(b, p) }
                 inbox.status?.let { CarData.setStatusJson(it) }
+                try { checkBattery(ctx) } catch (_: Exception) {}
                 inbox.live?.let { CarData.setLive(it) }
                 try { WorkReminder.schedule(ctx) } catch (_: Exception) {}
                 CarData.mergeTrips(inbox.trips)
@@ -118,6 +119,17 @@ object Sync {
         val first = urgent.first()
         val more = if (urgent.size > 1) " (+${urgent.size - 1})" else ""
         Notifs.service(ctx, if (first.overdue) "Serwis po terminie" else "Zbliża się serwis", "${first.name}: ${first.text}$more")
+    }
+
+    /** Akumulator: powiadomienie o każdym nowym pomiarze „uwaga” / „słaby” z CAR OS (raz na pomiar). */
+    fun checkBattery(ctx: Context) {
+        if (!CarData.notifBattery.value) return
+        val b = CarData.status.value?.bat ?: return
+        if (b.level < 1 || System.currentTimeMillis() - b.time > 2 * 86_400_000L) return
+        val sp = CarData.prefs ?: return
+        if (sp.getLong("bat_notified", 0L) >= b.time) return
+        sp.edit().putLong("bat_notified", b.time).apply()
+        Notifs.battery(ctx, if (b.level >= 2) "Słaby akumulator" else "Akumulator – uwaga", b.msg)
     }
 
     /** Szron / mróz: rano o wybranej godzinie (okno 3 h), raz dziennie. */

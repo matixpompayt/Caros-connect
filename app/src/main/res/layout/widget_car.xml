@@ -61,6 +61,17 @@
         android:textSize="12sp" />
 
     <TextView
+        android:id="@+id/w_extra"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:textColor="#EEF1F4"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
+    <TextView
         android:id="@+id/w_nav"
         android:layout_width="match_parent"
         android:layout_height="38dp"

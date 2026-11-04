@@ -23,6 +23,8 @@ object Notifs {
     const val ID_SERVICE = 3
     const val ID_WEATHER = 4
     const val ID_METER = 5
+    const val CH_BATTERY = "battery"
+    const val ID_BATTERY = 7
 
     fun channels(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
@@ -50,6 +52,11 @@ object Notifs {
         nm.createNotificationChannel(
             NotificationChannel(CH_WORK, "Przed pracą", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Przypomnienie przed zmianą z grafiku w CAR OS i o godzinie wyjazdu"
+            },
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CH_BATTERY, "Akumulator", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Ostrzeżenie z CAR OS o słabym akumulatorze lub ładowaniu"
             },
         )
         nm.createNotificationChannel(
@@ -120,6 +127,9 @@ object Notifs {
 
     fun work(ctx: Context, title: String, text: String) =
         simple(ctx, CH_WORK, ID_WORK, android.R.drawable.ic_lock_idle_alarm, title, text)
+
+    fun battery(ctx: Context, title: String, text: String) =
+        simple(ctx, CH_BATTERY, ID_BATTERY, android.R.drawable.ic_dialog_alert, title, text)
 
     fun meter(ctx: Context, title: String, text: String) =
         simple(ctx, CH_METER, ID_METER, android.R.drawable.ic_lock_idle_alarm, title, text)

@@ -52,6 +52,8 @@ object CarData {
         /** null = starszy CAR OS bez synchronizacji domu i pracy. */
         val home: Addr? = null,
         val work: Addr? = null,
+        /** Ostatni pomiar akumulatora z CAR OS (null = brak / starszy CAR OS). */
+        val bat: Battery? = null,
     ) {
         /** Lista serwisowa: liczona w telefonie z surowych danych (od razu po edycji), inaczej z radia. */
         val serviceList: List<Service>
@@ -64,6 +66,9 @@ object CarData {
         val durationS get() = (end - start) / 1000
         val avgKmh get() = if (movingS > 0) distanceM / movingS * 3.6 else 0.0
     }
+
+    /** Akumulator: napięcia w V, level 0 = dobrze, 1 = uwaga, 2 = słaby. */
+    data class Battery(val time: Long, val rest: Double?, val crank: Double?, val charge: Double?, val level: Int, val msg: String)
 
     /** Auto w drodze: pozycja co minutę od CAR OS. */
     data class Live(val lat: Double, val lon: Double, val speed: Int, val bearing: Int, val time: Long, val moving: Boolean)
@@ -104,6 +109,7 @@ object CarData {
     val carPaint = MutableStateFlow<Int?>(null)
 
     val notifService = MutableStateFlow(true)
+    val notifBattery = MutableStateFlow(true)
     val notifFrost = MutableStateFlow(true)
     val notifWork = MutableStateFlow(true)
     val notifDepart = MutableStateFlow(true)
@@ -130,6 +136,7 @@ object CarData {
         meterEnd.value = p.getLong("meter_end", 0L)
         meterStart.value = p.getLong("meter_start", 0L)
         notifService.value = p.getBoolean("n_service", true)
+        notifBattery.value = p.getBoolean("n_battery", true)
         notifFrost.value = p.getBoolean("n_frost", true)
         notifWork.value = p.getBoolean("n_work", true)
         notifDepart.value = p.getBoolean("n_depart", true)
@@ -297,6 +304,15 @@ object CarData {
             },
             home = addrFrom(o.optJSONObject("home")),
             work = addrFrom(o.optJSONObject("work")),
+            bat = o.optJSONObject("bat")?.let { b ->
+                Battery(
+                    b.optLong("t"),
+                    if (b.isNull("r")) null else b.optDouble("r"),
+                    if (b.isNull("k")) null else b.optDouble("k"),
+                    if (b.isNull("c")) null else b.optDouble("c"),
+                    b.optInt("l"), b.optString("m"),
+                )
+            },
         )
     } catch (_: Exception) {
         null
@@ -374,6 +390,7 @@ object CarData {
         sp?.edit()?.putLong("meter_start", start)?.putLong("meter_end", end)?.apply()
     }
 
+    fun setNotifBattery(v: Boolean) { notifBattery.value = v; sp?.edit()?.putBoolean("n_battery", v)?.apply() }
     fun setNotifService(v: Boolean) { notifService.value = v; sp?.edit()?.putBoolean("n_service", v)?.apply() }
     fun setNotifWork(v: Boolean) { notifWork.value = v; sp?.edit()?.putBoolean("n_work", v)?.apply() }
     fun setNotifDepart(v: Boolean) { notifDepart.value = v; sp?.edit()?.putBoolean("n_depart", v)?.apply() }

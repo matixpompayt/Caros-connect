@@ -2,6 +2,12 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Akumulator i lepszy widżet
+- Karta Akumulator w zakładce auta: napięcie spoczynkowe, przy rozruchu i ładowanie z CAR OS
+- Powiadomienie, gdy CAR OS wykryje słaby akumulator albo słabe ładowanie (do wyłączenia w Ustawieniach)
+- Widżet „Moje auto” pokazuje też zasięg paliwa, godzinę wyjazdu do pracy i ostrzeżenie o akumulatorze
+
 ## 1.16 · 2026-11-03
 Mapa nie przewija strony
 - Przesuwanie mapy jednym palcem rusza tylko mapę, a nie całą stronę

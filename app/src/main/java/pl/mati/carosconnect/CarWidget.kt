@@ -61,7 +61,37 @@ class CarWidget : AppWidgetProvider() {
                 val walk = PendingIntent.getActivity(ctx, 11, Notifs.walkIntent(s), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
                 v.setOnClickPendingIntent(R.id.w_nav, walk)
             }
+            // paliwo, wyjazd do pracy, akumulator
+            try {
+                val st = CarData.status.value
+                val extra = ArrayList<String>()
+                st?.fuel?.range?.let { extra += "Zasięg ${it.toInt()} km" }
+                st?.shifts?.firstOrNull { it.start > System.currentTimeMillis() }?.let { sh ->
+                    val dep = WorkReminder.departure(sh)
+                    val fmt = java.text.SimpleDateFormat("H:mm", java.util.Locale("pl"))
+                    extra += if (dep != null) "Wyjazd ${whenDay(dep)}${fmt.format(java.util.Date(dep))}" else "Zmiana ${whenDay(sh.start)}${fmt.format(java.util.Date(sh.start))}"
+                }
+                st?.bat?.let { b -> if (b.level >= 1) extra += (if (b.level >= 2) "Słaby akumulator" else "Akumulator – uwaga") }
+                if (extra.isEmpty()) v.setViewVisibility(R.id.w_extra, android.view.View.GONE)
+                else {
+                    v.setViewVisibility(R.id.w_extra, android.view.View.VISIBLE)
+                    v.setTextViewText(R.id.w_extra, extra.joinToString(" · "))
+                    v.setTextColor(R.id.w_extra, if ((st?.bat?.level ?: 0) >= 2) 0xFFFF6B6B.toInt() else 0xFFEEF1F4.toInt())
+                }
+            } catch (_: Exception) {}
             return v
+        }
+
+        /** „” dziś, „jutro ” albo dzień tygodnia przed godziną. */
+        private fun whenDay(t: Long): String {
+            val c = java.util.Calendar.getInstance()
+            val today = c.get(java.util.Calendar.DAY_OF_YEAR)
+            c.timeInMillis = t
+            return when (c.get(java.util.Calendar.DAY_OF_YEAR) - today) {
+                0 -> ""
+                1 -> "jutro "
+                else -> java.text.SimpleDateFormat("EEE ", java.util.Locale("pl")).format(java.util.Date(t))
+            }
         }
     }
 }
