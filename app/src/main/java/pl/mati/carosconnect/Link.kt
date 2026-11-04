@@ -36,6 +36,8 @@ object Link {
         val carIcon: Pair<String, Int?>? = null,
         /** Ostatnia pozycja auta w czasie jazdy. */
         val live: CarData.Live? = null,
+        /** Raport danych z radia (CAN) – tekst i czas wysłania. */
+        val report: Pair<String, Long>? = null,
     )
 
     private const val PREFIX = "#caros1."
@@ -145,6 +147,7 @@ object Link {
         var live: CarData.Live? = null
         val parts = HashMap<String, Array<String?>>()
         val meta = HashMap<String, Pair<Long, String>>()
+        val repParts = HashMap<String, Array<String?>>()
         try {
             if (c.responseCode !in 200..299) throw IOException("Przekaźnik: HTTP ${c.responseCode}")
             c.inputStream.bufferedReader().useLines { lines ->
@@ -173,6 +176,12 @@ object Link {
                             "live" -> {
                                 val l = CarData.Live(m.getDouble("lat"), m.getDouble("lon"), m.optInt("spd"), m.optInt("brg"), m.getLong("t"), m.optBoolean("m", true))
                                 if (live == null || l.time >= live!!.time) live = l
+                            }
+                            "rp" -> {
+                                val id = m.getString("id")
+                                val n = m.getInt("n")
+                                val arr = repParts.getOrPut(id) { arrayOfNulls(n) }
+                                if (arr.size == n) arr[m.getInt("i")] = m.getString("d")
                             }
                             "bk" -> {
                                 val id = m.getString("id")
@@ -203,6 +212,17 @@ object Link {
             } catch (_: Exception) {
             }
         }
-        return Inbox(park, status, trips, backup, carIcon, live)
+        var report: Pair<String, Long>? = null
+        for ((id, arr) in repParts.entries.sortedByDescending { it.key }) {
+            if (arr.any { it == null }) continue
+            try {
+                val bos = ByteArrayOutputStream()
+                arr.forEach { bos.write(Base64.decode(it, Base64.NO_WRAP)) }
+                report = String(gunzip(bos.toByteArray())) to (id.toLongOrNull() ?: 0L)
+                break
+            } catch (_: Exception) {
+            }
+        }
+        return Inbox(park, status, trips, backup, carIcon, live, report)
     }
 }

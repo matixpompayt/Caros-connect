@@ -54,6 +54,7 @@ object Sync {
                 try { WorkReminder.schedule(ctx) } catch (_: Exception) {}
                 CarData.mergeTrips(inbox.trips)
                 inbox.backup?.let { (text, created, car) -> CarData.setBackup(text, created, car) }
+                inbox.report?.let { (text, t) -> RadioReport.save(ctx, text, t) }
                 CarData.setLastSync(System.currentTimeMillis())
                 when {
                     Store.spot.value?.time != before -> "Pobrano nowe miejsce parkowania z CAR OS"

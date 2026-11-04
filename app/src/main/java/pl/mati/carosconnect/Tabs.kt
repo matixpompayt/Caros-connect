@@ -1015,6 +1015,7 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
     Label("Wygląd", Modifier.padding(top = 6.dp))
     ThemeChooser()
 
+    RadioReportCard()
     Label("Kopia ustawień CAR OS", Modifier.padding(top = 6.dp))
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult

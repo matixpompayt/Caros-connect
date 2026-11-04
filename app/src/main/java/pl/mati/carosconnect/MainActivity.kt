@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity(), Actions {
         super.onCreate(savedInstanceState)
         Store.init(this)
         Changelog.init(this)
+        RadioReport.init(this)
         Notifs.channels(this)
         org.maplibre.android.MapLibre.getInstance(this)
         CarData.init(this)

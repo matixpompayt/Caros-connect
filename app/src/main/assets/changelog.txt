@@ -2,6 +2,10 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Raport danych z radia
+- Odbiera raport CAN wysłany z CAR OS (Ustawienia → Raport danych z radia) i pozwala go udostępnić jednym przyciskiem
+
 ## 1.17 · 2026-11-04
 Akumulator i lepszy widżet
 - Karta Akumulator w zakładce auta: napięcie spoczynkowe, przy rozruchu i ładowanie z CAR OS
