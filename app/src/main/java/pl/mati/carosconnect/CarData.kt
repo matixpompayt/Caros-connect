@@ -110,6 +110,7 @@ object CarData {
 
     val notifService = MutableStateFlow(true)
     val notifBattery = MutableStateFlow(true)
+    val notifLive = MutableStateFlow(true)
     val notifFrost = MutableStateFlow(true)
     val notifWork = MutableStateFlow(true)
     val notifDepart = MutableStateFlow(true)
@@ -137,6 +138,7 @@ object CarData {
         meterStart.value = p.getLong("meter_start", 0L)
         notifService.value = p.getBoolean("n_service", true)
         notifBattery.value = p.getBoolean("n_battery", true)
+        notifLive.value = p.getBoolean("n_live", true)
         notifFrost.value = p.getBoolean("n_frost", true)
         notifWork.value = p.getBoolean("n_work", true)
         notifDepart.value = p.getBoolean("n_depart", true)
@@ -390,6 +392,7 @@ object CarData {
         sp?.edit()?.putLong("meter_start", start)?.putLong("meter_end", end)?.apply()
     }
 
+    fun setNotifLive(v: Boolean) { notifLive.value = v; sp?.edit()?.putBoolean("n_live", v)?.apply() }
     fun setNotifBattery(v: Boolean) { notifBattery.value = v; sp?.edit()?.putBoolean("n_battery", v)?.apply() }
     fun setNotifService(v: Boolean) { notifService.value = v; sp?.edit()?.putBoolean("n_service", v)?.apply() }
     fun setNotifWork(v: Boolean) { notifWork.value = v; sp?.edit()?.putBoolean("n_work", v)?.apply() }

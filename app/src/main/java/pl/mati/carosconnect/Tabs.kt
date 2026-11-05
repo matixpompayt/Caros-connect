@@ -977,6 +977,8 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
 
     Label("Powiadomienia", Modifier.padding(top = 6.dp))
     ToggleRow("Przypomnienia serwisowe", "Olej, przegląd, ubezpieczenie – z danych CAR OS", nService) { CarData.setNotifService(it) }
+    val nLive by CarData.notifLive.collectAsState()
+    ToggleRow("Auto ruszyło", "Gdy ktoś jedzie Twoim autem, a Ty nie (radio musi mieć internet; może przyjść do 15 min później)", nLive) { CarData.setNotifLive(it) }
     val nBat by CarData.notifBattery.collectAsState()
     ToggleRow("Słaby akumulator", "Gdy CAR OS zmierzy niskie napięcie albo słabe ładowanie", nBat) { CarData.setNotifBattery(it) }
     ToggleRow("Ostrzeżenie o mrozie", "Rano, gdy przy aucie może być szron", nFrost) { CarData.setNotifFrost(it) }

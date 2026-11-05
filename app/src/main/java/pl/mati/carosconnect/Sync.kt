@@ -50,6 +50,7 @@ object Sync {
                 inbox.carIcon?.let { (b, p) -> CarData.setCarIcon(b, p) }
                 inbox.status?.let { CarData.setStatusJson(it) }
                 try { checkBattery(ctx) } catch (_: Exception) {}
+                try { checkLive(ctx) } catch (_: Exception) {}
                 inbox.live?.let { CarData.setLive(it) }
                 try { WorkReminder.schedule(ctx) } catch (_: Exception) {}
                 CarData.mergeTrips(inbox.trips)
@@ -120,6 +121,27 @@ object Sync {
         val first = urgent.first()
         val more = if (urgent.size > 1) " (+${urgent.size - 1})" else ""
         Notifs.service(ctx, if (first.overdue) "Serwis po terminie" else "Zbliża się serwis", "${first.name}: ${first.text}$more")
+    }
+
+    /**
+     * „Auto ruszyło”: raz na jazdę, gdy CAR OS zgłasza jazdę, a telefonu nie ma w aucie
+     * (ktoś inny jedzie). Znika samo, gdy auto stanie.
+     */
+    fun checkLive(ctx: Context) {
+        val sp = CarData.prefs ?: return
+        val l = CarData.live.value
+        val fresh = l != null && l.moving && System.currentTimeMillis() - l.time < 10 * 60_000L
+        if (!fresh) {
+            if (sp.getBoolean("live_notified", false)) {
+                sp.edit().putBoolean("live_notified", false).apply()
+                Notifs.cancelLive(ctx)
+            }
+            return
+        }
+        if (sp.getBoolean("live_notified", false)) return
+        sp.edit().putBoolean("live_notified", true).apply()
+        if (!CarData.notifLive.value || DriveService.running) return
+        Notifs.live(ctx, "Auto ruszyło", "Jedzie teraz ${l!!.speed} km/h – dotknij, żeby zobaczyć na mapie, gdzie jest")
     }
 
     /** Akumulator: powiadomienie o każdym nowym pomiarze „uwaga” / „słaby” z CAR OS (raz na pomiar). */

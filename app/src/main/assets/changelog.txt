@@ -2,6 +2,12 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Powiadomienie „Auto ruszyło”
+- Gdy ktoś jedzie Twoim autem, a Ciebie w nim nie ma, telefon da znać (raz na jazdę) – dotknij, żeby zobaczyć auto na mapie
+- Powiadomienie znika samo, gdy auto stanie; wyłączysz je w Ustawienia → Powiadomienia
+- Działa, gdy radio ma internet w czasie jazdy; w tle może przyjść do 15 minut później
+
 ## 1.18 · 2026-11-04
 Raport danych z radia
 - Odbiera raport CAN wysłany z CAR OS (Ustawienia → Raport danych z radia) i pozwala go udostępnić jednym przyciskiem
