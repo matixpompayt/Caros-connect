@@ -374,7 +374,9 @@ private fun BottomBar(tab: Int, onTab: (Int) -> Unit) {
         Icons.Rounded.Map to "Trasy",
         Icons.Rounded.Settings to "Ustawienia",
     )
-    val glass = C.isGlass
+    // Glass: kapsuła z „kroplą wody” przepływającą między zakładkami (LiquidTabBar.kt)
+    if (C.isGlass) { LiquidTabBar(items, tab, onTab); return }
+    val glass = false
     val light = C.isLight
     val barShape = RoundedCornerShape(34.dp)
     // Glass: pływająca „kapsuła” jak pasek kart w iOS

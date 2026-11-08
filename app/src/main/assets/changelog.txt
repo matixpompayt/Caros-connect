@@ -2,6 +2,12 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Kropla wody w pasku zakładek
+- W motywie Glass zaznaczenie na dolnym pasku to kropla wody: przy zmianie zakładki przepływa do nowej, wydłuża się, zwęża z tyłu i sprężynuje na miejscu
+- Po dopłynięciu rozchodzi się mała fala, a ikona pod kroplą jest powiększona jak przez soczewkę
+- Lekka wibracja przy zmianie zakładki
+
 ## 1.23 · 2026-11-08
 Glass jak w iPhonie i własne tło
 - Szkło jak w iOS: karty naprawdę rozmywają tło pod sobą, wzmacniają jego kolory i mają połysk oraz jasną krawędź
