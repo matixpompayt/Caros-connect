@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.23 · 2026-11-08
 Glass jak w iPhonie i własne tło
 - Szkło jak w iOS: karty naprawdę rozmywają tło pod sobą, wzmacniają jego kolory i mają połysk oraz jasną krawędź
 - Pasek zakładek w motywie Glass to pływająca szklana „kapsuła”
