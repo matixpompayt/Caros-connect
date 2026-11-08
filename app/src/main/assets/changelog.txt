@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.22 · 2026-11-08
 Motyw Glass
 - Nowy wygląd „Glass” (Ustawienia → Wygląd): półprzezroczyste, szklane karty na kolorowym tle, które powoli się przesuwa
 - Działa w całej aplikacji – na kartach, liście tras, ustawieniach, pasku zakładek, oknach i ekranie powitalnym; tło sięga też pod pasek stanu
