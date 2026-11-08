@@ -27,6 +27,8 @@ object Notifs {
     const val CH_LIVE = "live"
     const val ID_LIVE = 8
     const val ID_BATTERY = 7
+    const val CH_FUEL = "fuel_prices"
+    const val ID_FUEL = 9
 
     fun channels(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
@@ -64,6 +66,11 @@ object Notifs {
         nm.createNotificationChannel(
             NotificationChannel(CH_BATTERY, "Akumulator", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "Ostrzeżenie z CAR OS o słabym akumulatorze lub ładowaniu"
+            },
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CH_FUEL, "Ceny paliw na jutro", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Gdy pojawi się obwieszczenie z maksymalnymi cenami paliw na następny dzień"
             },
         )
         nm.createNotificationChannel(
@@ -144,6 +151,9 @@ object Notifs {
 
     fun battery(ctx: Context, title: String, text: String) =
         simple(ctx, CH_BATTERY, ID_BATTERY, android.R.drawable.ic_dialog_alert, title, text)
+
+    fun fuel(ctx: Context, title: String, text: String) =
+        simple(ctx, CH_FUEL, ID_FUEL, android.R.drawable.ic_dialog_info, title, text)
 
     fun meter(ctx: Context, title: String, text: String) =
         simple(ctx, CH_METER, ID_METER, android.R.drawable.ic_lock_idle_alarm, title, text)

@@ -10,7 +10,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import java.util.concurrent.TimeUnit
 
-/** Co ~15 min w tle: dane z CAR OS, pogoda przy aucie, przypomnienia, widżet. */
+/** Co ~15 min w tle: dane z CAR OS, pogoda przy aucie, przypomnienia, ceny paliw, widżety. */
 class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
 
     override suspend fun doWork(): Result {
@@ -19,6 +19,7 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
         try { Sync.checkService(ctx) } catch (_: Exception) {}
         try { Sync.checkBattery(ctx) } catch (_: Exception) {}
         try { Sync.checkFrost(ctx) } catch (_: Exception) {}
+        try { FuelPrices.check(ctx) } catch (_: Exception) {}
         return Result.success()
     }
 

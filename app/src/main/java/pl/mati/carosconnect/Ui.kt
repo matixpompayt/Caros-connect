@@ -237,6 +237,8 @@ fun ParkApp(perms: Perms, actions: Actions) {
         }
         var tab by rememberSaveable { mutableIntStateOf(0) }
         var trip by remember { mutableStateOf<CarData.Trip?>(null) }
+        val openTab by OpenTab.collectAsState()
+        LaunchedEffect(openTab) { openTab?.let { tab = it; trip = null; OpenTab.value = null } }
         BackHandler(enabled = trip != null || tab != 0) { if (trip != null) trip = null else tab = 0 }
 
         // pociągnij w dół = odśwież (dane z CAR OS, uprawnienia, Bluetooth, aktualizacje)

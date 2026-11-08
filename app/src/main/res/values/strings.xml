@@ -2,5 +2,6 @@
 <resources>
     <string name="app_name">CAR OS Connect</string>
     <string name="widget_desc">Gdzie stoi auto i prowadzenie do niego</string>
+    <string name="widget_fuel_desc">Maksymalne ceny paliw dziś i jutro</string>
     <string name="send_to_car">Wyślij do auta</string>
 </resources>

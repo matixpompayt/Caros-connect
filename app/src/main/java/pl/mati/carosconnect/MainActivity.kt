@@ -67,8 +67,9 @@ class MainActivity : ComponentActivity(), Actions {
         Notifs.channels(this)
         org.maplibre.android.MapLibre.getInstance(this)
         CarData.init(this)
+        FuelPrices.init(this)
         SyncWorker.schedule(this)
-        if (savedInstanceState == null) handleShare(intent)
+        if (savedInstanceState == null) { handleShare(intent); openTabFrom(intent) }
         setContent {
             androidx.compose.foundation.layout.Box {
                 ParkApp(perms.value, this@MainActivity)
@@ -114,6 +115,7 @@ class MainActivity : ComponentActivity(), Actions {
         matchCarByName()
         startIfCarConnected()
         Updater.check(silent = true)
+        try { FuelPrices.refresh(this, force = true); FuelWidget.updateAll(this) } catch (_: Exception) {}
         return Sync.run(this, ask = true)
     }
 
@@ -129,6 +131,13 @@ class MainActivity : ComponentActivity(), Actions {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleShare(intent)
+        openTabFrom(intent)
+    }
+
+    /** Widżet może otworzyć konkretną zakładkę (np. ceny paliw → Auto). */
+    private fun openTabFrom(i: Intent?) {
+        val t = i?.getIntExtra("tab", -1) ?: -1
+        if (t >= 0) OpenTab.value = t
     }
 
     /** „Udostępnij → Wyślij do auta” (tekst z Map Google) albo adres geo:. */

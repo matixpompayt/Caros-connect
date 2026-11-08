@@ -2,6 +2,14 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Ceny paliw i widżet
+- Nowa sekcja „Ceny paliw” w zakładce Auto: maksymalne ceny ON, Pb95 i Pb98 z obwieszczeń Ministra Energii oraz średnia cena LPG
+- Zmiana względem poprzedniego obwieszczenia, ceny na jutro i wykres historii (14 dni, 30 dni, 3 miesiące) – przesuń palcem po wykresie, żeby zobaczyć ceny z danego dnia
+- Gwiazdką wybierasz ulubione paliwo
+- Nowy widżet „Ceny paliw” na ekran główny telefonu: ceny na dziś, zmiana i ceny na jutro
+- Powiadomienie, gdy pojawią się ceny na jutro (wyłączysz w Ustawienia → Powiadomienia)
+
 ## 1.19 · 2026-11-05
 Powiadomienie „Auto ruszyło”
 - Gdy ktoś jedzie Twoim autem, a Ciebie w nim nie ma, telefon da znać (raz na jazdę) – dotknij, żeby zobaczyć auto na mapie

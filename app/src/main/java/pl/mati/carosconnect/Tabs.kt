@@ -102,6 +102,9 @@ object Share {
     val incoming = MutableStateFlow<Pair<String?, Uri?>?>(null)
 }
 
+/** Zakładka do otwarcia (z widżetu). */
+val OpenTab = MutableStateFlow<Int?>(null)
+
 private val PL = Locale("pl")
 private fun km(m: Double): String = if (m < 1000) "${m.roundToInt()} m" else String.format(PL, "%.1f km", m / 1000)
 private fun thousands(v: Int): String = "%,d".format(v).replace(',', ' ')
@@ -133,6 +136,7 @@ fun CarTab(actions: Actions) {
             Text("Czekam na dane z auta", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
             Text("Włącz radio z CAR OS (z internetem) i pociągnij ekran w dół, żeby odświeżyć.", fontSize = 15.sp, color = C.Muted)
         }
+        FuelPricesSection()
     } else {
         var editOdo by remember { mutableStateOf(false) }
         var editItem by remember { mutableStateOf<CarData.SvcItem?>(null) }
@@ -162,6 +166,8 @@ fun CarTab(actions: Actions) {
                 Text("Dane z auta: ${whenText(s.time)}" + (if (s.version.isNotBlank()) " · CAR OS ${s.version}" else ""), fontSize = 12.sp, color = C.Muted)
             }
         }
+
+        FuelPricesSection()
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Label("Serwis", Modifier.weight(1f))
@@ -981,6 +987,8 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
     ToggleRow("Auto ruszyło", "Gdy ktoś jedzie Twoim autem, a Ty nie (radio musi mieć internet; może przyjść do 15 min później)", nLive) { CarData.setNotifLive(it) }
     val nBat by CarData.notifBattery.collectAsState()
     ToggleRow("Słaby akumulator", "Gdy CAR OS zmierzy niskie napięcie albo słabe ładowanie", nBat) { CarData.setNotifBattery(it) }
+    val nFuel by FuelPrices.notify.collectAsState()
+    ToggleRow("Ceny paliw na jutro", "Gdy pojawi się obwieszczenie z cenami maksymalnymi na następny dzień", nFuel) { FuelPrices.setNotify(ctx, it) }
     ToggleRow("Ostrzeżenie o mrozie", "Rano, gdy przy aucie może być szron", nFrost) { CarData.setNotifFrost(it) }
     if (nFrost) {
         Row(
