@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.21 · 2026-11-08
 Ceny paliw i widżet
 - Nowa sekcja „Ceny paliw” w zakładce Auto: maksymalne ceny ON, Pb95 i Pb98 z obwieszczeń Ministra Energii oraz średnia cena LPG
 - Zmiana względem poprzedniego obwieszczenia, ceny na jutro i wykres historii (14 dni, 30 dni, 3 miesiące) – przesuń palcem po wykresie, żeby zobaczyć ceny z danego dnia
