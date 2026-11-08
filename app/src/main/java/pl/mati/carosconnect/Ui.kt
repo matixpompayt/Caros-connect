@@ -153,18 +153,11 @@ object C {
         Color(0xFF12161B), Color(0xFF353D47), Color(0xFF66707C),
         Color(0xFF0A97B4), Color(0xFF2E9440), Color(0xFFCC7A1E), Color(0xFFCDE9F0), Color(0xFFD3E6F5),
     )
-    /** Szkło na kolorowym tle (Glass.kt): karty półprzezroczyste, Bg = kolor tekstu na akcencie. */
-    val GLASS = Pal(
-        false, Color(0xFF0B1026), Color(0x17FFFFFF), Color(0x1FFFFFFF), Color(0x2EFFFFFF),
-        Color(0xFFF5F7FF), Color(0xFFD6DCEB), Color(0xFFAAB4CA),
-        Color(0xFF67E8F9), Color(0xFF86EFAC), Color(0xFFFDBA74), Color(0x14FFFFFF), Color(0x3338BDF8),
-        glass = true,
-    )
     var pal by mutableStateOf(DARK)
     val isLight get() = pal.light
     val isGlass get() = pal.glass
     /** Tło okien dialogowych – w Glass prawie nieprzezroczyste, żeby tekst był czytelny. */
-    val Dialog get() = if (pal.glass) Color(0xF5171C33) else pal.card
+    val Dialog get() = if (pal.glass) (if (pal.light) Color(0xF7F4F6FA) else Color(0xF5171C33)) else pal.card
     val Bg get() = pal.bg
     val Card get() = pal.card
     val Raised get() = pal.raised
@@ -217,6 +210,7 @@ fun ThemeChooser() {
             if (on) Icon(Icons.Rounded.Check, null, tint = Color.White, modifier = Modifier.size(22.dp))
         }
     }
+    if (on) GlassSettings()
 }
 
 private val TIME = SimpleDateFormat("HH:mm", Locale("pl"))
@@ -245,9 +239,14 @@ fun ParkApp(perms: Perms, actions: Actions) {
     val themeMode by Store.theme.collectAsState()
     val sysDark = androidx.compose.foundation.isSystemInDarkTheme()
     val glass = themeMode == "glass"
-    val light = when (themeMode) { "light" -> true; "dark", "glass" -> false; else -> !sysDark }
-    val target = when { glass -> C.GLASS; light -> C.LIGHT; else -> C.DARK }
-    if (C.pal !== target) C.pal = target
+    val gSpec by GlassTheme.spec.collectAsState()
+    val light = when (themeMode) { "light" -> true; "dark" -> false; "glass" -> GlassTheme.isLight(gSpec, sysDark); else -> !sysDark }
+    val target = when {
+        glass -> GlassTheme.pal(light, gSpec.accent?.let { Color(it) } ?: GlassState.autoAccent ?: GlassTheme.DEFAULT_ACCENT)
+        light -> C.LIGHT
+        else -> C.DARK
+    }
+    if (C.pal != target) C.pal = target
     val view = androidx.compose.ui.platform.LocalView.current
     androidx.compose.runtime.SideEffect {
         (view.context as? android.app.Activity)?.window?.let { w ->
@@ -375,33 +374,38 @@ private fun BottomBar(tab: Int, onTab: (Int) -> Unit) {
         Icons.Rounded.Map to "Trasy",
         Icons.Rounded.Settings to "Ustawienia",
     )
-    Row(
-        Modifier.fillMaxWidth()
-            .then(
-                if (C.isGlass) Modifier.background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.10f), Color.White.copy(alpha = 0.04f))))
-                    .drawBehind { drawLine(Color.White.copy(alpha = 0.22f), androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(size.width, 0f), 1.dp.toPx()) }
-                else Modifier.background(C.Card),
-            )
-            .navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp),
-    ) {
-        items.forEachIndexed { i, (icon, label) ->
-            val on = i == tab
-            val src = remember { MutableInteractionSource() }
-            val pill by animateColorAsState(if (on) C.Accent.copy(alpha = 0.16f) else Color.Transparent, tween(250), label = "pill")
-            val tint by animateColorAsState(if (on) C.Accent else C.Muted, tween(250), label = "tint")
-            val padH by animateDpAsState(if (on) 20.dp else 12.dp, spring(dampingRatio = 0.6f, stiffness = 500f), label = "padH")
-            val iconScale by animateFloatAsState(if (on) 1.12f else 1f, spring(dampingRatio = 0.4f, stiffness = 450f), label = "iconScale")
-            Column(
-                Modifier.weight(1f).pressScale(src, 0.9f).clip(RoundedCornerShape(16.dp))
-                    .clickable(interactionSource = src, indication = null) { onTab(i) }.padding(vertical = 6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Box(
-                    Modifier.clip(RoundedCornerShape(50)).background(pill).padding(horizontal = padH, vertical = 4.dp),
+    val glass = C.isGlass
+    val light = C.isLight
+    val barShape = RoundedCornerShape(34.dp)
+    // Glass: pływająca „kapsuła” jak pasek kart w iOS
+    Box(if (glass) Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 10.dp) else Modifier.fillMaxWidth()) {
+        Row(
+            if (glass) Modifier.fillMaxWidth().clip(barShape).surface(barShape).padding(5.dp)
+            else Modifier.fillMaxWidth().background(C.Card).navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp),
+        ) {
+            items.forEachIndexed { i, (icon, label) ->
+                val on = i == tab
+                val src = remember { MutableInteractionSource() }
+                val pill by animateColorAsState(if (on && !glass) C.Accent.copy(alpha = 0.16f) else Color.Transparent, tween(250), label = "pill")
+                val lens by animateColorAsState(
+                    if (on && glass) (if (light) Color.White.copy(alpha = 0.7f) else Color.White.copy(alpha = 0.17f)) else Color.Transparent,
+                    tween(300), label = "lens",
+                )
+                val tint by animateColorAsState(if (on) C.Accent else if (glass) C.Text2 else C.Muted, tween(250), label = "tint")
+                val padH by animateDpAsState(if (on) 20.dp else 12.dp, spring(dampingRatio = 0.6f, stiffness = 500f), label = "padH")
+                val iconScale by animateFloatAsState(if (on) 1.12f else 1f, spring(dampingRatio = 0.4f, stiffness = 450f), label = "iconScale")
+                Column(
+                    Modifier.weight(1f).pressScale(src, 0.9f).clip(RoundedCornerShape(if (glass) 30.dp else 16.dp)).background(lens)
+                        .clickable(interactionSource = src, indication = null) { onTab(i) }.padding(vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Icon(icon, label, tint = tint, modifier = Modifier.size(24.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale })
+                    Box(
+                        Modifier.clip(RoundedCornerShape(50)).background(pill).padding(horizontal = if (glass) 12.dp else padH, vertical = 4.dp),
+                    ) {
+                        Icon(icon, label, tint = tint, modifier = Modifier.size(24.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale })
+                    }
+                    Text(label, fontSize = 12.sp, color = tint, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
                 }
-                Text(label, fontSize = 12.sp, color = tint, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
             }
         }
     }
@@ -969,7 +973,7 @@ fun Card(border: Color = C.Border, content: @Composable () -> Unit) {
     Column(
         Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(22.dp)).surface(RoundedCornerShape(22.dp), C.Card, border = border).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) { content() }
+    ) { androidx.compose.runtime.CompositionLocalProvider(LocalGlassDepth provides LocalGlassDepth.current + 1) { content() } }
 }
 
 @Composable

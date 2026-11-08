@@ -2,6 +2,14 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Glass jak w iPhonie i własne tło
+- Szkło jak w iOS: karty naprawdę rozmywają tło pod sobą, wzmacniają jego kolory i mają połysk oraz jasną krawędź
+- Pasek zakładek w motywie Glass to pływająca szklana „kapsuła”
+- Szkło ciemne, jasne albo jak w telefonie
+- Wybór tła: 10 gotowych mieszanek, jednolity kolor, własna mieszanka 2–4 kolorów (z losowaniem układu), zdjęcie z galerii albo tło wygenerowane przez AI – z opisu lub z gotowych pomysłów
+- Suwak przyciemnienia tła i kolor akcentu dobierany automatycznie z tła (albo wybrany ręcznie)
+
 ## 1.22 · 2026-11-08
 Motyw Glass
 - Nowy wygląd „Glass” (Ustawienia → Wygląd): półprzezroczyste, szklane karty na kolorowym tle, które powoli się przesuwa
