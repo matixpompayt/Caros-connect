@@ -2,6 +2,12 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Motyw Glass
+- Nowy wygląd „Glass” (Ustawienia → Wygląd): półprzezroczyste, szklane karty na kolorowym tle, które powoli się przesuwa
+- Działa w całej aplikacji – na kartach, liście tras, ustawieniach, pasku zakładek, oknach i ekranie powitalnym; tło sięga też pod pasek stanu
+- W jasnym motywie pasek stanu ma teraz jasny kolor zamiast ciemnego
+
 ## 1.21 · 2026-11-08
 Ceny paliw i widżet
 - Nowa sekcja „Ceny paliw” w zakładce Auto: maksymalne ceny ON, Pb95 i Pb98 z obwieszczeń Ministra Energii oraz średnia cena LPG

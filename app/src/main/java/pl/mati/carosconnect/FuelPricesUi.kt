@@ -116,8 +116,7 @@ private fun PriceTile(f: Fuel, s: FuelPrices.Snapshot, fav: Boolean, modifier: M
     val tm = if (s.hasNewTomorrow) s.tomorrow[f] else null
     val shape = RoundedCornerShape(16.dp)
     Column(
-        modifier.clip(shape).background(C.Raised)
-            .then(if (fav) Modifier.border(1.5.dp, C.Accent.copy(alpha = 0.8f), shape) else Modifier)
+        modifier.clip(shape).surface(shape, C.Raised, border = if (fav) C.Accent.copy(alpha = 0.8f) else null, borderWidth = if (fav) 1.5.dp else 1.dp)
             .padding(start = 12.dp, end = 2.dp, top = 2.dp, bottom = 10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -229,7 +228,7 @@ private fun PriceChart(days: List<FuelPrices.Day>, show: Set<Fuel>, modifier: Mo
     val textCol = C.Text.toArgb()
     val grid = C.Border
     val lineCol = C.Text
-    val tipBg = if (C.isLight) Color(0xFFFFFFFF) else Color(0xFF262C35)
+    val tipBg = if (C.isLight) Color(0xFFFFFFFF) else if (C.isGlass) Color(0xF2222943) else Color(0xFF262C35)
     val today = LocalDate.now()
     val todayIdx = days.indexOfFirst { it.date == today }
     val n = days.size

@@ -243,7 +243,7 @@ private fun BatteryCard(b: CarData.Battery) {
 
 @Composable
 private fun StatBox(label: String, value: String, modifier: Modifier) {
-    Column(modifier.clip(RoundedCornerShape(14.dp)).background(C.Raised).padding(horizontal = 12.dp, vertical = 10.dp)) {
+    Column(modifier.clip(RoundedCornerShape(14.dp)).surface(RoundedCornerShape(14.dp), C.Raised).padding(horizontal = 12.dp, vertical = 10.dp)) {
         Text(label, fontSize = 12.sp, color = C.Muted)
         Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = C.Text, maxLines = 1)
     }
@@ -258,7 +258,7 @@ private fun ServiceRow(s: CarData.Service, onClick: (() -> Unit)?) {
         else -> C.Green
     }
     Column(
-        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card)
+        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card)
             .border(1.dp, if (s.overdue) col.copy(alpha = 0.6f) else C.Border, RoundedCornerShape(16.dp))
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -373,7 +373,7 @@ private fun FuelSection(s: CarData.Status) {
     }
     f.fills.take(5).forEach { x ->
         Row(
-            Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card).padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+            Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card).padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -410,7 +410,7 @@ private fun FuelDialog(odo: Int?, onDismiss: () -> Unit) {
     val ok = l != null && l in 1.0..200.0 && c != null && c >= 0 && o != null && o > 0
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = C.Card,
+        containerColor = C.Dialog,
         title = { Text("Nowe tankowanie", color = C.Text) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -440,7 +440,7 @@ private fun HomeWorkRow(work: Boolean, a: CarData.Addr, onEdit: () -> Unit) {
     val label = if (work) "Praca" else "Dom"
     var busy by remember { mutableStateOf(false) }
     Row(
-        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card).clickable(onClick = onEdit)
+        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card).clickable(onClick = onEdit)
             .padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -562,7 +562,7 @@ private fun PlaceEditDialog(work: Boolean, current: CarData.Addr, onDismiss: () 
 
     AlertDialog(
         onDismissRequest = { if (busy == null) onDismiss() },
-        containerColor = C.Card,
+        containerColor = C.Dialog,
         title = { Text(if (work) "Adres pracy" else "Adres domu", color = C.Text) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -622,7 +622,7 @@ private fun FavRow(f: CarData.Place) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     Row(
-        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card).padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card).padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -684,7 +684,7 @@ fun PlaceSheet(place: CarData.Place?, resolving: Boolean, error: String?, onDism
     var sending by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = C.Card,
+        containerColor = C.Dialog,
         title = { Text(if (place != null) place.name else "Wyślij do auta", color = C.Text, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -729,7 +729,7 @@ fun ShareDialog(share: Pair<String?, Uri?>, actions: Actions, onDismiss: () -> U
     if (Store.pairing.value == null) {
         AlertDialog(
             onDismissRequest = onDismiss,
-            containerColor = C.Card,
+            containerColor = C.Dialog,
             title = { Text("Połącz z CAR OS", color = C.Text) },
             text = { Text("Żeby wysyłać cele do auta, połącz telefon z radiem kodem QR (radio: Ustawienia → Połączenia → CAR OS Connect).", color = C.Muted) },
             confirmButton = { TextButton(onClick = { onDismiss(); actions.scanQr() }) { Text("Skanuj kod") } },
@@ -794,12 +794,12 @@ fun TripsTab(sel: CarData.Trip?, onSelect: (CarData.Trip?) -> Unit) {
             lastDay = day
         }
         Row(
-            Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card).clickable { onSelect(t) }
+            Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card).clickable { onSelect(t) }
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(C.Raised), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).surface(RoundedCornerShape(12.dp), C.Raised), contentAlignment = Alignment.Center) {
                 Icon(if (t.path != null) Icons.Rounded.Map else Icons.Rounded.DirectionsCar, null, tint = C.Accent, modifier = Modifier.size(22.dp))
             }
             Column(Modifier.weight(1f)) {
@@ -926,7 +926,7 @@ fun MeterCard() {
 private fun Chip(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Box(
-        modifier.pressScale(src, 0.92f).height(42.dp).clip(RoundedCornerShape(12.dp)).background(C.Raised)
+        modifier.pressScale(src, 0.92f).height(42.dp).clip(RoundedCornerShape(12.dp)).surface(RoundedCornerShape(12.dp), C.Raised)
             .clickable(interactionSource = src, indication = androidx.compose.foundation.LocalIndication.current, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Text(text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = C.Text, maxLines = 1) }
@@ -940,7 +940,7 @@ fun CarWeatherCard() {
     if (spot == null || System.currentTimeMillis() - ww.time > 3 * 3_600_000L) return
     Row(
         Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp))
-            .background(if (ww.frost) C.Frost else C.Card).padding(horizontal = 16.dp, vertical = 12.dp),
+            .then(if (ww.frost) Modifier.background(C.Frost) else Modifier.surface(RoundedCornerShape(16.dp))).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -992,7 +992,7 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
     ToggleRow("Ostrzeżenie o mrozie", "Rano, gdy przy aucie może być szron", nFrost) { CarData.setNotifFrost(it) }
     if (nFrost) {
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card).padding(horizontal = 16.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card).padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Godzina ostrzeżenia", fontSize = 16.sp, color = C.Text, modifier = Modifier.weight(1f))
@@ -1075,7 +1075,7 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
 
     if (restoreAsk) AlertDialog(
         onDismissRequest = { restoreAsk = false },
-        containerColor = C.Card,
+        containerColor = C.Dialog,
         title = { Text("Przywrócić ustawienia w aucie?", color = C.Text) },
         text = {
             Text(
@@ -1102,7 +1102,7 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
 @Composable
 private fun ToggleRow(title: String, sub: String, on: Boolean, onChange: (Boolean) -> Unit) {
     Row(
-        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card).clickable { onChange(!on) }
+        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card).clickable { onChange(!on) }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1166,7 +1166,7 @@ private fun ServiceEditDialog(item: CarData.SvcItem, onDismiss: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = C.Card,
+        containerColor = C.Dialog,
         title = { Text(item.name, color = C.Text) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1234,7 +1234,7 @@ private fun OdoDialog(current: Int?, onDismiss: () -> Unit) {
     var v by remember { mutableStateOf(current?.toString() ?: "") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = C.Card,
+        containerColor = C.Dialog,
         title = { Text("Przebieg auta", color = C.Text) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

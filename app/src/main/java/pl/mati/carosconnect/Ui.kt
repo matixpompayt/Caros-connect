@@ -59,6 +59,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Bluetooth
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DirectionsCar
@@ -111,6 +112,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -136,6 +139,7 @@ data class Pal(
     val bg: Color, val card: Color, val raised: Color, val border: Color,
     val text: Color, val text2: Color, val muted: Color,
     val accent: Color, val green: Color, val orange: Color, val hero: Color, val frost: Color,
+    val glass: Boolean = false,
 )
 
 object C {
@@ -149,8 +153,18 @@ object C {
         Color(0xFF12161B), Color(0xFF353D47), Color(0xFF66707C),
         Color(0xFF0A97B4), Color(0xFF2E9440), Color(0xFFCC7A1E), Color(0xFFCDE9F0), Color(0xFFD3E6F5),
     )
+    /** Szkło na kolorowym tle (Glass.kt): karty półprzezroczyste, Bg = kolor tekstu na akcencie. */
+    val GLASS = Pal(
+        false, Color(0xFF0B1026), Color(0x17FFFFFF), Color(0x1FFFFFFF), Color(0x2EFFFFFF),
+        Color(0xFFF5F7FF), Color(0xFFD6DCEB), Color(0xFFAAB4CA),
+        Color(0xFF67E8F9), Color(0xFF86EFAC), Color(0xFFFDBA74), Color(0x14FFFFFF), Color(0x3338BDF8),
+        glass = true,
+    )
     var pal by mutableStateOf(DARK)
     val isLight get() = pal.light
+    val isGlass get() = pal.glass
+    /** Tło okien dialogowych – w Glass prawie nieprzezroczyste, żeby tekst był czytelny. */
+    val Dialog get() = if (pal.glass) Color(0xF5171C33) else pal.card
     val Bg get() = pal.bg
     val Card get() = pal.card
     val Raised get() = pal.raised
@@ -173,11 +187,34 @@ fun ThemeChooser() {
         listOf("auto" to "Jak telefon", "light" to "Jasny", "dark" to "Ciemny").forEach { (k, label) ->
             val on = mode == k
             Box(
-                Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if (on) C.Accent.copy(alpha = 0.16f) else C.Card)
-                    .border(1.dp, if (on) C.Accent else C.Border, RoundedCornerShape(14.dp))
+                Modifier.weight(1f).clip(RoundedCornerShape(14.dp))
+                    .then(if (on) Modifier.background(C.Accent.copy(alpha = 0.16f)).border(1.dp, C.Accent, RoundedCornerShape(14.dp)) else Modifier.surface(RoundedCornerShape(14.dp), border = C.Border))
                     .clickable { Store.setTheme(k) }.padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center,
             ) { Text(label, fontSize = 15.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, color = if (on) C.Accent else C.Text) }
+        }
+    }
+    // Glass – podgląd kolorowego tła prosto w kafelku
+    val on = mode == "glass"
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        Modifier.fillMaxWidth().clip(shape)
+            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Glass.Violet, Glass.Sky, Glass.Teal, Glass.Pink)))
+            .border(if (on) 2.dp else 1.dp, if (on) Color.White else Color.White.copy(alpha = 0.3f), shape)
+            .clickable { Store.setTheme("glass") },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            Modifier.padding(6.dp).weight(1f).clip(RoundedCornerShape(10.dp))
+                .background(Color.White.copy(alpha = 0.16f)).border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Glass", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("Szklane karty na kolorowym, ruchomym tle", fontSize = 13.sp, color = Color.White.copy(alpha = 0.85f))
+            }
+            if (on) Icon(Icons.Rounded.Check, null, tint = Color.White, modifier = Modifier.size(22.dp))
         }
     }
 }
@@ -207,19 +244,26 @@ fun distText(m: Float): String = if (m >= 1000) String.format(Locale("pl"), "%.1
 fun ParkApp(perms: Perms, actions: Actions) {
     val themeMode by Store.theme.collectAsState()
     val sysDark = androidx.compose.foundation.isSystemInDarkTheme()
-    val light = when (themeMode) { "light" -> true; "dark" -> false; else -> !sysDark }
-    if (C.pal.light != light) C.pal = if (light) C.LIGHT else C.DARK
+    val glass = themeMode == "glass"
+    val light = when (themeMode) { "light" -> true; "dark", "glass" -> false; else -> !sysDark }
+    val target = when { glass -> C.GLASS; light -> C.LIGHT; else -> C.DARK }
+    if (C.pal !== target) C.pal = target
     val view = androidx.compose.ui.platform.LocalView.current
     androidx.compose.runtime.SideEffect {
         (view.context as? android.app.Activity)?.window?.let { w ->
+            // Glass: tło także pod paskiem stanu i nawigacji
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(w, !glass)
+            val bars = if (glass) android.graphics.Color.TRANSPARENT else target.bg.toArgb()
+            w.statusBarColor = bars
+            w.navigationBarColor = bars
             androidx.core.view.WindowCompat.getInsetsController(w, view).apply {
                 isAppearanceLightStatusBars = light
                 isAppearanceLightNavigationBars = light
             }
         }
     }
-    val scheme = if (light) androidx.compose.material3.lightColorScheme(primary = C.Accent, background = C.Bg, surface = C.Card)
-    else darkColorScheme(primary = C.Accent, background = C.Bg, surface = C.Card)
+    val scheme = if (light) androidx.compose.material3.lightColorScheme(primary = C.Accent, background = C.Bg, surface = C.Dialog)
+    else darkColorScheme(primary = C.Accent, background = C.Bg, surface = C.Dialog)
     MaterialTheme(colorScheme = scheme) {
         val ctx = LocalContext.current
         val driving by Store.driving.collectAsState()
@@ -230,6 +274,7 @@ fun ParkApp(perms: Perms, actions: Actions) {
         var picker by remember { mutableStateOf(false) }
         var unpairAsk by remember { mutableStateOf(false) }
 
+        if (glass) GlassBackdrop()
         if (pairing == null && !skipped) {
             WelcomeScreen(actions)
             share?.let { ShareDialog(it, actions) { Share.incoming.value = null } }
@@ -253,7 +298,7 @@ fun ParkApp(perms: Perms, actions: Actions) {
                 Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
             }
         }
-        Column(Modifier.fillMaxSize().background(C.Bg)) {
+        Column(Modifier.fillMaxSize().then(if (glass) Modifier else Modifier.background(C.Bg))) {
             Box(Modifier.weight(1f).fillMaxWidth().nestedScroll(pull.nestedScrollConnection)) {
                 val scroll = remember(tab, trip) { ScrollState(0) }
                 Column(
@@ -301,7 +346,7 @@ fun ParkApp(perms: Perms, actions: Actions) {
                 PullToRefreshContainer(
                     state = pull,
                     modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding(),
-                    containerColor = C.Raised,
+                    containerColor = C.Dialog,
                     contentColor = C.Accent,
                 )
             }
@@ -311,7 +356,7 @@ fun ParkApp(perms: Perms, actions: Actions) {
         if (picker) DevicePicker(actions, onDismiss = { picker = false })
         if (unpairAsk) AlertDialog(
             onDismissRequest = { unpairAsk = false },
-            containerColor = C.Card,
+            containerColor = C.Dialog,
             title = { Text("Rozłączyć z CAR OS?", color = C.Text) },
             text = { Text("Zapisane miejsca zostaną w telefonie. Żeby połączyć ponownie, zeskanuj kod z radia.", color = C.Muted) },
             confirmButton = { TextButton(onClick = { Store.setPairing(null); unpairAsk = false }) { Text("Rozłącz") } },
@@ -331,7 +376,13 @@ private fun BottomBar(tab: Int, onTab: (Int) -> Unit) {
         Icons.Rounded.Settings to "Ustawienia",
     )
     Row(
-        Modifier.fillMaxWidth().background(C.Card).navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp),
+        Modifier.fillMaxWidth()
+            .then(
+                if (C.isGlass) Modifier.background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.10f), Color.White.copy(alpha = 0.04f))))
+                    .drawBehind { drawLine(Color.White.copy(alpha = 0.22f), androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(size.width, 0f), 1.dp.toPx()) }
+                else Modifier.background(C.Card),
+            )
+            .navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp),
     ) {
         items.forEachIndexed { i, (icon, label) ->
             val on = i == tab
@@ -453,7 +504,7 @@ private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
             }
             older.take(8).forEach { h ->
                 Row(
-                    Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card)
+                    Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card)
                         .clickable { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(h.mapsUrl))) }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -571,7 +622,7 @@ private fun NotePhotoCard() {
         var t by remember { mutableStateOf(note) }
         AlertDialog(
             onDismissRequest = { editNote = false },
-            containerColor = C.Card,
+            containerColor = C.Dialog,
             title = { Text("Notatka do parkowania", color = C.Text) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -606,13 +657,14 @@ private fun NotePhotoCard() {
 private fun WelcomeScreen(actions: Actions) {
     CompositionLocalProvider(LocalStagger provides remember { StaggerCounter() }) {
     Column(
-        Modifier.fillMaxSize().background(
-            androidx.compose.ui.graphics.Brush.verticalGradient(listOf(C.Hero, C.Bg, C.Bg)),
+        Modifier.fillMaxSize().then(
+            if (C.isGlass) Modifier
+            else Modifier.background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(C.Hero, C.Bg, C.Bg))),
         ).statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.height(36.dp))
-        Box(Modifier.size(132.dp).clip(CircleShape).background(C.Card).border(1.dp, C.Border, CircleShape), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(132.dp).clip(CircleShape).surface(CircleShape, C.Card, border = C.Border), contentAlignment = Alignment.Center) {
             AnimatedLogo(110.dp)
         }
         Spacer(Modifier.height(22.dp))
@@ -660,7 +712,7 @@ private fun Feature(icon: ImageVector, title: String, sub: String) {
 @Composable
 private fun Step(n: Int, text: String) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
-        Box(Modifier.size(26.dp).clip(CircleShape).background(C.Raised), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(26.dp).clip(CircleShape).surface(CircleShape, C.Raised), contentAlignment = Alignment.Center) {
             Text("$n", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = C.Accent)
         }
         Text(text, fontSize = 15.sp, color = C.Text2, modifier = Modifier.padding(top = 2.dp))
@@ -730,7 +782,7 @@ private fun FinderCard(s: Store.Spot, me: Location?, azimuth: Float?) {
         val dist = me.distanceTo(target)
         val bearing = me.bearingTo(target)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-            Box(Modifier.size(96.dp).clip(CircleShape).background(C.Raised), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(96.dp).clip(CircleShape).surface(CircleShape, C.Raised), contentAlignment = Alignment.Center) {
                 if (dist < 15) {
                     Icon(Icons.Rounded.DirectionsCar, null, tint = C.Green, modifier = Modifier.size(48.dp))
                 } else if (azimuth != null) {
@@ -760,7 +812,7 @@ private fun DevicePicker(actions: Actions, onDismiss: () -> Unit) {
     val devices = remember { actions.pairedDevices() }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = C.Card,
+        containerColor = C.Dialog,
         title = { Text("Wybierz radio w aucie", color = C.Text) },
         text = {
             Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
@@ -802,7 +854,7 @@ fun UpdateItem() {
     // co nowego w dostępnej wersji – zanim zainstalujesz
     (st as? Updater.State.Available)?.notes?.let { n ->
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card).padding(horizontal = 16.dp, vertical = 12.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text("Co nowego w ${n.version}", fontSize = 13.sp, color = C.Accent, fontWeight = FontWeight.SemiBold)
@@ -834,7 +886,7 @@ fun ChangelogDialog(onDismiss: () -> Unit) {
     val next = (upd as? Updater.State.Available)?.notes
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = C.Card,
+        containerColor = C.Dialog,
         title = { Text("Co nowego", color = C.Text) },
         text = {
             Column(
@@ -882,7 +934,7 @@ fun WhatsNewDialog() {
     }
     AlertDialog(
         onDismissRequest = { Changelog.markSeen() },
-        containerColor = C.Card,
+        containerColor = C.Dialog,
         title = { Text("Nowość w wersji ${entry.version}", color = C.Text) },
         text = {
             Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -915,7 +967,7 @@ fun SettingItem(icon: ImageVector, title: String, sub: String, highlight: Boolea
 @Composable
 fun Card(border: Color = C.Border, content: @Composable () -> Unit) {
     Column(
-        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(C.Card).border(1.dp, border, RoundedCornerShape(22.dp)).padding(18.dp),
+        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(22.dp)).surface(RoundedCornerShape(22.dp), C.Card, border = border).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) { content() }
 }
@@ -944,7 +996,7 @@ fun PrimaryButton(text: String, icon: ImageVector, onClick: () -> Unit) {
 fun SecondaryButton(text: String, icon: ImageVector, modifier: Modifier = Modifier, h: Dp = 54.dp, onClick: () -> Unit) {
     val src = remember { MutableInteractionSource() }
     Row(
-        modifier.pressScale(src).height(h).clip(RoundedCornerShape(16.dp)).background(C.Raised)
+        modifier.pressScale(src).height(h).clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Raised)
             .clickable(interactionSource = src, indication = LocalIndication.current, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
