@@ -144,7 +144,13 @@ class MainActivity : ComponentActivity(), Actions {
     /** „Udostępnij → Wyślij do auta” (tekst z Map Google) albo adres geo:. */
     private fun handleShare(i: Intent?) {
         when (i?.action) {
-            Intent.ACTION_SEND -> i.getStringExtra(Intent.EXTRA_TEXT)?.let { Share.incoming.value = it to null }
+            Intent.ACTION_SEND -> {
+                // Mapy Google: nazwa bywa tylko w temacie, a w tekście sam link
+                val text = i.getStringExtra(Intent.EXTRA_TEXT)
+                val subject = i.getStringExtra(Intent.EXTRA_SUBJECT)?.trim()
+                val all = if (!subject.isNullOrBlank() && text?.contains(subject) != true) listOfNotNull(subject, text).joinToString("\n") else text
+                all?.let { Share.incoming.value = it to null }
+            }
             Intent.ACTION_VIEW -> i.data?.takeIf { it.scheme == "geo" }?.let { Share.incoming.value = null to it }
         }
     }

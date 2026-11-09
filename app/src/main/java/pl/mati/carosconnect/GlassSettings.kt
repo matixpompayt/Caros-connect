@@ -244,7 +244,9 @@ private fun WallTile(name: String, on: Boolean, brush: Brush, onClick: () -> Uni
 @Composable
 private fun Swatches(selected: List<Long>, numbered: Boolean, onTap: (Long) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        GlassTheme.SWATCHES.chunked(6).forEach { row ->
+        val rows = GlassTheme.SWATCHES.chunked(6) + listOf(emptyList<Long>()) + GlassTheme.DARK_SWATCHES.chunked(6)
+        rows.forEach { row ->
+            if (row.isEmpty()) { Text("Ciemne", fontSize = 12.sp, color = C.Muted); return@forEach }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 row.forEach { c ->
                     val idx = selected.indexOf(c)

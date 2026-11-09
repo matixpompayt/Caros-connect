@@ -678,10 +678,15 @@ suspend fun sendToCar(ctx: android.content.Context, type: String, p: CarData.Pla
 
 /** Okno: co zrobić z miejscem (nawigacja w aucie / ulubione). */
 @Composable
-fun PlaceSheet(place: CarData.Place?, resolving: Boolean, error: String?, onDismiss: () -> Unit) {
+fun PlaceSheet(
+    place0: CarData.Place?, resolving: Boolean, error: String?,
+    others: List<CarData.Place> = emptyList(), shared: String? = null, onDismiss: () -> Unit,
+) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var sending by remember { mutableStateOf(false) }
+    var picked by remember(place0) { mutableStateOf(place0) }
+    val place = picked
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
@@ -693,9 +698,26 @@ fun PlaceSheet(place: CarData.Place?, resolving: Boolean, error: String?, onDism
                         CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
                         Text("Odczytuję miejsce…", color = C.Muted)
                     }
-                    place == null -> Text(error ?: "Nie udało się odczytać miejsca", color = C.Orange)
+                    place == null -> {
+                        Text(error ?: "Nie udało się odczytać miejsca", color = C.Orange)
+                        if (!shared.isNullOrBlank()) Text("Udostępniono: " + shared.take(220), color = C.Muted, fontSize = 12.sp)
+                    }
                     else -> {
                         if (place.detail.isNotBlank()) Text(place.detail, color = C.Muted, fontSize = 14.sp)
+                        // inne pasujące miejsca (gdy wyszukiwanie po nazwie trafiło kilka)
+                        val alts = (listOfNotNull(place0) + others).distinctBy { "%.4f,%.4f".format(it.lat, it.lon) }.filter { it != place }
+                        if (alts.isNotEmpty()) {
+                            Text("To nie to? Inne wyniki:", fontSize = 12.sp, color = C.Muted)
+                            alts.take(4).forEach { o ->
+                                Column(
+                                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).surface(RoundedCornerShape(12.dp), C.Raised)
+                                        .clickable { picked = o }.padding(horizontal = 12.dp, vertical = 8.dp),
+                                ) {
+                                    Text(o.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    if (o.detail.isNotBlank()) Text(o.detail, fontSize = 12.sp, color = C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
                         PrimaryButton(if (sending) "Wysyłam…" else "Nawiguj w aucie", Icons.Rounded.Navigation) {
                             if (sending) return@PrimaryButton
                             sending = true
@@ -720,10 +742,14 @@ fun PlaceSheet(place: CarData.Place?, resolving: Boolean, error: String?, onDism
 /** Udostępnienie z Map Google → odczyt miejsca → okno wysyłki. */
 @Composable
 fun ShareDialog(share: Pair<String?, Uri?>, actions: Actions, onDismiss: () -> Unit) {
-    var place by remember(share) { mutableStateOf<CarData.Place?>(null) }
+    val ctx = LocalContext.current
+    var res by remember(share) { mutableStateOf<Places.Resolved?>(null) }
     var resolving by remember(share) { mutableStateOf(true) }
     LaunchedEffect(share) {
-        place = withContext(Dispatchers.IO) { try { Places.resolve(share.first, share.second) } catch (_: Exception) { null } }
+        res = withContext(Dispatchers.IO) {
+            try { Places.resolve(ctx.applicationContext, share.first, share.second) }
+            catch (_: Exception) { Places.Resolved(null, emptyList(), "", share.first ?: share.second?.toString().orEmpty()) }
+        }
         resolving = false
     }
     if (Store.pairing.value == null) {
@@ -737,7 +763,13 @@ fun ShareDialog(share: Pair<String?, Uri?>, actions: Actions, onDismiss: () -> U
         )
         return
     }
-    PlaceSheet(place, resolving, "Nie znalazłem współrzędnych w udostępnionym linku", onDismiss)
+    val r = res
+    PlaceSheet(
+        r?.place, resolving,
+        if (r != null && r.query.isNotBlank()) "Nie znalazłem miejsca „${r.query.take(80)}” – wpisz je w „Wyślij cel do auta”"
+        else "Nie znalazłem miejsca w udostępnionym linku",
+        others = r?.others.orEmpty(), shared = r?.shared, onDismiss = onDismiss,
+    )
 }
 
 // ======================= TRASY =======================

@@ -52,6 +52,12 @@ object GlassTheme {
         Preset("mint", "Mięta", listOf(0xFF5EEAD4, 0xFFA7F3D0, 0xFF38BDF8, 0xFFC4B5FD), 0xFF0B2027),
         Preset("peach", "Brzoskwinia", listOf(0xFFFDBA74, 0xFFF9A8D4, 0xFFFDE68A, 0xFFFCA5A5), 0xFF3B1F2B),
         Preset("graphite", "Grafit", listOf(0xFF64748B, 0xFF94A3B8, 0xFF334155, 0xFF475569), 0xFF0B0E13),
+        // ciemne
+        Preset("night", "Noc", listOf(0xFF1E3A8A, 0xFF312E81, 0xFF3B0764, 0xFF0B1F4D), 0xFF02040C),
+        Preset("onyx", "Onyks", listOf(0xFF27272A, 0xFF1F2937, 0xFF3F3F46, 0xFF111827), 0xFF000000),
+        Preset("deep", "Głębia", listOf(0xFF134E4A, 0xFF0C4A6E, 0xFF064E3B, 0xFF1E3A8A), 0xFF010B10),
+        Preset("burgundy", "Bordo", listOf(0xFF7F1D1D, 0xFF881337, 0xFF4A044E, 0xFF7C2D12), 0xFF0E0205),
+        Preset("darkforest", "Las nocą", listOf(0xFF14532D, 0xFF064E3B, 0xFF365314, 0xFF134E4A), 0xFF010A04),
     )
 
     /** Kolory do „Jednolity kolor”, „Mieszanka” i akcentu. */
@@ -59,6 +65,13 @@ object GlassTheme {
         0xFFEF4444, 0xFFF97316, 0xFFF59E0B, 0xFFFACC15, 0xFF84CC16, 0xFF22C55E,
         0xFF10B981, 0xFF14B8A6, 0xFF06B6D4, 0xFF0EA5E9, 0xFF3B82F6, 0xFF6366F1,
         0xFF8B5CF6, 0xFFA855F7, 0xFFD946EF, 0xFFEC4899, 0xFFF43F5E, 0xFF94A3B8,
+    )
+
+    /** Ciemne kolory do „Jednolity kolor” i „Mieszanka”. */
+    val DARK_SWATCHES = listOf(
+        0xFF0A0A0F, 0xFF27272A, 0xFF1F2937, 0xFF1E293B, 0xFF0B1F4D, 0xFF1E3A8A,
+        0xFF312E81, 0xFF3B0764, 0xFF4A044E, 0xFF881337, 0xFF7F1D1D, 0xFF7C2D12,
+        0xFF451A03, 0xFF365314, 0xFF14532D, 0xFF064E3B, 0xFF134E4A, 0xFF0C4A6E,
     )
 
     /** Pomysły na tło AI: (napis, opis wysyłany do generatora po angielsku). */
