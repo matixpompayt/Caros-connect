@@ -348,7 +348,7 @@ fun ParkApp(perms: Perms, actions: Actions) {
                 PullToRefreshContainer(
                     state = pull,
                     modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding(),
-                    containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
+                    containerColor = C.Dialog,
                     contentColor = C.Accent,
                 )
             }
