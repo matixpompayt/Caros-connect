@@ -83,7 +83,7 @@ object GlassIndication : Indication {
 private class GlassGlow(val glow: Animatable<Float, AnimationVector1D>, val pos: MutableState<Offset>) : IndicationInstance {
     override fun ContentDrawScope.drawIndication() {
         drawContent()
-        val g = glow.value
+        val g = glow.value.coerceIn(0f, 1f)
         if (g <= 0.01f) return
         val p = pos.value.takeIf { it.isSpecified } ?: center
         val r = maxOf(size.maxDimension * 0.8f, 56.dp.toPx())
@@ -151,12 +151,12 @@ fun LiquidSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier:
             }
             .then(
                 if (shader) Modifier.graphicsLayer {
-                    val p = press.value
+                    val p = press.value.coerceIn(0f, 1f)
                     renderEffect = if (p > 0.01f) {
                         val w = SW_W.toPx(); val h = SW_H.toPx()
                         val tx = (w - TR_W.toPx()) / 2f
                         val travel = TR_W.toPx() - 4.dp.toPx() - KN_W.toPx()
-                        val cx = tx + 2.dp.toPx() + pos.value * travel + KN_W.toPx() / 2f
+                        val cx = tx + 2.dp.toPx() + pos.value.coerceIn(-0.05f, 1.05f) * travel + KN_W.toPx() / 2f
                         val g = DropGeom.capsule(cx, h / 2f, (KN_W + 10.dp * p).toPx(), (KN_H + 10.dp * p).toPx())
                         val l = GlassLight.dir
                         fx.effect(w, h, g, p, light, l.x, l.y, 4.dp.toPx(), density.density)
@@ -191,17 +191,19 @@ fun LiquidSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier:
                 }
             }
             .drawBehind {
-                val p = press.value
+                // sprężyny „przestrzeliwują” (np. 1,05 albo -0,03) – kolory i przezroczystość muszą zostać w 0..1
+                val p = press.value.coerceIn(0f, 1f)
                 val t = pos.value
+                val tc = t.coerceIn(0f, 1f)
                 val tx = (size.width - TR_W.toPx()) / 2f
                 val ty = (size.height - TR_H.toPx()) / 2f
                 val tw = TR_W.toPx(); val th = TR_H.toPx()
-                drawRoundRect(lerp(offColor, IOS_GREEN, t), Offset(tx, ty), Size(tw, th), CornerRadius(th / 2f))
+                drawRoundRect(lerp(offColor, IOS_GREEN, tc), Offset(tx, ty), Size(tw, th), CornerRadius(th / 2f))
                 val kh = KN_H.toPx()
                 // bez shadera gałka tylko się wydłuża (jak w starszym iOS)
                 val kw = KN_W.toPx() + if (shader) 0f else 8.dp.toPx() * p
                 val travel = tw - 4.dp.toPx() - kw
-                val kx = tx + 2.dp.toPx() + t * travel
+                val kx = tx + 2.dp.toPx() + t.coerceIn(-0.05f, 1.05f) * travel
                 val ky = ty + 2.dp.toPx()
                 val alpha = if (shader) 1f - p else 1f
                 if (alpha > 0.01f) {
@@ -248,12 +250,12 @@ fun LiquidSlider(
             }
             .then(
                 if (shader) Modifier.graphicsLayer {
-                    val p = press.value
+                    val p = press.value.coerceIn(0f, 1f)
                     val sz = box.value
                     renderEffect = if (p > 0.01f && sz.width > 0) {
                         val w = sz.width.toFloat(); val h = sz.height.toFloat()
                         val ins = inset.toPx()
-                        val cx = ins + shown.value * (w - 2 * ins)
+                        val cx = ins + shown.value.coerceIn(0f, 1f) * (w - 2 * ins)
                         val g = DropGeom.capsule(cx, h / 2f, (38.dp + 12.dp * p).toPx(), (24.dp + 12.dp * p).toPx())
                         val l = GlassLight.dir
                         fx.effect(w, h, g, p, light, l.x, l.y, 4.dp.toPx(), density.density)
@@ -289,10 +291,10 @@ fun LiquidSlider(
                 val th = 6.dp.toPx()
                 val cy = size.height / 2f
                 val tw = size.width - 2 * ins
-                val x = ins + shown.value * tw
+                val x = ins + shown.value.coerceIn(0f, 1f) * tw
                 drawRoundRect(trackOff, Offset(ins - th / 2f, cy - th / 2f), Size(tw + th, th), CornerRadius(th / 2f))
                 drawRoundRect(accent, Offset(ins - th / 2f, cy - th / 2f), Size(x - ins + th, th), CornerRadius(th / 2f))
-                val p = press.value
+                val p = press.value.coerceIn(0f, 1f)
                 val kw = 38.dp.toPx() + if (shader) 0f else 6.dp.toPx() * p
                 val kh = 24.dp.toPx()
                 val alpha = if (shader) 1f - p else 1f

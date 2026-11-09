@@ -2,6 +2,10 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Poprawka przełączników
+- Naprawione zamykanie aplikacji po użyciu przełącznika (i suwaka) w motywie Glass
+
 ## 1.27 · 2026-11-09
 Cały interfejs w stylu Liquid Glass (iOS 26)
 - Przełączniki jak w iPhonie: gałka-pastylka, która po dotknięciu zamienia się w szklaną kroplę większą od toru, załamuje kolor pod sobą, daje się przeciągnąć i sprężyście wraca

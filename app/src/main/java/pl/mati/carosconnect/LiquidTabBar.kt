@@ -238,7 +238,8 @@ internal fun dropPath(g: DropGeom): Path {
     }
 }
 
-internal fun DrawScope.drawDropBody(path: Path, light: Boolean, lift: Float) {
+internal fun DrawScope.drawDropBody(path: Path, light: Boolean, lift0: Float) {
+    val lift = lift0.coerceIn(0f, 1f)
     if (!light) translate(top = 3.dp.toPx()) { drawPath(path, Color.Black.copy(alpha = 0.10f + 0.10f * lift)) }
     drawPath(path, if (light) Color.White.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.10f + 0.04f * lift))
     clipPath(path) {
