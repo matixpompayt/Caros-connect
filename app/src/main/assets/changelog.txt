@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.28 · 2026-11-09
 Poprawka przełączników
 - Naprawione zamykanie aplikacji po użyciu przełącznika (i suwaka) w motywie Glass
 
