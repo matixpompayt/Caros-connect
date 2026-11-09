@@ -273,7 +273,7 @@ fun ParkApp(perms: Perms, actions: Actions) {
         var picker by remember { mutableStateOf(false) }
         var unpairAsk by remember { mutableStateOf(false) }
 
-        if (glass) GlassBackdrop()
+        if (glass) { GlassBackdrop(); GlassTiltSensor() }
         if (pairing == null && !skipped) {
             WelcomeScreen(actions)
             share?.let { ShareDialog(it, actions) { Share.incoming.value = null } }

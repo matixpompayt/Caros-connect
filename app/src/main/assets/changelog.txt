@@ -2,6 +2,14 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Prawdziwe „liquid glass” jak w iOS 26
+- Kropla w dolnym pasku działa jak soczewka: przy brzegach załamuje światło i zagina to, co pod nią, z lekką tęczową poświatą jak w szkle (Android 13 i nowszy)
+- Przytrzymaj pasek – kropla się podnosi, powiększa ikony pod sobą i możesz ją przeciągać palcem między zakładkami; puść, a wskoczy na najbliższą (z lekkim „tyknięciem” przy każdej zakładce)
+- Przy zmianie zakładki kropla przepływa: przód leci pierwszy, tył dogania, na końcu sprężynuje
+- Odblaski na krawędziach szkła (kropla, karty, pasek) przesuwają się, gdy przechylasz telefon
+- Cień pod kroplą i delikatniejsze, bardziej naturalne rozciąganie
+
 ## 1.24 · 2026-11-08
 Kropla wody w pasku zakładek
 - W motywie Glass zaznaczenie na dolnym pasku to kropla wody: przy zmianie zakładki przepływa do nowej, wydłuża się, zwęża z tyłu i sprężynuje na miejscu
