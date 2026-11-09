@@ -178,7 +178,11 @@ private fun History(s: FuelPrices.Snapshot) {
     }
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
         Text("Historia", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text, modifier = Modifier.weight(1f))
-        listOf(14 to "14 dni", 30 to "30 dni", 90 to "3 mies.").forEach { (d, l) ->
+        val ranges = listOf(14 to "14 dni", 30 to "30 dni", 90 to "3 mies.")
+        if (C.isGlass) LiquidSegmented(
+            ranges.map { it.second }, ranges.indexOfFirst { it.first == range }, { i -> range = ranges[i].first },
+            modifier = Modifier.width(206.dp), height = 34.dp, fontSize = 12.sp,
+        ) else ranges.forEach { (d, l) ->
             val on = range == d
             Text(
                 l, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = if (on) C.Bg else C.Text2,

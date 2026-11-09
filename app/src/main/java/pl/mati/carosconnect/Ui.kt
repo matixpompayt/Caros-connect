@@ -157,6 +157,8 @@ object C {
     val isLight get() = pal.light
     val isGlass get() = pal.glass
     /** Tło okien dialogowych – w Glass prawie nieprzezroczyste, żeby tekst był czytelny. */
+    /** Kolor kontenera AlertDialog: w Glass przezroczysty, tło rysuje Modifier.glassDialog(). */
+    val DialogBg get() = if (pal.glass) Color.Transparent else Dialog
     val Dialog get() = if (pal.glass) (if (pal.light) Color(0xF7F4F6FA) else Color(0xF5171C33)) else pal.card
     val Bg get() = pal.bg
     val Card get() = pal.card
@@ -264,6 +266,7 @@ fun ParkApp(perms: Perms, actions: Actions) {
     val scheme = if (light) androidx.compose.material3.lightColorScheme(primary = C.Accent, background = C.Bg, surface = C.Dialog)
     else darkColorScheme(primary = C.Accent, background = C.Bg, surface = C.Dialog)
     MaterialTheme(colorScheme = scheme) {
+      androidx.compose.runtime.CompositionLocalProvider(LocalIndication provides (if (glass) GlassIndication else LocalIndication.current)) {
         val ctx = LocalContext.current
         val driving by Store.driving.collectAsState()
         val car by Store.carName.collectAsState()
@@ -277,7 +280,7 @@ fun ParkApp(perms: Perms, actions: Actions) {
         if (pairing == null && !skipped) {
             WelcomeScreen(actions)
             share?.let { ShareDialog(it, actions) { Share.incoming.value = null } }
-            return@MaterialTheme
+            return@CompositionLocalProvider
         }
         var tab by rememberSaveable { mutableIntStateOf(0) }
         var trip by remember { mutableStateOf<CarData.Trip?>(null) }
@@ -345,7 +348,7 @@ fun ParkApp(perms: Perms, actions: Actions) {
                 PullToRefreshContainer(
                     state = pull,
                     modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding(),
-                    containerColor = C.Dialog,
+                    containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
                     contentColor = C.Accent,
                 )
             }
@@ -355,7 +358,7 @@ fun ParkApp(perms: Perms, actions: Actions) {
         if (picker) DevicePicker(actions, onDismiss = { picker = false })
         if (unpairAsk) AlertDialog(
             onDismissRequest = { unpairAsk = false },
-            containerColor = C.Dialog,
+            containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
             title = { Text("Rozłączyć z CAR OS?", color = C.Text) },
             text = { Text("Zapisane miejsca zostaną w telefonie. Żeby połączyć ponownie, zeskanuj kod z radia.", color = C.Muted) },
             confirmButton = { TextButton(onClick = { Store.setPairing(null); unpairAsk = false }) { Text("Rozłącz") } },
@@ -363,6 +366,7 @@ fun ParkApp(perms: Perms, actions: Actions) {
         )
         share?.let { ShareDialog(it, actions) { Share.incoming.value = null } }
         WhatsNewDialog()
+      }
     }
 }
 
@@ -628,7 +632,7 @@ private fun NotePhotoCard() {
         var t by remember { mutableStateOf(note) }
         AlertDialog(
             onDismissRequest = { editNote = false },
-            containerColor = C.Dialog,
+            containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
             title = { Text("Notatka do parkowania", color = C.Text) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -818,7 +822,7 @@ private fun DevicePicker(actions: Actions, onDismiss: () -> Unit) {
     val devices = remember { actions.pairedDevices() }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = C.Dialog,
+        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
         title = { Text("Wybierz radio w aucie", color = C.Text) },
         text = {
             Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
@@ -892,7 +896,7 @@ fun ChangelogDialog(onDismiss: () -> Unit) {
     val next = (upd as? Updater.State.Available)?.notes
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = C.Dialog,
+        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
         title = { Text("Co nowego", color = C.Text) },
         text = {
             Column(
@@ -940,7 +944,7 @@ fun WhatsNewDialog() {
     }
     AlertDialog(
         onDismissRequest = { Changelog.markSeen() },
-        containerColor = C.Dialog,
+        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
         title = { Text("Nowość w wersji ${entry.version}", color = C.Text) },
         text = {
             Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -987,7 +991,8 @@ fun Label(text: String, modifier: Modifier = Modifier) {
 fun PrimaryButton(text: String, icon: ImageVector, onClick: () -> Unit) {
     val src = remember { MutableInteractionSource() }
     Row(
-        Modifier.stagger().pressScale(src).fillMaxWidth().height(60.dp).clip(RoundedCornerShape(18.dp)).background(C.Accent)
+        Modifier.stagger().pressScale(src).fillMaxWidth().height(60.dp).clip(RoundedCornerShape(if (C.isGlass) 30.dp else 18.dp))
+            .then(if (C.isGlass) Modifier.surface(RoundedCornerShape(30.dp), C.Raised).background(C.Accent.copy(alpha = 0.82f)) else Modifier.background(C.Accent))
             .clickable(interactionSource = src, indication = LocalIndication.current, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
@@ -1002,7 +1007,7 @@ fun PrimaryButton(text: String, icon: ImageVector, onClick: () -> Unit) {
 fun SecondaryButton(text: String, icon: ImageVector, modifier: Modifier = Modifier, h: Dp = 54.dp, onClick: () -> Unit) {
     val src = remember { MutableInteractionSource() }
     Row(
-        modifier.pressScale(src).height(h).clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Raised)
+        modifier.pressScale(src).height(h).clip(RoundedCornerShape(if (C.isGlass) h / 2 else 16.dp)).surface(RoundedCornerShape(if (C.isGlass) h / 2 else 16.dp), C.Raised)
             .clickable(interactionSource = src, indication = LocalIndication.current, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,

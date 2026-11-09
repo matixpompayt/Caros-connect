@@ -37,6 +37,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -128,7 +129,7 @@ fun GlassBackdrop() {
  * Tło powierzchni (karty, wiersze, przyciski) zgodne z motywem:
  * w Glass – szkło, w pozostałych – zwykły kolor (i ramka, jeśli podana).
  */
-fun Modifier.surface(shape: Shape, color: Color = C.Card, border: Color? = null, borderWidth: Dp = 1.dp): Modifier =
+fun Modifier.surface(shape: Shape, color: Color = C.Card, border: Color? = null, borderWidth: Dp = 1.dp, heavy: Boolean = false): Modifier =
     if (!C.isGlass) {
         this.background(color, shape).then(if (border != null) Modifier.border(borderWidth, border, shape) else Modifier)
     } else composed {
@@ -137,12 +138,20 @@ fun Modifier.surface(shape: Shape, color: Color = C.Card, border: Color? = null,
         val raised = color == C.Raised
         val extraBorder = border?.takeIf { it != C.Border }
         val pos = remember { mutableStateOf(Offset.Zero) }
-        this.onGloballyPositioned { pos.value = it.positionInRoot() }
+        val view = LocalView.current
+        // pozycja na ekranie (okna dialogowe mają własne okno – tapeta jest liczona od rogu ekranu)
+        this.onGloballyPositioned {
+            val loc = IntArray(2)
+            view.getLocationOnScreen(loc)
+            pos.value = it.positionInRoot() + Offset(loc[0].toFloat(), loc[1].toFloat())
+        }
             .drawWithCache {
                 val outline = shape.createOutline(size, layoutDirection, this)
                 val path = Path().apply { addOutline(outline) }
                 // odcień materiału (jak .regularMaterial / .thinMaterial w iOS)
                 val tint: List<Color> = when {
+                    heavy && light -> listOf(Color.White.copy(alpha = 0.74f))
+                    heavy -> listOf(Color.Black.copy(alpha = 0.40f), Color.White.copy(alpha = 0.08f))
                     depth > 0 && light -> listOf(Color.White.copy(alpha = if (raised) 0.42f else 0.30f))
                     depth > 0 -> listOf(Color.White.copy(alpha = if (raised) 0.10f else 0.07f))
                     light -> listOf(Color.White.copy(alpha = 0.52f))

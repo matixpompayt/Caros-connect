@@ -61,7 +61,12 @@ fun Modifier.stagger(): Modifier = composed {
 /** Sprężyste „wciśnięcie”. */
 fun Modifier.pressScale(src: MutableInteractionSource, pressed: Float = 0.96f): Modifier = composed {
     val isPressed by src.collectIsPressedAsState()
-    val s by animateFloatAsState(if (isPressed) pressed else 1f, spring(dampingRatio = 0.55f, stiffness = 700f), label = "press")
+    val glass = C.isGlass
+    val s by animateFloatAsState(
+        if (isPressed) (if (glass) 1f + (1f - pressed).coerceAtMost(0.05f) * 0.8f else pressed) else 1f,
+        if (glass) spring(dampingRatio = 0.45f, stiffness = 520f) else spring(dampingRatio = 0.55f, stiffness = 700f),
+        label = "press",
+    )
     Modifier.graphicsLayer {
         scaleX = s
         scaleY = s

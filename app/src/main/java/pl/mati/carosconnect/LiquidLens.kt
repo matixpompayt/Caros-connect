@@ -63,7 +63,8 @@ half4 main(float2 p) {
     if (dsh > 0.0) {
         shadow = (1.0 - clamp(dsh / ((10.0 + 8.0 * uLift) * uDensity), 0.0, 1.0)) * (0.08 + 0.14 * uLift) * (1.0 - 0.5 * uLight);
     }
-    float4 outside = float4(base.rgb * (1.0 - shadow), base.a);
+    // cień: czarny „nad” treścią (działa też na przezroczystym tle)
+    float4 outside = float4(base.rgb * (1.0 - shadow), shadow + base.a * (1.0 - shadow));
     if (dist > 1.0) { return half4(outside); }
 
     float e = 1.0;
@@ -85,14 +86,21 @@ half4 main(float2 p) {
     float3 rgb = float3(cr.r, cg.g, cb.b);
     float t = mix(0.08, 0.32, uLight) + 0.04 * uLift;
     rgb = rgb * (1.0 - t) + float3(a * t);
+    // „ciało” szkła tam, gdzie pod soczewką nic nie ma (np. gałka wystająca poza tor)
+    float body = mix(0.10, 0.30, uLight) * (1.0 - a);
+    rgb = rgb + float3(body);
+    a = a + body;
     float ndl = dot(n, uLightDir);
     float facing = clamp(ndl, 0.0, 1.0);
     float back = clamp(-ndl, 0.0, 1.0);
     float edge = 1.0 - clamp(-dist / (2.2 * uDensity), 0.0, 1.0);
     float spec = edge * (0.75 * facing * facing + 0.25 * back * back) * mix(1.0, 0.8, uLight);
     float inner = (1.0 - clamp(-dist / (thick * 1.6), 0.0, 1.0)) * facing * 0.12;
-    rgb = min(rgb + float3((spec + inner) * a), float3(a));
-    float4 inside = float4(rgb, a);
+    float hl = clamp(spec + inner, 0.0, 1.0);
+    // odblask: biały „nad” szkłem
+    rgb = float3(hl) + rgb * (1.0 - hl);
+    a = hl + a * (1.0 - hl);
+    float4 inside = float4(min(rgb, float3(a)), a);
     float aa = clamp((1.0 - dist) * 0.5, 0.0, 1.0);
     return half4(mix(outside, inside, aa));
 }
@@ -103,14 +111,19 @@ half4 main(float2 p) {
 
     val supported get() = Build.VERSION.SDK_INT >= 33 && !broken
 
+    internal val source get() = AGSL
+}
+
+/** Soczewka dla jednej kontrolki (własny RuntimeShader – kontrolki nie nadpisują sobie parametrów). */
+class LensFx {
     private var shader: Any? = null
 
     @RequiresApi(33)
     fun effect(
         w: Float, h: Float, g: DropGeom, lift: Float, light: Boolean,
-        lx: Float, ly: Float, pad: Float, density: Float,
+        lx: Float, ly: Float, refr: Float, density: Float,
     ): RenderEffect? = try {
-        val s = (shader as? RuntimeShader) ?: RuntimeShader(AGSL).also { shader = it }
+        val s = (shader as? RuntimeShader) ?: RuntimeShader(LiquidLens.source).also { shader = it }
         s.setFloatUniform("uSize", w, h)
         s.setFloatUniform("uRear", g.rearX, g.cy)
         s.setFloatUniform("uFront", g.frontX, g.cy)
@@ -120,11 +133,11 @@ half4 main(float2 p) {
         s.setFloatUniform("uLift", lift)
         s.setFloatUniform("uLight", if (light) 1f else 0f)
         s.setFloatUniform("uLightDir", lx, ly)
-        s.setFloatUniform("uPad", pad)
+        s.setFloatUniform("uPad", refr)
         s.setFloatUniform("uDensity", density)
         android.graphics.RenderEffect.createRuntimeShaderEffect(s, "content").asComposeRenderEffect()
     } catch (t: Throwable) {
-        broken = true
+        LiquidLens.broken = true
         null
     }
 }
@@ -132,6 +145,15 @@ half4 main(float2 p) {
 /** Geometria kropli w pikselach paska: środki tylnej i przedniej „czapki”, ich promienie i kierunek ruchu. */
 data class DropGeom(val rearX: Float, val frontX: Float, val cy: Float, val rr: Float, val rf: Float, val dir: Int) {
     val lensX get() = (rearX + frontX) / 2f
+
+    companion object {
+        /** Zwykła kapsuła (gałka przełącznika / suwaka): środek, szerokość, wysokość. */
+        fun capsule(cx: Float, cy: Float, w: Float, h: Float): DropGeom {
+            val r = h / 2f
+            val half = maxOf(0f, w / 2f - r)
+            return DropGeom(cx - half, cx + half, cy, r, r, 1)
+        }
+    }
 }
 
 /**

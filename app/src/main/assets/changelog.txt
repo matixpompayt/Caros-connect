@@ -2,6 +2,15 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Cały interfejs w stylu Liquid Glass (iOS 26)
+- Przełączniki jak w iPhonie: gałka-pastylka, która po dotknięciu zamienia się w szklaną kroplę większą od toru, załamuje kolor pod sobą, daje się przeciągnąć i sprężyście wraca
+- Suwaki: cienki tor i gałka, która przy przesuwaniu staje się szklaną soczewką
+- Przełączniki segmentowe (Szkło, Tło, zakres wykresu cen paliw) z przepływającą kroplą – tak jak dolny pasek
+- Przyciski i wiersze przy wciśnięciu lekko „rosną” i świecą pod palcem zamiast androidowej fali
+- Okna dialogowe z mrożonego szkła, zaokrąglone przyciski w kształcie kapsuły
+- Kolor włączonego przełącznika – zielony jak w iOS
+
 ## 1.25 · 2026-11-09
 Prawdziwe „liquid glass” jak w iOS 26
 - Kropla w dolnym pasku działa jak soczewka: przy brzegach załamuje światło i zagina to, co pod nią, z lekką tęczową poświatą jak w szkle (Android 13 i nowszy)

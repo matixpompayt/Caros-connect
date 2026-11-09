@@ -87,10 +87,12 @@ fun GlassSettings() {
 
     Card {
         SubTitle("Szkło")
-        Pills(listOf("dark" to "Ciemne", "light" to "Jasne", "auto" to "Jak telefon"), s.tone) { k -> upd { it.copy(tone = k) } }
+        val tones = listOf("dark" to "Ciemne", "light" to "Jasne", "auto" to "Jak telefon")
+        LiquidSegmented(tones.map { it.second }, tones.indexOfFirst { it.first == s.tone }, { i -> upd { it.copy(tone = tones[i].first) } })
 
         SubTitle("Tło")
-        Pills(listOf("preset" to "Gotowe", "solid" to "Kolor", "mix" to "Mieszanka", "photo" to "Zdjęcie", "ai" to "AI"), tab, scroll = true) { tab = it }
+        val tabs = listOf("preset" to "Gotowe", "solid" to "Kolor", "mix" to "Mieszanka", "photo" to "Zdjęcie", "ai" to "AI")
+        LiquidSegmented(tabs.map { it.second }, tabs.indexOfFirst { it.first == tab }, { i -> tab = tabs[i].first }, fontSize = 12.sp)
 
         when (tab) {
             "preset" -> Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -169,10 +171,9 @@ fun GlassSettings() {
             Text("Przyciemnienie tła", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text, modifier = Modifier.weight(1f))
             Text("${(dim * 100).roundToInt()}%", fontSize = 14.sp, color = C.Muted)
         }
-        Slider(
+        LiquidSlider(
             value = dim, onValueChange = { dim = it }, valueRange = 0f..0.7f,
             onValueChangeFinished = { upd { it.copy(dim = dim) } },
-            colors = SliderDefaults.colors(thumbColor = C.Accent, activeTrackColor = C.Accent, inactiveTrackColor = C.Border),
         )
 
         SubTitle("Kolor akcentu")
@@ -292,7 +293,7 @@ private fun AiPromptDialog(initial: String, onDismiss: () -> Unit, onGenerate: (
     LaunchedEffect(Unit) { GlassTheme.aiError.value = null }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = C.Dialog,
+        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
         title = { Text("Tło z AI", color = C.Text) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

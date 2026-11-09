@@ -410,7 +410,7 @@ private fun FuelDialog(odo: Int?, onDismiss: () -> Unit) {
     val ok = l != null && l in 1.0..200.0 && c != null && c >= 0 && o != null && o > 0
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = C.Dialog,
+        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
         title = { Text("Nowe tankowanie", color = C.Text) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -562,7 +562,7 @@ private fun PlaceEditDialog(work: Boolean, current: CarData.Addr, onDismiss: () 
 
     AlertDialog(
         onDismissRequest = { if (busy == null) onDismiss() },
-        containerColor = C.Dialog,
+        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
         title = { Text(if (work) "Adres pracy" else "Adres domu", color = C.Text) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -684,7 +684,7 @@ fun PlaceSheet(place: CarData.Place?, resolving: Boolean, error: String?, onDism
     var sending by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = C.Dialog,
+        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
         title = { Text(if (place != null) place.name else "Wyślij do auta", color = C.Text, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -729,7 +729,7 @@ fun ShareDialog(share: Pair<String?, Uri?>, actions: Actions, onDismiss: () -> U
     if (Store.pairing.value == null) {
         AlertDialog(
             onDismissRequest = onDismiss,
-            containerColor = C.Dialog,
+            containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
             title = { Text("Połącz z CAR OS", color = C.Text) },
             text = { Text("Żeby wysyłać cele do auta, połącz telefon z radiem kodem QR (radio: Ustawienia → Połączenia → CAR OS Connect).", color = C.Muted) },
             confirmButton = { TextButton(onClick = { onDismiss(); actions.scanQr() }) { Text("Skanuj kod") } },
@@ -1075,7 +1075,7 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
 
     if (restoreAsk) AlertDialog(
         onDismissRequest = { restoreAsk = false },
-        containerColor = C.Dialog,
+        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
         title = { Text("Przywrócić ustawienia w aucie?", color = C.Text) },
         text = {
             Text(
@@ -1101,8 +1101,11 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
 
 @Composable
 private fun ToggleRow(title: String, sub: String, on: Boolean, onChange: (Boolean) -> Unit) {
+    val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Row(
-        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card).clickable { onChange(!on) }
+        Modifier.stagger().pressScale(src, 0.985f).fillMaxWidth().clip(RoundedCornerShape(if (C.isGlass) 22.dp else 16.dp))
+            .surface(RoundedCornerShape(if (C.isGlass) 22.dp else 16.dp), C.Card)
+            .clickable(interactionSource = src, indication = androidx.compose.foundation.LocalIndication.current) { onChange(!on) }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1111,7 +1114,8 @@ private fun ToggleRow(title: String, sub: String, on: Boolean, onChange: (Boolea
             Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
             Text(sub, fontSize = 13.sp, color = C.Muted)
         }
-        Switch(
+        if (C.isGlass) LiquidSwitch(on, onChange)
+        else Switch(
             checked = on, onCheckedChange = onChange,
             colors = SwitchDefaults.colors(checkedTrackColor = C.Accent, checkedThumbColor = C.Bg),
         )
@@ -1166,7 +1170,7 @@ private fun ServiceEditDialog(item: CarData.SvcItem, onDismiss: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = C.Dialog,
+        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
         title = { Text(item.name, color = C.Text) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1234,7 +1238,7 @@ private fun OdoDialog(current: Int?, onDismiss: () -> Unit) {
     var v by remember { mutableStateOf(current?.toString() ?: "") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = C.Dialog,
+        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
         title = { Text("Przebieg auta", color = C.Text) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
