@@ -65,6 +65,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -1013,6 +1014,8 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
     }
     SettingItem(Icons.Rounded.PlayCircle, "Autostart (Xiaomi)", "Włącz, żeby aplikacja budziła się po połączeniu z autem") { actions.openAutostart() }
 
+    CamSamSection()
+
     Label("Powiadomienia", Modifier.padding(top = 6.dp))
     ToggleRow("Przypomnienia serwisowe", "Olej, przegląd, ubezpieczenie – z danych CAR OS", nService) { CarData.setNotifService(it) }
     val nLive by CarData.notifLive.collectAsState()
@@ -1291,3 +1294,68 @@ private fun OdoDialog(current: Int?, onDismiss: () -> Unit) {
         dismissButton = { TextButton(onClick = onDismiss) { Text("Anuluj") } },
     )
 }
+
+// ======================= CamSam → CAR OS =======================
+
+private fun openListenerSettings(ctx: android.content.Context) {
+    val direct = if (android.os.Build.VERSION.SDK_INT >= 30) {
+        android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+            .putExtra(android.provider.Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, CamSamListener.component(ctx).flattenToString())
+    } else null
+    val list = android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+    for (i in listOfNotNull(direct, list)) {
+        try {
+            ctx.startActivity(i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            return
+        } catch (_: Exception) {
+        }
+    }
+    Toast.makeText(ctx, "Otwórz Ustawienia → Powiadomienia → Dostęp do powiadomień", Toast.LENGTH_LONG).show()
+}
+
+@Composable
+private fun CamSamSection() {
+    val ctx = LocalContext.current
+    val on by CamSamRelay.enabled.collectAsState()
+    val pairing by Store.pairing.collectAsState()
+    var access by remember { mutableStateOf(CamSamRelay.hasAccess(ctx)) }
+    // odświeżenie po powrocie z ustawień systemu
+    LaunchedEffect(Unit) {
+        while (true) {
+            access = CamSamRelay.hasAccess(ctx)
+            delay(1500)
+        }
+    }
+    val seen by CamSamRelay.lastSeen.collectAsState()
+    val sent by CamSamRelay.lastSent.collectAsState()
+    val err by CamSamRelay.lastError.collectAsState()
+    val app = remember { CamSamRelay.installed(ctx) }
+
+    Label("Ostrzeżenia drogowe", Modifier.padding(top = 6.dp))
+    ToggleRow(
+        "CamSam z telefonu w CAR OS",
+        "Fotoradary, kontrole i odcinki z CamSam / Yanosika na tym telefonie pokazują się na ekranie radia (w radiu potrzebny internet)",
+        on,
+    ) {
+        CamSamRelay.setEnabled(it)
+        if (it && !access) openListenerSettings(ctx)
+    }
+    if (!on) return
+    SettingItem(
+        Icons.Rounded.NotificationsActive, "Dostęp do powiadomień",
+        if (access) "Włączony – aplikacja widzi powiadomienia CamSam" else "Wyłączony – dotknij i włącz „CAR OS Connect”",
+        highlight = !access,
+    ) { openListenerSettings(ctx) }
+    val fmt = SimpleDateFormat("H:mm:ss", PL)
+    val lines = buildList {
+        add(app?.let { "Na telefonie: " + (CamSamRelay.appName(it) ?: it) } ?: "Nie znaleziono CamSam ani Yanosika na telefonie")
+        if (pairing == null) add("Najpierw połącz z CAR OS kodem QR z radia – bez tego nie ma jak wysłać ostrzeżeń")
+        seen?.let { add("Ostatnio z ${it.app} (${fmt.format(Date(it.time))}): " + listOf(it.title, it.text).filter { t -> t.isNotBlank() }.joinToString(" · ").take(90) + if (it.alert) " → ostrzeżenie" else " → pominięte (to nie ostrzeżenie)") }
+        if (sent > 0) add("Wysłano do auta: ${fmt.format(Date(sent))} · dziś ${CamSamRelay.sentToday()} wiad.")
+        err?.let { add("Błąd wysyłki: $it") }
+        add("Wysyłane tylko, gdy telefon jest połączony z radiem. W CamSam włącz powiadomienia z ostrzeżeniami.")
+    }
+    Text(lines.joinToString("\n"), fontSize = 13.sp, color = C.Muted, modifier = Modifier.padding(horizontal = 4.dp))
+    if (pairing != null) SecondaryButton("Wyślij próbne ostrzeżenie do auta", Icons.Rounded.NotificationsActive) { CamSamRelay.test() }
+}
+

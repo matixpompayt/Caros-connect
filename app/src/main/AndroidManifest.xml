@@ -19,6 +19,13 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
+    <!-- sprawdzenie, czy CamSam / Yanosik jest zainstalowany (Android 11+) -->
+    <queries>
+        <package android:name="com.camsam.plus" />
+        <package android:name="com.camsam" />
+        <package android:name="pl.neptis.yanosik.mobi.android" />
+    </queries>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -103,6 +110,17 @@
                 <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
             </intent-filter>
         </receiver>
+
+        <!-- Ostrzeżenia CamSam / Yanosik z powiadomień telefonu → baner w CAR OS -->
+        <service
+            android:name=".CamSamListener"
+            android:exported="true"
+            android:label="CAR OS Connect – ostrzeżenia CamSam do auta"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
         <service
             android:name=".DriveService"

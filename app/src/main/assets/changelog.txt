@@ -2,6 +2,13 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Ostrzeżenia CamSam z telefonu w aucie
+- Nowe: Ustawienia → Ostrzeżenia drogowe → „CamSam z telefonu w CAR OS”. Fotoradary, kontrole i odcinkowe pomiary z CamSam / CamSam PLUS albo Yanosika na tym telefonie pokazują się na ekranie radia
+- Aplikacja czyta powiadomienia CamSam (trzeba raz dać „Dostęp do powiadomień” – przycisk prowadzi prosto do ustawienia) i przepuszcza tylko prawdziwe ostrzeżenia
+- Wysyła tylko, gdy telefon jest połączony z radiem; oszczędnie (nowe ostrzeżenie od razu, zmiany co kilka sekund), a radio samo odlicza metry z prędkości auta
+- Podgląd: co ostatnio przyszło z CamSam, czy poszło do auta, i przycisk „Wyślij próbne ostrzeżenie do auta”
+
 ## 1.30 · 2026-11-10
 Animację kropli można wyłączyć
 - Ustawienia → Wygląd → Glass → „Animacja kropli w pasku”: wyłączona – kropla w dolnym pasku i przełącznikach segmentowych od razu przeskakuje, bez przelewania, podnoszenia i powiększania; wygląd Glass zostaje

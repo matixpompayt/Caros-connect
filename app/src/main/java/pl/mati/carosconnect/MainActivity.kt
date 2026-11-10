@@ -67,6 +67,7 @@ class MainActivity : ComponentActivity(), Actions {
         Notifs.channels(this)
         org.maplibre.android.MapLibre.getInstance(this)
         CarData.init(this)
+        CamSamRelay.init(this)
         FuelPrices.init(this)
         GlassTheme.init(this)
         SyncWorker.schedule(this)
