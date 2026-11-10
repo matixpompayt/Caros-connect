@@ -40,6 +40,33 @@ object Store {
     val carName = MutableStateFlow<String?>(null)
     /** true = telefon jest połączony z autem i śledzi pozycję (usługa działa). */
     val driving = MutableStateFlow(false)
+    /**
+     * Telefon jest teraz połączony z radiem (Bluetooth). Dopóki tak jest, auto jest „w trasie” –
+     * „zaparkowane” dopiero po rozłączeniu (wtedy DriveService zapisuje miejsce).
+     */
+    val linked = MutableStateFlow(false)
+
+    /** Czy radio jest połączone z telefonem (null – nie wiadomo: brak uprawnień albo nie wybrano auta). */
+    @android.annotation.SuppressLint("MissingPermission")
+    fun btLinked(ctx: Context): Boolean? {
+        val mac = carMac.value ?: return null
+        return try {
+            val d = ctx.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter?.bondedDevices
+                ?.firstOrNull { it.address.equals(mac, true) } ?: return false
+            android.bluetooth.BluetoothDevice::class.java.getMethod("isConnected").invoke(d) as? Boolean
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Odśwież stan połączenia z autem; gdy połączone, a usługa jazdy nie działa – uruchom ją. */
+    fun refreshLink(ctx: Context, startService: Boolean = false): Boolean {
+        val bt = btLinked(ctx)
+        val on = driving.value || bt == true
+        linked.value = on
+        if (startService && bt == true && !DriveService.running) DriveService.start(ctx)
+        return on
+    }
     /** Wygląd: "auto" (jak telefon), "light", "dark". */
     val theme = MutableStateFlow("auto")
     /** Notatka i zdjęcie do bieżącego miejsca parkowania. */
@@ -153,6 +180,8 @@ object Store {
 
     /** Pozycja wysłana przez radio – przyjmij, jeśli nowsza niż zapisana. */
     fun offerCarSpot(ctx: Context, s: Spot) {
+        // telefon w aucie – parkowanie zapisze się samo po rozłączeniu z radiem
+        if (driving.value || btLinked(ctx) == true) return
         val cur = spot.value
         if (cur != null && cur.time >= s.time) return
         if (cur != null && cur.src == SRC_CAR && cur.lat == s.lat && cur.lon == s.lon) return

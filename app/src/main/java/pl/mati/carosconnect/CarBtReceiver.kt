@@ -17,8 +17,12 @@ class CarBtReceiver : BroadcastReceiver() {
         val d: BluetoothDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE) ?: return
         if (!Store.isCar(d.address)) return
         when (intent.action) {
-            BluetoothDevice.ACTION_ACL_CONNECTED -> if (!DriveService.running) DriveService.start(ctx)
+            BluetoothDevice.ACTION_ACL_CONNECTED -> {
+                Store.linked.value = true
+                if (!DriveService.running) DriveService.start(ctx)
+            }
             BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                Store.linked.value = false
                 if (DriveService.running) return // usługa sama zapisze miejsce
                 val pending = goAsync()
                 val app = ctx.applicationContext

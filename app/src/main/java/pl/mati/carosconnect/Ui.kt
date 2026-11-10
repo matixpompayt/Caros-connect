@@ -268,7 +268,16 @@ fun ParkApp(perms: Perms, actions: Actions) {
     MaterialTheme(colorScheme = scheme) {
       androidx.compose.runtime.CompositionLocalProvider(LocalIndication provides (if (glass) GlassIndication else LocalIndication.current)) {
         val ctx = LocalContext.current
-        val driving by Store.driving.collectAsState()
+        val inService by Store.driving.collectAsState()
+        val linked by Store.linked.collectAsState()
+        val driving = inService || linked
+        // stan połączenia z radiem: „zaparkowane” tylko po rozłączeniu Bluetooth
+        LaunchedEffect(Unit) {
+            while (true) {
+                Store.refreshLink(ctx, startService = true)
+                delay(5000)
+            }
+        }
         val car by Store.carName.collectAsState()
         val pairing by Store.pairing.collectAsState()
         val skipped by Store.skippedPairing.collectAsState()
@@ -422,7 +431,9 @@ private fun BottomBar(tab: Int, onTab: (Int) -> Unit) {
 private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
     val ctx = LocalContext.current
     val spot by Store.spot.collectAsState()
-    val driving by Store.driving.collectAsState()
+    val inService by Store.driving.collectAsState()
+    val linked by Store.linked.collectAsState()
+    val driving = inService || linked
     val car by Store.carName.collectAsState()
     val history by Store.history.collectAsState()
     val scope = rememberCoroutineScope()

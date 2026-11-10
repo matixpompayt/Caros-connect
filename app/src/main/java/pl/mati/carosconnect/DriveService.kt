@@ -84,6 +84,7 @@ class DriveService : Service(), LocationListener {
         }
         running = true
         Store.driving.value = true
+        Store.linked.value = true
         ContextCompat.registerReceiver(
             this, btReceiver,
             IntentFilter().apply {
@@ -158,6 +159,7 @@ class DriveService : Service(), LocationListener {
     private fun carGone() {
         if (parking) return
         parking = true
+        Store.linked.value = false
         val l = last
         val fresh = l != null && System.currentTimeMillis() - l.time < 30_000 && l.accuracy <= 35f
         if (fresh) {

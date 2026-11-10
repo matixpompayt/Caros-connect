@@ -159,6 +159,8 @@ object Link {
                     try {
                         when (m.optString("type")) {
                             "park" -> {
+                                // postój w trakcie jazdy (światła, korek) – nie parkowanie
+                                if (m.has("fin") && !m.optBoolean("fin")) continue
                                 val s = Store.Spot(
                                     m.getDouble("lat"), m.getDouble("lon"), m.getLong("t"), m.optDouble("acc", 0.0).toFloat(),
                                     m.optString("a").ifBlank { null }, src = Store.SRC_CAR,

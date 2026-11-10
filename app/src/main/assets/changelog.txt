@@ -2,6 +2,13 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+„Zaparkowane” dopiero po rozłączeniu z radiem
+- Auto jest „zaparkowane” tylko wtedy, gdy telefon rozłączy się z radiem (zgaszenie auta) – wtedy zapisuje się miejsce i przychodzi powiadomienie
+- Dopóki telefon jest połączony z radiem, status to „W trasie” – nawet gdy system uśpił usługę jazdy (aplikacja sama ją wtedy wznawia)
+- Postoje w trakcie jazdy (światła, korek, stacja) nie zmieniają już miejsca parkowania
+- Pozycja z radia jest brana tylko, gdy telefonu nie było w aucie (np. jechał ktoś inny)
+
 ## 1.31 · 2026-11-10
 Ostrzeżenia CamSam z telefonu w aucie
 - Nowe: Ustawienia → Ostrzeżenia drogowe → „CamSam z telefonu w CAR OS”. Fotoradary, kontrole i odcinkowe pomiary z CamSam / CamSam PLUS albo Yanosika na tym telefonie pokazują się na ekranie radia
