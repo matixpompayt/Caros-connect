@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.32 · 2026-11-10
 „Zaparkowane” dopiero po rozłączeniu z radiem
 - Auto jest „zaparkowane” tylko wtedy, gdy telefon rozłączy się z radiem (zgaszenie auta) – wtedy zapisuje się miejsce i przychodzi powiadomienie
 - Dopóki telefon jest połączony z radiem, status to „W trasie” – nawet gdy system uśpił usługę jazdy (aplikacja sama ją wtedy wznawia)
