@@ -176,6 +176,19 @@ fun GlassSettings() {
             onValueChangeFinished = { upd { it.copy(dim = dim) } },
         )
 
+        // animacja kropli – można wyłączyć, wygląd Glass zostaje
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("Animacja kropli w pasku", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+                Text(
+                    if (s.anim) "Kropla przelewa się między zakładkami i powiększa ikony"
+                    else "Wyłączona – kropla od razu przeskakuje, wygląd Glass zostaje",
+                    fontSize = 12.sp, color = C.Muted,
+                )
+            }
+            LiquidSwitch(s.anim, { v -> upd { it.copy(anim = v) } })
+        }
+
         SubTitle("Kolor akcentu")
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             val auto = s.accent == null

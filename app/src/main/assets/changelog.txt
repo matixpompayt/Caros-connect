@@ -2,6 +2,10 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Animację kropli można wyłączyć
+- Ustawienia → Wygląd → Glass → „Animacja kropli w pasku”: wyłączona – kropla w dolnym pasku i przełącznikach segmentowych od razu przeskakuje, bez przelewania, podnoszenia i powiększania; wygląd Glass zostaje
+
 ## 1.29 · 2026-11-09
 Cele z Map Google i ciemne kolory w Glass
 - Udostępnianie konkretnego miejsca z Map Google (sklep, firma, adres) do auta: aplikacja omija stronę zgody Google, czyta pinezkę ze strony miejsca, a gdy jej nie ma – szuka po nazwie i adresie w bazie Google telefonu, potem w OpenStreetMap

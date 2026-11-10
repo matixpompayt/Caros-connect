@@ -106,6 +106,8 @@ object GlassTheme {
         val aiPrompt: String = "",
         /** zmienia się po zapisaniu nowego obrazu → przerysuj */
         val rev: Int = 0,
+        /** Animacja kropli w pasku zakładek i przełącznikach segmentowych (wył. = kropla od razu przeskakuje). */
+        val anim: Boolean = true,
     )
 
     val spec = MutableStateFlow(Spec())
@@ -133,6 +135,7 @@ object GlassTheme {
             imageSrc = p.getString("imageSrc", "") ?: "",
             aiPrompt = p.getString("aiPrompt", "") ?: "",
             rev = p.getInt("rev", 0),
+            anim = p.getBoolean("anim", true),
         ).let { if (it.kind == "image" && !imageFile(ctx).exists()) it.copy(kind = "preset") else it }
     }
 
@@ -143,7 +146,7 @@ object GlassTheme {
             .putString("tone", s.tone).putString("kind", s.kind).putString("preset", s.preset)
             .putLong("solid", s.solid).putString("mix", s.mix.joinToString(",") { it.toString(16) })
             .putInt("seed", s.seed).putFloat("dim", s.dim).putLong("accent", s.accent ?: 0L)
-            .putString("imageSrc", s.imageSrc).putString("aiPrompt", s.aiPrompt).putInt("rev", s.rev)
+            .putString("imageSrc", s.imageSrc).putString("aiPrompt", s.aiPrompt).putInt("rev", s.rev).putBoolean("anim", s.anim)
             .apply()
     }
 

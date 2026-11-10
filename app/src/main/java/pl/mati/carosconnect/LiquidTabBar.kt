@@ -22,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -109,6 +110,10 @@ fun LiquidSelector(
     val haptic = LocalHapticFeedback.current
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
+    val gSpec by GlassTheme.spec.collectAsState()
+    // animacje wyłączone: kropla przeskakuje od razu, bez przelewania, podnoszenia i powiększania
+    val anim = gSpec.anim
+    val curAnim by rememberUpdatedState(anim)
     val curSel by rememberUpdatedState(selected)
     val curOnSelect by rememberUpdatedState(onSelect)
     val has = selected in 0 until n
@@ -127,6 +132,7 @@ fun LiquidSelector(
         if (wasHidden) { wasHidden = false; front.snapTo(target); rear.snapTo(target); return@LaunchedEffect }
         if (abs(front.value - target) < 0.001f && abs(rear.value - target) < 0.001f) return@LaunchedEffect
         dir = if (target > front.value) 1 else -1
+        if (!anim) { front.snapTo(target); rear.snapTo(target); lift.snapTo(0f); return@LaunchedEffect }
         launch { front.animateTo(target, spring(dampingRatio = 0.78f, stiffness = 520f)) }
         launch { delay(40); rear.animateTo(target, spring(dampingRatio = 0.55f, stiffness = 230f)) }
     }
@@ -170,8 +176,9 @@ fun LiquidSelector(
                     val itemW = (size.width - 2 * p) / n
                     fun idx(x: Float) = ((x - p) / itemW - 0.5f).coerceIn(0f, (n - 1).toFloat())
                     val startSel = curSel
+                    val animOn = curAnim
                     val canDrag = startSel in 0 until n
-                    scope.launch { lift.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 600f)) }
+                    if (animOn) scope.launch { lift.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 600f)) }
                     var dragging = false
                     var x = down.position.x
                     var lastSnap = startSel
@@ -185,8 +192,14 @@ fun LiquidSelector(
                             ch.consume()
                             val t = idx(x)
                             if (abs(t - front.value) > 0.001f) dir = if (t > front.value) 1 else -1
-                            scope.launch { front.animateTo(t, spring(dampingRatio = 0.85f, stiffness = 1500f)) }
-                            scope.launch { rear.animateTo(t, spring(dampingRatio = 0.6f, stiffness = 320f)) }
+                            if (animOn) {
+                                scope.launch { front.animateTo(t, spring(dampingRatio = 0.85f, stiffness = 1500f)) }
+                                scope.launch { rear.animateTo(t, spring(dampingRatio = 0.6f, stiffness = 320f)) }
+                            } else {
+                                // bez animacji kropla przeskakuje na zakładkę pod palcem
+                                val snapTo = t.roundToInt().toFloat()
+                                scope.launch { front.snapTo(snapTo); rear.snapTo(snapTo) }
+                            }
                             val snap = t.roundToInt()
                             if (snap != lastSnap) { lastSnap = snap; haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
                         }
@@ -196,11 +209,13 @@ fun LiquidSelector(
                     if (changed) {
                         if (!dragging) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         curOnSelect(target)
-                    } else {
+                    } else if (animOn) {
                         scope.launch { front.animateTo(target.toFloat(), spring(dampingRatio = 0.75f, stiffness = 500f)) }
                         scope.launch { rear.animateTo(target.toFloat(), spring(dampingRatio = 0.55f, stiffness = 230f)) }
+                    } else {
+                        scope.launch { front.snapTo(target.toFloat()); rear.snapTo(target.toFloat()) }
                     }
-                    scope.launch {
+                    if (animOn) scope.launch {
                         delay(if (changed && !dragging) 200 else 60)
                         lift.animateTo(0f, spring(dampingRatio = 0.5f, stiffness = 260f))
                     }
