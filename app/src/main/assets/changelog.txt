@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.31 · 2026-11-10
 Ostrzeżenia CamSam z telefonu w aucie
 - Nowe: Ustawienia → Ostrzeżenia drogowe → „CamSam z telefonu w CAR OS”. Fotoradary, kontrole i odcinkowe pomiary z CamSam / CamSam PLUS albo Yanosika na tym telefonie pokazują się na ekranie radia
 - Aplikacja czyta powiadomienia CamSam (trzeba raz dać „Dostęp do powiadomień” – przycisk prowadzi prosto do ustawienia) i przepuszcza tylko prawdziwe ostrzeżenia
