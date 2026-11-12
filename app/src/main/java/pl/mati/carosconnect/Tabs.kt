@@ -66,6 +66,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Send
 import androidx.compose.runtime.collectAsState
@@ -1016,6 +1018,7 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
     }
     SettingItem(Icons.Rounded.PlayCircle, "Autostart (Xiaomi)", "Włącz, żeby aplikacja budziła się po połączeniu z autem") { actions.openAutostart() }
 
+    LiveSection()
     CamSamSection()
     TrafficKeySection()
 
@@ -1412,5 +1415,114 @@ private fun TrafficKeySection() {
         }
     }
     status?.let { Text(it, fontSize = 13.sp, color = C.Text2, modifier = Modifier.padding(horizontal = 4.dp)) }
+}
+
+// ======================= Pozycja auta na żywo (+ Firebase) =======================
+
+@Composable
+private fun LiveSection() {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val iv by LiveFeed.interval.collectAsState()
+    val fb by LiveFeed.fbUrl.collectAsState()
+    val fbState by LiveFeed.fbState.collectAsState()
+    val pairing by Store.pairing.collectAsState()
+    var url by remember { mutableStateOf(fb) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var help by remember { mutableStateOf(fb.isBlank()) }
+
+    Label("Pozycja auta na żywo", Modifier.padding(top = 6.dp))
+    Text(
+        "Gdy jesteś w aucie, pozycja auta to GPS telefonu. Gdy autem jedzie ktoś inny – pozycja z radia. Po rozłączeniu z radiem widać miejsce parkowania.",
+        fontSize = 13.sp, color = C.Muted, modifier = Modifier.padding(horizontal = 4.dp),
+    )
+    // wybór odświeżania
+    if (C.isGlass) {
+        LiquidSegmented(LiveFeed.OPTIONS.map { it.second }, LiveFeed.OPTIONS.indexOfFirst { it.first == iv }.coerceAtLeast(0), { i ->
+            LiveFeed.setInterval(LiveFeed.OPTIONS[i].first)
+            scope.launch { LiveFeed.sendCfg() }
+        }, Modifier.fillMaxWidth(), fontSize = 13.sp)
+    } else {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for ((v, l) in LiveFeed.OPTIONS) {
+                val sel = v == iv
+                Box(
+                    Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(14.dp))
+                        .background(if (sel) C.Accent else C.Raised)
+                        .clickable { LiveFeed.setInterval(v); scope.launch { LiveFeed.sendCfg() } },
+                    contentAlignment = Alignment.Center,
+                ) { Text(l, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (sel) C.Bg else C.Text, maxLines = 1) }
+            }
+        }
+    }
+
+    Card {
+        Text("Firebase – szybka pozycja, gdy telefonu nie ma w aucie", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+        Text(
+            if (fb.isBlank()) "Bez Firebase radio wysyła pozycję co ok. minutę (limit darmowego przekaźnika). Z własną, darmową bazą Firebase – co wybrany czas."
+            else "Baza: ${fb.removePrefix("https://")}" + (fbState?.let { "\n$it" } ?: ""),
+            fontSize = 13.sp, color = C.Muted,
+        )
+        if (help) {
+            Text(
+                "1. console.firebase.google.com → „Utwórz projekt” (bez Analytics)\n" +
+                    "2. Kompilacja → Realtime Database → „Utwórz bazę danych” → lokalizacja Europa (Belgia) → tryb zablokowany\n" +
+                    "3. Zakładka „Reguły” → wklej reguły (przycisk niżej) → „Opublikuj”\n" +
+                    "4. Zakładka „Dane” → skopiuj adres bazy (https://…firebasedatabase.app) i wklej tutaj\n" +
+                    "5. „Sprawdź”, potem „Wyślij do auta”\n" +
+                    "Pozycja jest szyfrowana kluczem z parowania – nikt poza Twoim telefonem jej nie odczyta. Firebase może ostrzegać o „publicznych regułach” – to dotyczy tylko zaszyfrowanych danych.",
+                fontSize = 13.sp, color = C.Text2,
+            )
+        }
+        OutlinedTextField(
+            value = url, onValueChange = { url = it.trim() },
+            placeholder = { Text("https://…-default-rtdb.europe-west1.firebasedatabase.app") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = C.Accent, unfocusedBorderColor = C.Border,
+                focusedTextColor = C.Text, unfocusedTextColor = C.Text, cursorColor = C.Accent,
+            ),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecondaryButton("Kopiuj reguły", Icons.Rounded.ContentCopy, Modifier.weight(1f)) {
+                val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
+                cm?.setPrimaryClip(android.content.ClipData.newPlainText("Reguły Firebase", LiveFeed.RULES))
+                Toast.makeText(ctx, "Skopiowano reguły – wklej je w Firebase → Reguły", Toast.LENGTH_SHORT).show()
+            }
+            SecondaryButton("Otwórz Firebase", Icons.Rounded.OpenInNew, Modifier.weight(1f)) {
+                try {
+                    ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://console.firebase.google.com/")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (_: Exception) {
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecondaryButton("Sprawdź", Icons.Rounded.CheckCircle, Modifier.weight(1f)) {
+                val n = LiveFeed.normalize(url)
+                if (n == null) { status = "To nie wygląda na adres bazy Firebase (…firebaseio.com albo …firebasedatabase.app)"; return@SecondaryButton }
+                url = n
+                LiveFeed.setFbUrl(n)
+                status = "Sprawdzam…"
+                scope.launch { status = LiveFeed.test() }
+            }
+            SecondaryButton("Wyślij do auta", Icons.Rounded.Send, Modifier.weight(1f)) {
+                val n = LiveFeed.normalize(url)
+                if (n == null) { status = "To nie wygląda na adres bazy Firebase"; return@SecondaryButton }
+                url = n
+                LiveFeed.setFbUrl(n)
+                if (pairing == null) { status = "Najpierw połącz z CAR OS kodem QR z radia"; return@SecondaryButton }
+                status = "Wysyłam…"
+                scope.launch { status = LiveFeed.sendCfg() + if (n.isBlank()) " – Firebase wyłączony" else " – radio zacznie wpisywać pozycję w czasie jazdy" }
+            }
+        }
+        Text(
+            if (help) "Ukryj instrukcję" else "Jak założyć bazę (5 min, za darmo)",
+            fontSize = 13.sp, color = C.Accent, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { help = !help }.padding(vertical = 6.dp),
+        )
+        status?.let { Text(it, fontSize = 13.sp, color = C.Text2) }
+    }
 }
 

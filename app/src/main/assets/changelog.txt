@@ -2,6 +2,14 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Auto na żywo – wybierz odświeżanie
+- Ustawienia → „Pozycja auta na żywo”: 30 s, 10 s, 5 s albo na bieżąco
+- Gdy jesteś w aucie (telefon połączony z radiem), na ekranie Parkowanie mapa na żywo z pozycją auta – z GPS telefonu, bez internetu i limitów; mapa płynnie jedzie za autem
+- Gdy autem jedzie ktoś inny: z własną darmową bazą Firebase pozycja przychodzi od razu, co wybrany czas (bez niej – co ok. minutę jak dawniej)
+- Po rozłączeniu telefonu z radiem widać miejsce zaparkowanego auta
+- Konfiguracja Firebase krok po kroku w aplikacji: „Kopiuj reguły”, „Sprawdź”, „Wyślij do auta”; pozycja szyfrowana kluczem z parowania
+
 ## 1.33 · 2026-11-12
 Klucz do korków w CAR OS
 - Ustawienia → „Korki w CAR OS”: wklej darmowy klucz TomTom i „Wyślij do auta” – radio pokaże korki na mapie i czas przyjazdu z korkami

@@ -68,6 +68,7 @@ class MainActivity : ComponentActivity(), Actions {
         org.maplibre.android.MapLibre.getInstance(this)
         CarData.init(this)
         CamSamRelay.init(this)
+        LiveFeed.init(this)
         FuelPrices.init(this)
         GlassTheme.init(this)
         SyncWorker.schedule(this)

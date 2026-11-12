@@ -447,18 +447,39 @@ private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
 
         if (!perms.allOk || car == null) SetupCard(perms, actions, car) { onPickCar() }
 
-        // auto w drodze (ktoś jedzie autem) – pozycja co minutę z CAR OS
+        val iv by LiveFeed.interval.collectAsState()
+        val fb by LiveFeed.fbUrl.collectAsState()
+        // 1) telefon w aucie (połączony z radiem) → pozycja auta = GPS telefonu, co wybrany czas
+        var inCarPos by remember { mutableStateOf<Location?>(null) }
+        LaunchedEffect(me, iv, driving) {
+            val m = me ?: return@LaunchedEffect
+            if (!driving) { inCarPos = null; return@LaunchedEffect }
+            val cur = inCarPos
+            if (cur == null || iv <= 0 || m.time - cur.time >= iv * 1000L - 300) inCarPos = m
+        }
+        // 2) telefonu nie ma w aucie, a auto jedzie → z Firebase na żywo, bez niego z przekaźnika co ok. minutę
         val live by CarData.live.collectAsState()
         val lv = live
-        val liveActive = lv != null && lv.moving && System.currentTimeMillis() + 0 * tick - lv.time < 10 * 60_000L &&
+        val liveActive = !driving && lv != null && lv.moving && System.currentTimeMillis() + 0 * tick - lv.time < 10 * 60_000L &&
             (spot == null || lv.time > (spot?.time ?: 0L))
-        LaunchedEffect(liveActive, visible) {
-            while (liveActive && visible) {
+        LaunchedEffect(visible, fb, driving) {
+            if (visible && fb.isNotBlank() && !driving) LiveFeed.stream { CarData.setLive(it) }
+        }
+        LaunchedEffect(liveActive, visible, fb) {
+            while (liveActive && visible && fb.isBlank()) {
                 delay(30_000)
                 actions.refreshFromCar()
             }
         }
-        if (liveActive && lv != null) LiveCard(lv, me)
+        val icp = inCarPos
+        if (driving && icp != null) {
+            LiveCard(
+                CarData.Live(icp.latitude, icp.longitude, if (icp.hasSpeed()) (icp.speed * 3.6f).roundToInt() else 0, icp.bearing.toInt(), icp.time, true),
+                null, "jesteś w aucie · ${LiveFeed.label(iv)}",
+            )
+        } else if (liveActive && lv != null) {
+            LiveCard(lv, me, if (fb.isNotBlank()) "na żywo · ${LiveFeed.label(iv)}" else "co ok. minutę (szybciej z Firebase – Ustawienia)")
+        }
 
         val s = spot
         if (s == null) {
@@ -560,10 +581,10 @@ fun shareSpot(ctx: android.content.Context, s: Store.Spot) {
 
 /** Auto w drodze: mapa z autem i prędkość. */
 @Composable
-private fun LiveCard(l: CarData.Live, me: android.location.Location?) {
+private fun LiveCard(l: CarData.Live, me: android.location.Location?, sub: String) {
     val ctx = LocalContext.current
-    val spot = remember(l.time) { Store.Spot(l.lat, l.lon, l.time, 0f, src = Store.SRC_CAR) }
-    ParkMap(spot, me, Modifier.stagger().fillMaxWidth().height(260.dp).clip(RoundedCornerShape(24.dp)).border(1.dp, C.Border, RoundedCornerShape(24.dp)))
+    val spot = remember(l.time, l.lat, l.lon) { Store.Spot(l.lat, l.lon, l.time, 0f, src = Store.SRC_CAR) }
+    ParkMap(spot, me, Modifier.stagger().fillMaxWidth().height(260.dp).clip(RoundedCornerShape(24.dp)).border(1.dp, C.Border, RoundedCornerShape(24.dp)), live = true)
     Card {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.size(44.dp).clip(CircleShape).background(C.Green), contentAlignment = Alignment.Center) {
@@ -571,7 +592,7 @@ private fun LiveCard(l: CarData.Live, me: android.location.Location?) {
             }
             Column(Modifier.weight(1f)) {
                 Text("Auto w drodze · ${l.speed} km/h", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
-                Text("Pozycja ${agoText(l.time)} · odświeża się co pół minuty", fontSize = 14.sp, color = C.Muted)
+                Text("Pozycja ${agoText(l.time)} · $sub", fontSize = 14.sp, color = C.Muted)
             }
         }
         SecondaryButton("Pokaż w Mapach", Icons.Rounded.Map, Modifier.fillMaxWidth()) {

@@ -141,7 +141,7 @@ private fun personBitmap(ctx: Context) = Model3D.personIcon(0xFF2FD3F0.toInt(), 
 /** Mapa parkingu: ciemna, 3D, pinezka auta i Twoja pozycja. */
 @SuppressLint("MissingPermission")
 @Composable
-fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier) {
+fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier, live: Boolean = false) {
     val ctx = LocalContext.current
     var is3d by remember { mutableStateOf(true) }
     val h = remember {
@@ -213,10 +213,16 @@ fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier) {
         else src.setGeoJson(Feature.fromGeometry(point(me.latitude, me.longitude)))
     }
 
+    // na żywo: mapa płynnie jedzie za autem (bez skakania kamery przy każdej pozycji)
+    var placed by remember { mutableStateOf(false) }
     LaunchedEffect(s.lat, s.lon, h.ready) {
         if (!h.ready) return@LaunchedEffect
         h.style?.getSourceAs<GeoJsonSource>("caros-car")?.setGeoJson(Feature.fromGeometry(point(s.lat, s.lon)))
-        h.map?.cameraPosition = CameraPosition.Builder().target(LatLng(s.lat, s.lon)).zoom(17.0).tilt(if (is3d) 50.0 else 0.0).build()
+        if (live && placed) h.map?.easeCamera(CameraUpdateFactory.newLatLng(LatLng(s.lat, s.lon)), 900)
+        else {
+            h.map?.cameraPosition = CameraPosition.Builder().target(LatLng(s.lat, s.lon)).zoom(17.0).tilt(if (is3d) 50.0 else 0.0).build()
+            placed = true
+        }
     }
     LaunchedEffect(is3d, h.ready) {
         if (!h.ready) return@LaunchedEffect
