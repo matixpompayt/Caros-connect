@@ -2,6 +2,11 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Klucz do korków w CAR OS
+- Ustawienia → „Korki w CAR OS”: wklej darmowy klucz TomTom i „Wyślij do auta” – radio pokaże korki na mapie i czas przyjazdu z korkami
+- Przycisk „Otwórz TomTom” prowadzi do założenia konta (bez karty)
+
 ## 1.32 · 2026-11-10
 „Zaparkowane” dopiero po rozłączeniu z radiem
 - Auto jest „zaparkowane” tylko wtedy, gdy telefon rozłączy się z radiem (zgaszenie auta) – wtedy zapisuje się miejsce i przychodzi powiadomienie

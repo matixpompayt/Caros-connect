@@ -66,6 +66,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Send
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -1015,6 +1017,7 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
     SettingItem(Icons.Rounded.PlayCircle, "Autostart (Xiaomi)", "Włącz, żeby aplikacja budziła się po połączeniu z autem") { actions.openAutostart() }
 
     CamSamSection()
+    TrafficKeySection()
 
     Label("Powiadomienia", Modifier.padding(top = 6.dp))
     ToggleRow("Przypomnienia serwisowe", "Olej, przegląd, ubezpieczenie – z danych CAR OS", nService) { CarData.setNotifService(it) }
@@ -1357,5 +1360,57 @@ private fun CamSamSection() {
     }
     Text(lines.joinToString("\n"), fontSize = 13.sp, color = C.Muted, modifier = Modifier.padding(horizontal = 4.dp))
     if (pairing != null) SecondaryButton("Wyślij próbne ostrzeżenie do auta", Icons.Rounded.NotificationsActive) { CamSamRelay.test() }
+}
+
+// ======================= Korki (TomTom) → CAR OS =======================
+
+@Composable
+private fun TrafficKeySection() {
+    val ctx = LocalContext.current
+    val pairing by Store.pairing.collectAsState()
+    val sp = remember { ctx.getSharedPreferences("traffic", android.content.Context.MODE_PRIVATE) }
+    var key by remember { mutableStateOf(sp.getString("tomtom", "") ?: "") }
+    var status by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    Label("Korki w CAR OS", Modifier.padding(top = 6.dp))
+    Text(
+        "Korki na mapie radia i czas przyjazdu z korkami korzystają z TomTom. Darmowy klucz: developer.tomtom.com → załóż konto (bez karty) → " +
+            "API Keys → skopiuj i wklej tutaj, potem „Wyślij do auta”. Darmowo 2 500 zapytań i 50 000 kafelków mapy dziennie.",
+        fontSize = 13.sp, color = C.Muted, modifier = Modifier.padding(horizontal = 4.dp),
+    )
+    OutlinedTextField(
+        value = key, onValueChange = { key = it.filter { c -> c.isLetterOrDigit() }.take(64) },
+        placeholder = { Text("Klucz TomTom") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = C.Accent, unfocusedBorderColor = C.Border,
+            focusedTextColor = C.Text, unfocusedTextColor = C.Text, cursorColor = C.Accent,
+        ),
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        SecondaryButton("Otwórz TomTom", Icons.Rounded.OpenInNew, Modifier.weight(1f)) {
+            try {
+                ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://developer.tomtom.com/user/register")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (_: Exception) {
+            }
+        }
+        SecondaryButton("Wyślij do auta", Icons.Rounded.Send, Modifier.weight(1f)) {
+            val p = pairing
+            if (p == null) { status = "Najpierw połącz z CAR OS kodem QR z radia"; return@SecondaryButton }
+            sp.edit().putString("tomtom", key.trim()).apply()
+            status = "Wysyłam…"
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                status = try {
+                    Link.send(p, org.json.JSONObject().put("type", "cfg").put("tomtom", key.trim()))
+                    if (key.isBlank()) "Wysłano – korki w radiu wyłączone" else "Wysłano – radio sprawdzi klucz i pokaże wynik na ekranie"
+                } catch (e: Exception) {
+                    "Nie udało się wysłać: " + (e.message ?: "brak internetu")
+                }
+            }
+        }
+    }
+    status?.let { Text(it, fontSize = 13.sp, color = C.Text2, modifier = Modifier.padding(horizontal = 4.dp)) }
 }
 
