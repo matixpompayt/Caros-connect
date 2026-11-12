@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.33 · 2026-11-12
 Klucz do korków w CAR OS
 - Ustawienia → „Korki w CAR OS”: wklej darmowy klucz TomTom i „Wyślij do auta” – radio pokaże korki na mapie i czas przyjazdu z korkami
 - Przycisk „Otwórz TomTom” prowadzi do założenia konta (bez karty)
