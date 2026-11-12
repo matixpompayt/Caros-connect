@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.34 · 2026-11-12
 Auto na żywo – wybierz odświeżanie
 - Ustawienia → „Pozycja auta na żywo”: 30 s, 10 s, 5 s albo na bieżąco
 - Gdy jesteś w aucie (telefon połączony z radiem), na ekranie Parkowanie mapa na żywo z pozycją auta – z GPS telefonu, bez internetu i limitów; mapa płynnie jedzie za autem
