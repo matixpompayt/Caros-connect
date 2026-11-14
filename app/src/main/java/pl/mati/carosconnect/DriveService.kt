@@ -41,6 +41,7 @@ class DriveService : Service(), LocationListener {
             true
         } catch (e: Exception) {
             Log.w(TAG, "Nie mogę uruchomić usługi: $e")
+            Store.log(ctx, "System nie pozwolił uruchomić usługi jazdy (${e.javaClass.simpleName}) – miejsce zapisze się awaryjnie")
             false
         }
     }
@@ -56,11 +57,11 @@ class DriveService : Service(), LocationListener {
                 BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
                     @Suppress("DEPRECATION")
                     val d: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                    if (Store.isCar(d?.address)) carGone()
+                    if (Store.isCar(d?.address)) carGone("rozłączono z radiem")
                 }
                 BluetoothAdapter.ACTION_STATE_CHANGED -> {
                     val st = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1)
-                    if (st == BluetoothAdapter.STATE_TURNING_OFF || st == BluetoothAdapter.STATE_OFF) carGone()
+                    if (st == BluetoothAdapter.STATE_TURNING_OFF || st == BluetoothAdapter.STATE_OFF) carGone("wyłączony Bluetooth")
                 }
             }
         }
@@ -79,9 +80,11 @@ class DriveService : Service(), LocationListener {
             }
         } catch (e: Exception) {
             Log.w(TAG, "startForeground: $e")
+            Store.log(this, "Usługa jazdy zablokowana przez system (${e.javaClass.simpleName}) – sprawdź lokalizację „Zawsze”")
             stopSelf()
             return
         }
+        Store.log(this, "Połączono z radiem – śledzę pozycję do zapisu parkowania")
         running = true
         Store.driving.value = true
         Store.linked.value = true
@@ -110,7 +113,7 @@ class DriveService : Service(), LocationListener {
                 true -> misses = 0
                 null -> Unit
             }
-            if (misses >= 2) carGone() else handler.postDelayed(this, 60_000)
+            if (misses >= 2) carGone("radio niepołączone od 2 min") else handler.postDelayed(this, 60_000)
         }
     }
 
@@ -142,7 +145,7 @@ class DriveService : Service(), LocationListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_GONE) carGone()
+        if (intent?.action == ACTION_GONE) carGone("zgłoszenie rozłączenia")
         return START_NOT_STICKY
     }
 
@@ -156,10 +159,11 @@ class DriveService : Service(), LocationListener {
     }
 
     /** Auto zgaszone (Bluetooth rozłączony): zapisz miejsce. */
-    private fun carGone() {
+    private fun carGone(why: String) {
         if (parking) return
         parking = true
         Store.linked.value = false
+        Store.log(this, "Koniec jazdy: $why")
         val l = last
         val fresh = l != null && System.currentTimeMillis() - l.time < 30_000 && l.accuracy <= 35f
         if (fresh) {
@@ -172,12 +176,17 @@ class DriveService : Service(), LocationListener {
 
     private var done = false
 
-    private fun finish(l: Location?) {
+    private fun finish(l0: Location?) {
         if (done) return
         done = true
         handler.removeCallbacksAndMessages(null)
+        // bez świeżego GPS: ostatnia znana pozycja telefonu (do 10 min) – lepsze to niż nic
+        val l = l0 ?: Locator.lastKnown(this)?.takeIf { System.currentTimeMillis() - it.time < 10 * 60_000L }
         if (l != null) {
             Store.saveSpot(this, Store.Spot(l.latitude, l.longitude, System.currentTimeMillis(), l.accuracy))
+            Store.log(this, "Zapisano miejsce parkowania (dokładność ${l.accuracy.toInt()} m, ${l.provider})")
+        } else {
+            Store.log(this, "Brak pozycji GPS – miejsce weźmie się z radia przy następnym odświeżeniu")
         }
         stopSelf()
     }

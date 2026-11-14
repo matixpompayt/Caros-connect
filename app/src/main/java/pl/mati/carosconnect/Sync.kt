@@ -46,7 +46,8 @@ object Sync {
                 val before = Store.spot.value?.time
                 val beforeStatus = CarData.status.value?.time
                 val inbox = Link.fetchInbox(p)
-                inbox.park?.let { Store.offerCarSpot(ctx, it) }
+                inbox.park?.let { Store.offerCarSpot(ctx, it, final = true) }
+                inbox.stop?.let { Store.offerCarSpot(ctx, it, final = false) }
                 inbox.carIcon?.let { (b, p) -> CarData.setCarIcon(b, p) }
                 inbox.status?.let { CarData.setStatusJson(it) }
                 try { checkBattery(ctx) } catch (_: Exception) {}

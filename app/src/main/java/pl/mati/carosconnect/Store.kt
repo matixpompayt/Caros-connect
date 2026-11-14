@@ -64,7 +64,11 @@ object Store {
         val bt = btLinked(ctx)
         val on = driving.value || bt == true
         linked.value = on
-        if (startService && bt == true && !DriveService.running) DriveService.start(ctx)
+        // nie uruchamiaj ponownie zaraz po zapisaniu parkowania (radio bywa jeszcze chwilę połączone)
+        if (startService && bt == true && !DriveService.running && System.currentTimeMillis() - (spot.value?.time ?: 0L) > 3 * 60_000L) {
+            log(ctx, "Telefon połączony z radiem, usługa jazdy nie działała – uruchamiam")
+            if (!DriveService.start(ctx)) log(ctx, "Nie udało się uruchomić usługi jazdy")
+        }
         return on
     }
     /** Wygląd: "auto" (jak telefon), "light", "dark". */
@@ -81,6 +85,7 @@ object Store {
         val p = ctx.applicationContext.getSharedPreferences("parking", Context.MODE_PRIVATE)
         sp = p
         carMac.value = p.getString("car_mac", null)
+        loadLog()
         carName.value = p.getString("car_name", null)
         theme.value = p.getString("theme", "auto") ?: "auto"
         spotNote.value = p.getString("spot_note", "") ?: ""
@@ -179,17 +184,46 @@ object Store {
     }
 
     /** Pozycja wysłana przez radio – przyjmij, jeśli nowsza niż zapisana. */
-    fun offerCarSpot(ctx: Context, s: Spot) {
-        // telefon w aucie – parkowanie zapisze się samo po rozłączeniu z radiem
-        if (driving.value || btLinked(ctx) == true) return
+    /**
+     * Miejsce z radia. [final] – zgaszenie auta / wyłączenie ekranu radia (prawdziwe parkowanie),
+     * inaczej ostatni postój w trakcie jazdy (zapas, gdy telefonu nie było w aucie albo nie zdążył zapisać).
+     */
+    fun offerCarSpot(ctx: Context, s: Spot, final: Boolean = true) {
+        init(ctx)
         val cur = spot.value
         if (cur != null && cur.time >= s.time) return
         if (cur != null && cur.src == SRC_CAR && cur.lat == s.lat && cur.lon == s.lon) return
+        if (!final) {
+            // telefon w aucie – postój na światłach to nie parkowanie; zapisze się po rozłączeniu z radiem
+            if (driving.value || btLinked(ctx) == true) return
+            // ostatni postój z radia – tylko jeśli jest już po jeździe (min. 3 min temu)
+            if (System.currentTimeMillis() - s.time < 3 * 60_000L) return
+        }
+        log(ctx, "Radio: " + (if (final) "miejsce po zgaszeniu auta" else "ostatni postój auta (zapas)") + " – zapisane")
         clearNotesIfNew(s)
         spot.value = s
         history.value = (listOf(s) + history.value.filterNot { it.time == s.time }).take(20)
         persist()
         CarWidget.updateAll(ctx.applicationContext)
+    }
+
+    // ---------- dziennik parkowania (diagnostyka) ----------
+    val parkLog = MutableStateFlow<List<String>>(emptyList())
+    private val LOG_FMT = java.text.SimpleDateFormat("d.MM HH:mm:ss", java.util.Locale.ROOT)
+
+    @Synchronized
+    fun log(ctx: Context, msg: String) {
+        init(ctx)
+        val line = LOG_FMT.format(java.util.Date()) + "  " + msg
+        val list = (listOf(line) + parkLog.value).take(50)
+        parkLog.value = list
+        sp?.edit()?.putString("park_log", JSONArray(list).toString())?.apply()
+        android.util.Log.i("CarOsConnect", msg)
+    }
+
+    fun loadLog() {
+        val raw = sp?.getString("park_log", null) ?: return
+        parkLog.value = try { JSONArray(raw).let { a -> List(a.length()) { a.getString(it) } } } catch (_: Exception) { emptyList() }
     }
 
     fun isCar(mac: String?): Boolean = mac != null && mac.equals(carMac.value, ignoreCase = true)

@@ -2,6 +2,14 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Naprawa zapisu miejsca parkowania
+- Miejsce zapisuje się też wtedy, gdy przy zgaszeniu auta nie ma świeżego GPS – brana jest ostatnia pozycja telefonu (do 10 min)
+- Zapas z radia: gdy telefon nie zapisał miejsca, bierze miejsce z radia po zgaszeniu albo ostatni postój auta
+- Miejsce z radia po zgaszeniu auta jest przyjmowane zawsze (wcześniej było pomijane, gdy telefon jeszcze był połączony z radiem)
+- Usługa jazdy nie uruchamia się ponownie zaraz po zapisaniu parkowania
+- Nowy „Dziennik parkowania” na ekranie Parkowanie (pod przyciskami): połączenie z radiem, koniec jazdy, zapis, błędy – widać, dlaczego miejsce się nie zapisało
+
 ## 1.34 · 2026-11-12
 Auto na żywo – wybierz odświeżanie
 - Ustawienia → „Pozycja auta na żywo”: 30 s, 10 s, 5 s albo na bieżąco

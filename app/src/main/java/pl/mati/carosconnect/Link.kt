@@ -38,6 +38,8 @@ object Link {
         val live: CarData.Live? = null,
         /** Raport danych z radia (CAN) – tekst i czas wysłania. */
         val report: Pair<String, Long>? = null,
+        /** Ostatni postój w trakcie jazdy (radio, ≥ 20 s) – zapas na wypadek braku zapisu w telefonie. */
+        val stop: Store.Spot? = null,
     )
 
     private const val PREFIX = "#caros1."
@@ -140,6 +142,7 @@ object Link {
         c.readTimeout = 20_000
         c.setRequestProperty("User-Agent", "CarOS-Connect")
         var park: Store.Spot? = null
+        var stop: Store.Spot? = null
         var carIcon: Pair<String, Int?>? = null
         var status: String? = null
         var statusT = 0L
@@ -159,12 +162,15 @@ object Link {
                     try {
                         when (m.optString("type")) {
                             "park" -> {
-                                // postój w trakcie jazdy (światła, korek) – nie parkowanie
-                                if (m.has("fin") && !m.optBoolean("fin")) continue
                                 val s = Store.Spot(
                                     m.getDouble("lat"), m.getDouble("lon"), m.getLong("t"), m.optDouble("acc", 0.0).toFloat(),
                                     m.optString("a").ifBlank { null }, src = Store.SRC_CAR,
                                 )
+                                // postój w trakcie jazdy (światła, korek) – osobno, tylko jako zapas
+                                if (m.has("fin") && !m.optBoolean("fin")) {
+                                    if (stop == null || s.time >= stop!!.time) stop = s
+                                    continue
+                                }
                                 if (park == null || s.time >= park!!.time) {
                                     park = s
                                     m.optString("body").ifBlank { null }?.let { b -> carIcon = b to (if (m.has("paint")) m.optInt("paint") else null) }
@@ -225,6 +231,6 @@ object Link {
             } catch (_: Exception) {
             }
         }
-        return Inbox(park, status, trips, backup, carIcon, live, report)
+        return Inbox(park, status, trips, backup, carIcon, live, report, stop)
     }
 }

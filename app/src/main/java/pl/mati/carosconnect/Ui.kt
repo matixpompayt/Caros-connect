@@ -533,6 +533,7 @@ private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
             }
             if (s != null) SecondaryButton("Udostępnij", Icons.Rounded.Share, Modifier.weight(1f)) { shareSpot(ctx, s) }
         }
+        ParkLogLink()
 
         CarWeatherCard()
         MeterCard()
@@ -1157,3 +1158,28 @@ private fun rememberAzimuth(me: Location?, enabled: Boolean): Float? {
     }
     return az
 }
+
+/** „Co się działo przy parkowaniu” – dziennik zdarzeń (połączenie z radiem, zapis, błędy). */
+@Composable
+private fun ParkLogLink() {
+    val log by Store.parkLog.collectAsState()
+    var open by remember { mutableStateOf(false) }
+    Text(
+        "Dziennik parkowania" + (log.firstOrNull()?.let { " · ostatnio: " + it.substringAfter("  ").take(40) } ?: ""),
+        fontSize = 13.sp, color = C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { open = true }.padding(horizontal = 4.dp, vertical = 6.dp),
+    )
+    if (open) AlertDialog(
+        onDismissRequest = { open = false },
+        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
+        title = { Text("Dziennik parkowania", color = C.Text) },
+        text = {
+            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (log.isEmpty()) Text("Jeszcze nic – zapisze się przy następnym połączeniu z radiem.", color = C.Muted, fontSize = 14.sp)
+                log.forEach { Text(it, color = C.Text, fontSize = 13.sp) }
+            }
+        },
+        confirmButton = { TextButton(onClick = { open = false }) { Text("Zamknij") } },
+    )
+}
+

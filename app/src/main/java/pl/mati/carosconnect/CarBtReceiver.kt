@@ -24,12 +24,19 @@ class CarBtReceiver : BroadcastReceiver() {
             BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
                 Store.linked.value = false
                 if (DriveService.running) return // usługa sama zapisze miejsce
+                Store.log(ctx, "Rozłączono z radiem (usługa jazdy nie działała) – zapis awaryjny")
                 val pending = goAsync()
                 val app = ctx.applicationContext
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        val l = Locator.freshFix(app, 25)
-                        if (l != null) Store.saveSpot(app, Store.Spot(l.latitude, l.longitude, System.currentTimeMillis(), l.accuracy))
+                        val l = Locator.freshFix(app, 20)
+                            ?: Locator.lastKnown(app)?.takeIf { System.currentTimeMillis() - it.time < 10 * 60_000L }
+                        if (l != null) {
+                            Store.saveSpot(app, Store.Spot(l.latitude, l.longitude, System.currentTimeMillis(), l.accuracy))
+                            Store.log(app, "Zapisano miejsce parkowania (awaryjnie, dokładność ${l.accuracy.toInt()} m)")
+                        } else {
+                            Store.log(app, "Brak pozycji – brak zgody na lokalizację w tle? Miejsce weźmie się z radia")
+                        }
                     } finally {
                         pending.finish()
                     }
