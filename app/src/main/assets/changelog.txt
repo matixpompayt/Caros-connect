@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.35 · 2026-11-14
 Naprawa zapisu miejsca parkowania
 - Miejsce zapisuje się też wtedy, gdy przy zgaszeniu auta nie ma świeżego GPS – brana jest ostatnia pozycja telefonu (do 10 min)
 - Zapas z radia: gdy telefon nie zapisał miejsca, bierze miejsce z radia po zgaszeniu albo ostatni postój auta
