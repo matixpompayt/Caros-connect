@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.42 · 2026-11-15
 Zasięg zawsze widoczny
 - Zasięg auta pokazuje się zawsze – gdy radio nie przyśle wyniku, telefon liczy go sam z tankowań, przebiegu i spalania
 - Po dodaniu tankowania w telefonie zasięg od razu się przelicza (bez czekania na radio)
