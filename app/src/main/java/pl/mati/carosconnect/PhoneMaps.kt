@@ -107,7 +107,8 @@ private fun rememberMapLifecycle(h: MapHolder) {
     // jasny / ciemny wygląd mapy razem z aplikacją
     val light = C.isLight
     LaunchedEffect(light, h.ready) { if (h.ready) h.style?.let { CarMapStyle.apply(it, light) } }
-    val lifecycle = (LocalContext.current as? ComponentActivity)?.lifecycle
+    // w oknie dialogowym kontekst bywa opakowany – wtedy cykl życia z kompozycji
+    val lifecycle = (LocalContext.current as? ComponentActivity)?.lifecycle ?: androidx.compose.ui.platform.LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, e ->
             when (e) {
@@ -324,3 +325,96 @@ fun TripMap(pts: List<LatLng>, modifier: Modifier) {
     }
     AndroidView(factory = { h.view }, modifier = modifier)
 }
+
+/** Podgląd trasy przed wysłaniem do auta: linia trasy, korki na trasie, start (auto) i cel. */
+@Composable
+fun RouteMap(pts: List<LatLng>, jams: List<RoutePreview.Jam>, modifier: Modifier) {
+    val ctx = LocalContext.current
+    val h = remember(pts) {
+        MapHolder(ctx) { m, st ->
+            val below = CarMapStyle.firstSymbolId(st)
+            fun add(l: org.maplibre.android.style.layers.Layer) { if (below != null) st.addLayerBelow(l, below) else st.addLayer(l) }
+            st.addSource(GeoJsonSource("caros-rt", Feature.fromGeometry(LineString.fromLngLats(pts.map { Point.fromLngLat(it.longitude, it.latitude) }))))
+            add(
+                LineLayer("caros-rt-casing", "caros-rt").withProperties(
+                    PropertyFactory.lineColor(android.graphics.Color.parseColor("#05070A")),
+                    PropertyFactory.lineWidth(10f),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                ),
+            )
+            add(
+                LineLayer("caros-rt-line", "caros-rt").withProperties(
+                    PropertyFactory.lineColor(android.graphics.Color.parseColor("#2FD3F0")),
+                    PropertyFactory.lineWidth(6f),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                ),
+            )
+            st.addSource(GeoJsonSource("caros-rt-jams"))
+            add(
+                LineLayer("caros-rt-jams-line", "caros-rt-jams").withProperties(
+                    PropertyFactory.lineColor(org.maplibre.android.style.expressions.Expression.toColor(org.maplibre.android.style.expressions.Expression.get("c"))),
+                    PropertyFactory.lineWidth(6f),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                ),
+            )
+            st.addSource(
+                GeoJsonSource(
+                    "caros-rt-ends",
+                    FeatureCollection.fromFeatures(
+                        listOf(
+                            Feature.fromGeometry(point(pts.first().latitude, pts.first().longitude)).also { it.addStringProperty("k", "s") },
+                            Feature.fromGeometry(point(pts.last().latitude, pts.last().longitude)).also { it.addStringProperty("k", "e") },
+                        ),
+                    ),
+                ),
+            )
+            st.addLayer(
+                CircleLayer("caros-rt-dots", "caros-rt-ends").withProperties(
+                    PropertyFactory.circleRadius(8f),
+                    PropertyFactory.circleColor(
+                        org.maplibre.android.style.expressions.Expression.match(
+                            org.maplibre.android.style.expressions.Expression.get("k"),
+                            org.maplibre.android.style.expressions.Expression.color(android.graphics.Color.WHITE),
+                            org.maplibre.android.style.expressions.Expression.stop("s", org.maplibre.android.style.expressions.Expression.color(android.graphics.Color.parseColor("#7CF06B"))),
+                        ),
+                    ),
+                    PropertyFactory.circleStrokeColor(android.graphics.Color.parseColor("#0A0C0F")),
+                    PropertyFactory.circleStrokeWidth(3f),
+                ),
+            )
+            m.uiSettings.isRotateGesturesEnabled = false
+        }
+    }
+    rememberMapLifecycle(h)
+    LaunchedEffect(h.ready) {
+        if (!h.ready) return@LaunchedEffect
+        val b = LatLngBounds.Builder()
+        pts.forEach { b.include(it) }
+        h.view.post {
+            try { h.map?.moveCamera(CameraUpdateFactory.newLatLngBounds(b.build(), (28 * h.density).toInt())) } catch (_: Exception) {}
+        }
+    }
+    LaunchedEffect(jams, h.ready) {
+        if (!h.ready) return@LaunchedEffect
+        h.style?.getSourceAs<GeoJsonSource>("caros-rt-jams")?.setGeoJson(
+            FeatureCollection.fromFeatures(jams.filter { it.pts.size >= 2 }.map { j ->
+                Feature.fromGeometry(LineString.fromLngLats(j.pts.map { Point.fromLngLat(it.longitude, it.latitude) })).also {
+                    it.addStringProperty(
+                        "c",
+                        when {
+                            j.kind == "ROAD_CLOSURE" || j.magnitude == 4 -> "#7A0E0E"
+                            j.magnitude == 3 -> "#D9302B"
+                            j.magnitude == 2 -> "#F26B1D"
+                            else -> "#F5A623"
+                        },
+                    )
+                }
+            }),
+        )
+    }
+    AndroidView(factory = { h.view }, modifier = modifier)
+}
+

@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -697,7 +698,7 @@ fun PlaceSheet(
         containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
         title = { Text(if (place != null) place.name else "Wyślij do auta", color = C.Text, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 when {
                     resolving -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
@@ -708,7 +709,22 @@ fun PlaceSheet(
                         if (!shared.isNullOrBlank()) Text("Udostępniono: " + shared.take(220), color = C.Muted, fontSize = 12.sp)
                     }
                     else -> {
-                        if (place.detail.isNotBlank()) Text(place.detail, color = C.Muted, fontSize = 14.sp)
+                        if (place.detail.isNotBlank()) Text(place.detail, color = C.Muted, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        // podgląd: trasa z miejsca parkowania, korki, pogoda, przyjazd
+                        RoutePreviewBlock(place)
+                        PrimaryButton(if (sending) "Wysyłam…" else "Nawiguj w aucie", Icons.Rounded.Navigation) {
+                            if (sending) return@PrimaryButton
+                            sending = true
+                            scope.launch { if (sendToCar(ctx, "route", place)) onDismiss(); sending = false }
+                        }
+                        SecondaryButton("Dodaj do ulubionych w aucie", Icons.Rounded.StarBorder, Modifier.fillMaxWidth()) {
+                            if (sending) return@SecondaryButton
+                            sending = true
+                            scope.launch {
+                                if (sendToCar(ctx, "fav_add", place)) { CarData.addFavLocal(place); onDismiss() }
+                                sending = false
+                            }
+                        }
                         // inne pasujące miejsca (gdy wyszukiwanie po nazwie trafiło kilka)
                         val alts = (listOfNotNull(place0) + others).distinctBy { "%.4f,%.4f".format(it.lat, it.lon) }.filter { it != place }
                         if (alts.isNotEmpty()) {
@@ -723,25 +739,103 @@ fun PlaceSheet(
                                 }
                             }
                         }
-                        PrimaryButton(if (sending) "Wysyłam…" else "Nawiguj w aucie", Icons.Rounded.Navigation) {
-                            if (sending) return@PrimaryButton
-                            sending = true
-                            scope.launch { if (sendToCar(ctx, "route", place)) onDismiss(); sending = false }
-                        }
-                        SecondaryButton("Dodaj do ulubionych w aucie", Icons.Rounded.StarBorder, Modifier.fillMaxWidth()) {
-                            if (sending) return@SecondaryButton
-                            sending = true
-                            scope.launch {
-                                if (sendToCar(ctx, "fav_add", place)) { CarData.addFavLocal(place); onDismiss() }
-                                sending = false
-                            }
-                        }
                     }
                 }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Zamknij") } },
     )
+}
+
+/** Podgląd trasy w oknie „Wyślij do auta”: start z miejsca parkowania, mapa, przyjazd, korki, pogoda. */
+@Composable
+private fun RoutePreviewBlock(place: CarData.Place) {
+    val ctx = LocalContext.current
+    val spot by Store.spot.collectAsState()
+    val linked by Store.linked.collectAsState()
+    val inService by Store.driving.collectAsState()
+    var offsetMin by remember(place) { mutableStateOf(0) }
+    var res by remember(place) { mutableStateOf<RoutePreview.Result?>(null) }
+    var err by remember(place) { mutableStateOf<String?>(null) }
+    var loading by remember(place) { mutableStateOf(true) }
+    // start: telefon w aucie → jego pozycja (auto), inaczej miejsce zaparkowanego auta
+    val start = remember(place, spot, linked, inService) {
+        val me = Locator.lastKnown(ctx)
+        val sp = spot
+        when {
+            (linked || inService) && me != null -> LatLng(me.latitude, me.longitude) to "z aktualnej pozycji auta"
+            sp != null -> LatLng(sp.lat, sp.lon) to ("z miejsca parkowania" + (sp.address?.let { " · $it" } ?: ""))
+            me != null -> LatLng(me.latitude, me.longitude) to "z Twojej pozycji (brak zapisanego parkowania)"
+            else -> null
+        }
+    }
+    LaunchedEffect(place, offsetMin, start?.first) {
+        val st = start
+        if (st == null) {
+            loading = false
+            err = "Brak miejsca startu – zapisz parkowanie albo włącz lokalizację"
+            return@LaunchedEffect
+        }
+        loading = true
+        err = null
+        res = try {
+            RoutePreview.compute(ctx, st.first, LatLng(place.lat, place.lon), System.currentTimeMillis() + offsetMin * 60_000L)
+        } catch (e: Exception) {
+            err = "Nie udało się wyznaczyć trasy" + (e.message?.let { ": $it" } ?: "")
+            null
+        }
+        loading = false
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        start?.let { Text("Start " + it.second, fontSize = 12.sp, color = C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        // godzina wyjazdu
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for ((m, l) in listOf(0 to "Teraz", 15 to "+15 min", 30 to "+30 min", 60 to "+1 h")) {
+                val sel = m == offsetMin
+                Box(
+                    Modifier.weight(1f).height(34.dp).clip(RoundedCornerShape(12.dp))
+                        .background(if (sel) C.Accent else C.Raised)
+                        .clickable { offsetMin = m },
+                    contentAlignment = Alignment.Center,
+                ) { Text(l, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = if (sel) C.Bg else C.Text, maxLines = 1) }
+            }
+        }
+        val r = res
+        Box(Modifier.fillMaxWidth().height(190.dp).clip(RoundedCornerShape(16.dp)).border(1.dp, C.Border, RoundedCornerShape(16.dp))) {
+            if (r != null) RouteMap(r.pts, r.jams, Modifier.fillMaxSize())
+            if (loading) CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.align(Alignment.Center).size(28.dp))
+            else if (r == null) Text(err ?: "", color = C.Orange, fontSize = 13.sp, modifier = Modifier.align(Alignment.Center).padding(12.dp))
+        }
+        if (r != null && !loading) {
+            val mins = (r.travelS / 60).roundToInt()
+            val dur = if (mins >= 60) "${mins / 60} h ${"%02d".format(mins % 60)} min" else "$mins min"
+            val km = if (r.distanceM >= 10_000) "${(r.distanceM / 1000).roundToInt()} km" else "%.1f km".format(r.distanceM / 1000).replace('.', ',')
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text((if (offsetMin == 0) "Przyjazd " else "Wyjazd ${RoutePreview.hhmm(r.depart)} → ") + RoutePreview.hhmm(r.arrive), fontSize = 19.sp, fontWeight = FontWeight.Bold, color = C.Text)
+                Text("$dur · $km", fontSize = 13.sp, color = C.Muted, modifier = Modifier.padding(bottom = 2.dp))
+            }
+            val d = r.delayS
+            when {
+                d != null && d >= 60 -> Text(
+                    "Korki +${(d / 60.0).roundToInt()} min" + (if (r.jams.isNotEmpty()) " · ${r.jams.size} ${if (r.jams.size == 1) "odcinek" else "odcinki"} na trasie" else ""),
+                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = if (d >= 600) Color(0xFFE5483F) else C.Orange,
+                )
+                d != null -> Text("Bez korków", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = C.Green)
+                r.trafficNote != null -> Text(r.trafficNote, fontSize = 12.sp, color = C.Muted)
+            }
+            val head = RoutePreview.headline(r)
+            if (head != null) {
+                val bad = r.weather?.any { it.kind != "frost" } == true
+                Text("Pogoda: $head", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = if (bad) Color(0xFF5AB4FF) else C.Text)
+                r.weather?.filter { it.kind != "frost" }?.drop(1)?.take(3)?.forEach { e ->
+                    Text("${e.name}: ${e.fromKm.roundToInt()}–${e.toKm.roundToInt().coerceAtLeast(e.fromKm.roundToInt() + 1)} km, ok. ${RoutePreview.hhmm(e.time)}", fontSize = 12.sp, color = C.Muted)
+                }
+            } else {
+                Text("Pogoda na trasie: brak danych", fontSize = 12.sp, color = C.Muted)
+            }
+            r.destTemp?.let { Text("Na miejscu ok. ${it.roundToInt()}°", fontSize = 12.sp, color = C.Muted) }
+        }
+    }
 }
 
 /** Udostępnienie z Map Google → odczyt miejsca → okno wysyłki. */

@@ -2,6 +2,15 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Podgląd trasy przy „Wyślij do auta”
+- Po udostępnieniu miejsca z Map Google okno pokazuje mapę z trasą – start z miejsca zaparkowanego auta (gdy jesteś w aucie: z jego aktualnej pozycji)
+- Godzina przyjazdu, czas i długość trasy
+- Korki: czas z korkami, „korki +X min” i korki zaznaczone na trasie (TomTom – klucz z Ustawienia → Korki w CAR OS)
+- Pogoda na trasie na godzinę przejazdu: deszcz, śnieg, marznący deszcz, mgła, wiatr, mróz – gdzie i o której, plus temperatura na miejscu
+- Wybór wyjazdu: teraz, za 15 min, 30 min albo godzinę – przyjazd, korki i pogoda przeliczają się
+- Inne wyniki wyszukiwania („To nie to?”) są teraz pod przyciskami
+
 ## 1.35 · 2026-11-14
 Naprawa zapisu miejsca parkowania
 - Miejsce zapisuje się też wtedy, gdy przy zgaszeniu auta nie ma świeżego GPS – brana jest ostatnia pozycja telefonu (do 10 min)
