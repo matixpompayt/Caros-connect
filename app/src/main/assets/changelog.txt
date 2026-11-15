@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.41 · 2026-11-15
 CamSam w końcu działa
 - CamSam naprawiony: ostrzeżenia CamSam PLUS są w pływającym okienku, nie w powiadomieniu – teraz aplikacja czyta to okienko (ikona znaku, pasek odległości, ulica) i wysyła je do radia
 - Nowe uprawnienie: Ustawienia → Ostrzeżenia drogowe → „Odczyt okienka CamSam” (ułatwienia dostępu, czyta tylko CamSam/Yanosika)
