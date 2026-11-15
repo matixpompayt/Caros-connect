@@ -447,6 +447,7 @@ private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
 
         if (!perms.allOk || car == null) SetupCard(perms, actions, car) { onPickCar() }
 
+        TripPlanCard()
         val iv by LiveFeed.interval.collectAsState()
         val fb by LiveFeed.fbUrl.collectAsState()
         // 1) telefon w aucie (połączony z radiem) → pozycja auta = GPS telefonu, co wybrany czas
@@ -1181,5 +1182,31 @@ private fun ParkLogLink() {
         },
         confirmButton = { TextButton(onClick = { open = false }) { Text("Zamknij") } },
     )
+}
+
+/** Zaplanowany wyjazd (z „Wyślij do auta”): kiedy wyjechać, przypomnienie, odwołanie. */
+@Composable
+private fun TripPlanCard() {
+    val ctx = LocalContext.current
+    val p by TripPlan.plan.collectAsState()
+    val pl = p ?: return
+    if (pl.arrive < System.currentTimeMillis()) return
+    Card(border = C.Accent.copy(alpha = 0.5f)) {
+        Text("Zaplanowany wyjazd", fontSize = 13.sp, color = C.Muted)
+        Text(pl.name, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(
+            "Wyjedź o ${RoutePreview.hhmm(pl.depart)} · przyjazd ${RoutePreview.hhmm(pl.arrive)}" +
+                (pl.delayS?.let { if (it >= 60) " · korki +${it / 60} min" else "" } ?: ""),
+            fontSize = 15.sp, color = C.Accent, fontWeight = FontWeight.SemiBold,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (pl.remindAt > System.currentTimeMillis()) "Przypomnienie o ${RoutePreview.hhmm(pl.remindAt)} – sprawdzę wtedy korki jeszcze raz" else "Przypomnienie wysłane",
+                fontSize = 13.sp, color = C.Muted, modifier = Modifier.weight(1f),
+            )
+            Text("Odwołaj", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = C.Accent,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { TripPlan.cancel(ctx) }.padding(8.dp))
+        }
+    }
 }
 

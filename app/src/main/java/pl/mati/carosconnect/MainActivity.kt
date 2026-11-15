@@ -69,6 +69,7 @@ class MainActivity : ComponentActivity(), Actions {
         CarData.init(this)
         CamSamRelay.init(this)
         LiveFeed.init(this)
+        TripPlan.load(this)
         FuelPrices.init(this)
         GlassTheme.init(this)
         SyncWorker.schedule(this)

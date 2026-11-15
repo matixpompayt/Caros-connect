@@ -56,7 +56,7 @@ object RoutePreview {
         return hypot((a.longitude - b.longitude) * kx, (a.latitude - b.latitude) * 110_540.0)
     }
 
-    suspend fun compute(ctx: Context, from: LatLng, to: LatLng, depart: Long): Result = withContext(Dispatchers.IO) {
+    suspend fun compute(ctx: Context, from: LatLng, to: LatLng, depart: Long, withWeather: Boolean = true): Result = withContext(Dispatchers.IO) {
         // 1) trasa jak w radiu
         val osrm = JSONObject(
             get(String.format(Locale.US, "https://router.project-osrm.org/route/v1/driving/%.6f,%.6f;%.6f,%.6f?overview=full&geometries=polyline", from.longitude, from.latitude, to.longitude, to.latitude)),
@@ -75,7 +75,7 @@ object RoutePreview {
             val traffic = async { try { traffic(ctx, pts, depart) } catch (e: Exception) { Triple(null, emptyList<Jam>(), "Korki: brak danych (${e.message ?: "błąd"})") } }
             val t = traffic.await()
             val travel = (t.first?.first?.toDouble() ?: baseS)
-            val wx = try { weather(pts, cum, depart, travel) } catch (_: Exception) { null }
+            val wx = if (!withWeather) null else try { weather(pts, cum, depart, travel) } catch (_: Exception) { null }
             Result(
                 pts = pts, distanceM = distance, baseS = baseS,
                 trafficS = t.first?.first, delayS = t.first?.second, jams = t.second, trafficNote = t.third,

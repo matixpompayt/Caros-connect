@@ -68,6 +68,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Send
@@ -755,6 +756,10 @@ private fun RoutePreviewBlock(place: CarData.Place) {
     val linked by Store.linked.collectAsState()
     val inService by Store.driving.collectAsState()
     var offsetMin by remember(place) { mutableStateOf(0) }
+    // 0 – teraz / za chwilę, 1 – wyjazd o…, 2 – być na miejscu o…
+    var mode by remember(place) { mutableStateOf(0) }
+    var picked by remember(place) { mutableStateOf<Long?>(null) }
+    val plan by TripPlan.plan.collectAsState()
     var res by remember(place) { mutableStateOf<RoutePreview.Result?>(null) }
     var err by remember(place) { mutableStateOf<String?>(null) }
     var loading by remember(place) { mutableStateOf(true) }
@@ -769,7 +774,7 @@ private fun RoutePreviewBlock(place: CarData.Place) {
             else -> null
         }
     }
-    LaunchedEffect(place, offsetMin, start?.first) {
+    LaunchedEffect(place, offsetMin, mode, picked, start?.first) {
         val st = start
         if (st == null) {
             loading = false
@@ -778,27 +783,63 @@ private fun RoutePreviewBlock(place: CarData.Place) {
         }
         loading = true
         err = null
+        val to = LatLng(place.lat, place.lon)
+        val now = System.currentTimeMillis()
         res = try {
-            RoutePreview.compute(ctx, st.first, LatLng(place.lat, place.lon), System.currentTimeMillis() + offsetMin * 60_000L)
+            val t = picked
+            when {
+                mode == 1 && t != null -> RoutePreview.compute(ctx, st.first, to, t)
+                mode == 2 && t != null -> {
+                    // być o [t]: najpierw czas przejazdu teraz, potem z prognozą ruchu na wyliczoną godzinę wyjazdu
+                    val r1 = RoutePreview.compute(ctx, st.first, to, now, withWeather = false)
+                    val dep1 = t - (r1.travelS * 1000).toLong()
+                    if (dep1 <= now + 2 * 60_000) RoutePreview.compute(ctx, st.first, to, now)
+                    else {
+                        val r2 = RoutePreview.compute(ctx, st.first, to, dep1)
+                        r2.copy(depart = t - (r2.travelS * 1000).toLong())
+                    }
+                }
+                else -> RoutePreview.compute(ctx, st.first, to, now + offsetMin * 60_000L)
+            }
         } catch (e: Exception) {
             err = "Nie udało się wyznaczyć trasy" + (e.message?.let { ": $it" } ?: "")
             null
         }
         loading = false
     }
+    fun pickTime(kind: Int) {
+        val c = java.util.Calendar.getInstance().apply { timeInMillis = picked ?: (System.currentTimeMillis() + 3600_000) }
+        val act = generateSequence(ctx) { (it as? android.content.ContextWrapper)?.baseContext }.firstOrNull { it is android.app.Activity } ?: ctx
+        android.app.TimePickerDialog(act, { _, h, m ->
+            val cal = java.util.Calendar.getInstance().apply {
+                set(java.util.Calendar.HOUR_OF_DAY, h); set(java.util.Calendar.MINUTE, m)
+                set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+            }
+            // godzina, która już minęła → jutro
+            if (cal.timeInMillis < System.currentTimeMillis() - 60_000) cal.add(java.util.Calendar.DAY_OF_MONTH, 1)
+            picked = cal.timeInMillis
+            mode = kind
+        }, c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE), true).show()
+    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         start?.let { Text("Start " + it.second, fontSize = 12.sp, color = C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-        // godzina wyjazdu
+        // godzina wyjazdu: szybkie wybory albo konkretna godzina wyjazdu / przyjazdu
+        @Composable
+        fun Chip(label: String, sel: Boolean, mod: Modifier, onClick: () -> Unit) {
+            Box(
+                mod.height(34.dp).clip(RoundedCornerShape(12.dp)).background(if (sel) C.Accent else C.Raised).clickable(onClick = onClick),
+                contentAlignment = Alignment.Center,
+            ) { Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = if (sel) C.Bg else C.Text, maxLines = 1) }
+        }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             for ((m, l) in listOf(0 to "Teraz", 15 to "+15 min", 30 to "+30 min", 60 to "+1 h")) {
-                val sel = m == offsetMin
-                Box(
-                    Modifier.weight(1f).height(34.dp).clip(RoundedCornerShape(12.dp))
-                        .background(if (sel) C.Accent else C.Raised)
-                        .clickable { offsetMin = m },
-                    contentAlignment = Alignment.Center,
-                ) { Text(l, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = if (sel) C.Bg else C.Text, maxLines = 1) }
+                Chip(l, mode == 0 && m == offsetMin, Modifier.weight(1f)) { mode = 0; offsetMin = m }
             }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val t = picked
+            Chip(if (mode == 1 && t != null) "Wyjazd o ${RoutePreview.hhmm(t)}" else "Wyjadę o…", mode == 1, Modifier.weight(1f)) { pickTime(1) }
+            Chip(if (mode == 2 && t != null) "Być o ${RoutePreview.hhmm(t)}" else "Chcę być o…", mode == 2, Modifier.weight(1f)) { pickTime(2) }
         }
         val r = res
         Box(Modifier.fillMaxWidth().height(190.dp).clip(RoundedCornerShape(16.dp)).border(1.dp, C.Border, RoundedCornerShape(16.dp))) {
@@ -810,9 +851,21 @@ private fun RoutePreviewBlock(place: CarData.Place) {
             val mins = (r.travelS / 60).roundToInt()
             val dur = if (mins >= 60) "${mins / 60} h ${"%02d".format(mins % 60)} min" else "$mins min"
             val km = if (r.distanceM >= 10_000) "${(r.distanceM / 1000).roundToInt()} km" else "%.1f km".format(r.distanceM / 1000).replace('.', ',')
-            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text((if (offsetMin == 0) "Przyjazd " else "Wyjazd ${RoutePreview.hhmm(r.depart)} → ") + RoutePreview.hhmm(r.arrive), fontSize = 19.sp, fontWeight = FontWeight.Bold, color = C.Text)
-                Text("$dur · $km", fontSize = 13.sp, color = C.Muted, modifier = Modifier.padding(bottom = 2.dp))
+            val now = System.currentTimeMillis()
+            if (mode == 2) {
+                val late = r.depart < now - 60_000
+                if (late) {
+                    Text("Nie zdążysz na ${RoutePreview.hhmm(picked ?: r.arrive)}", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = C.Orange)
+                    Text("Wyjeżdżając teraz będziesz ok. ${RoutePreview.hhmm(now + (r.travelS * 1000).toLong())} · $dur · $km", fontSize = 13.sp, color = C.Muted)
+                } else {
+                    Text("Wyjedź o ${RoutePreview.hhmm(r.depart)}", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = C.Accent)
+                    Text("żeby być o ${RoutePreview.hhmm(r.arrive)} · $dur · $km", fontSize = 13.sp, color = C.Muted)
+                }
+            } else {
+                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text((if (mode == 0 && offsetMin == 0) "Przyjazd " else "Wyjazd ${RoutePreview.hhmm(r.depart)} → ") + RoutePreview.hhmm(r.arrive), fontSize = 19.sp, fontWeight = FontWeight.Bold, color = C.Text)
+                    Text("$dur · $km", fontSize = 13.sp, color = C.Muted, modifier = Modifier.padding(bottom = 2.dp))
+                }
             }
             val d = r.delayS
             when {
@@ -834,6 +887,30 @@ private fun RoutePreviewBlock(place: CarData.Place) {
                 Text("Pogoda na trasie: brak danych", fontSize = 12.sp, color = C.Muted)
             }
             r.destTemp?.let { Text("Na miejscu ok. ${it.roundToInt()}°", fontSize = 12.sp, color = C.Muted) }
+            // przypomnienie 10 min przed wyjazdem
+            val p = plan
+            val samePlace = p != null && kotlin.math.abs(p.lat - place.lat) < 1e-4 && kotlin.math.abs(p.lon - place.lon) < 1e-4
+            if (samePlace && p != null && p.depart > now - 60_000) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Przypomnienie o ${RoutePreview.hhmm(p.remindAt)} (wyjazd ${RoutePreview.hhmm(p.depart)})", fontSize = 13.sp, color = C.Green, modifier = Modifier.weight(1f))
+                    Text("Odwołaj", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.Accent,
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { TripPlan.cancel(ctx) }.padding(6.dp))
+                }
+            }
+            if (r.depart - TripPlan.REMIND_MS > now + 60_000 && !(samePlace && p?.depart == r.depart)) {
+                val st = start
+                SecondaryButton("Przypomnij o ${RoutePreview.hhmm(r.depart - TripPlan.REMIND_MS)} (10 min przed wyjazdem)", Icons.Rounded.Alarm, Modifier.fillMaxWidth()) {
+                    if (st == null) return@SecondaryButton
+                    TripPlan.set(
+                        ctx,
+                        TripPlan.Plan(
+                            place.name, place.detail, place.lat, place.lon, st.first.latitude, st.first.longitude,
+                            r.depart, r.arrive, mode == 2, r.delayS,
+                        ),
+                    )
+                    Toast.makeText(ctx, "Przypomnę o ${RoutePreview.hhmm(r.depart - TripPlan.REMIND_MS)}", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 }

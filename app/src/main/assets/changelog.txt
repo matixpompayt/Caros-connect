@@ -2,6 +2,14 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Zaplanuj wyjazd
+- W oknie „Wyślij do auta”: „Wyjadę o…” (podajesz godzinę wyjazdu) albo „Chcę być o…” – wtedy pokazuje, o której wyjechać, licząc korki prognozowane na tę godzinę
+- Gdy nie zdążysz – „Nie zdążysz, wyjeżdżając teraz będziesz o…”
+- Przycisk „Przypomnij 10 min przed wyjazdem”: powiadomienie „Za 10 min wyjazd do…”; tuż przed nim trasa liczy się jeszcze raz z aktualnymi korkami (godzina wyjazdu może się przesunąć)
+- W powiadomieniu: „Nawiguj w aucie” (trasa czeka w radiu) i „Odwołaj”
+- Zaplanowany wyjazd widać na ekranie Parkowanie; przypomnienie działa też po restarcie telefonu
+
 ## 1.36 · 2026-11-15
 Podgląd trasy przy „Wyślij do auta”
 - Po udostępnieniu miejsca z Map Google okno pokazuje mapę z trasą – start z miejsca zaparkowanego auta (gdy jesteś w aucie: z jego aktualnej pozycji)
