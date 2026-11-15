@@ -21,6 +21,61 @@ object CarMapStyle {
 
     const val STYLE_URL = "https://tiles.openfreemap.org/styles/liberty"
     const val BUILDINGS_3D = "caros-buildings-3d"
+    const val HOUSENUM = "caros-housenumber"
+
+    /** Numery domów na mapach (przełącznik w Ustawieniach → Wygląd). */
+    val houseNumbers = kotlinx.coroutines.flow.MutableStateFlow(true)
+    private var prefs: android.content.SharedPreferences? = null
+
+    fun init(ctx: android.content.Context) {
+        if (prefs != null) return
+        prefs = ctx.applicationContext.getSharedPreferences("map", android.content.Context.MODE_PRIVATE)
+        houseNumbers.value = prefs?.getBoolean("housenum", true) ?: true
+    }
+
+    fun setHouseNumbersPref(v: Boolean) {
+        houseNumbers.value = v
+        prefs?.edit()?.putBoolean("housenum", v)?.apply()
+    }
+
+    /** Numery domów od dużego przybliżenia (ok. 16,5) – nad budynkami, pod resztą napisów. */
+    fun addHouseNumbers(style: Style, light: Boolean) {
+        if (style.getLayer(HOUSENUM) == null) {
+            val src = style.sources.firstOrNull { it.id == "openmaptiles" }?.id ?: return
+            var font: Array<String>? = null
+            style.layers.filterIsInstance<SymbolLayer>().filter { it.sourceLayer == "housenumber" && !it.id.startsWith("caros-") }.forEach {
+                try { if (font == null) font = it.textFont.value } catch (_: Exception) {}
+                it.setProperties(PropertyFactory.visibility(Property.NONE))
+            }
+            val layer = SymbolLayer(HOUSENUM, src).withSourceLayer("housenumber").withProperties(
+                PropertyFactory.textField(Expression.toString(Expression.get("housenumber"))),
+                PropertyFactory.textFont(font ?: arrayOf("Noto Sans Regular")),
+                PropertyFactory.textSize(Expression.interpolate(Expression.linear(), Expression.zoom(), Expression.stop(16.5, 11f), Expression.stop(19, 15f))),
+                PropertyFactory.textHaloWidth(1.3f),
+                PropertyFactory.textPadding(3f),
+                PropertyFactory.textAllowOverlap(false),
+            )
+            layer.minZoom = 16.5f
+            val below = firstSymbolId(style)
+            if (below != null) style.addLayerBelow(layer, below) else style.addLayer(layer)
+        }
+        recolorHouseNumbers(style, light)
+        setHouseNumbers(style, houseNumbers.value)
+    }
+
+    private fun recolorHouseNumbers(style: Style, light: Boolean) {
+        try {
+            (style.getLayer(HOUSENUM) as? SymbolLayer)?.setProperties(
+                PropertyFactory.textColor(Color.parseColor(if (light) "#4A5460" else "#9CA6B3")),
+                PropertyFactory.textHaloColor(Color.parseColor(if (light) "#EEF1F4" else "#0A0C0F")),
+            )
+        } catch (_: Exception) {
+        }
+    }
+
+    fun setHouseNumbers(style: Style, on: Boolean) {
+        try { style.getLayer(HOUSENUM)?.setProperties(PropertyFactory.visibility(if (on) Property.VISIBLE else Property.NONE)) } catch (_: Exception) {}
+    }
 
     private fun has(id: String, vararg keys: String) = keys.any { id.contains(it) }
 
@@ -105,6 +160,7 @@ object CarMapStyle {
             }
         }
         swapBuildings(style, light)
+        recolorHouseNumbers(style, light)
     }
 
     private fun buildingsId(light: Boolean) = BUILDINGS_3D + if (light) "-l" else "-d"

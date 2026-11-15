@@ -1236,6 +1236,10 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
 
     Label("Wygląd", Modifier.padding(top = 6.dp))
     ThemeChooser()
+    run {
+        val nums by CarMapStyle.houseNumbers.collectAsState()
+        ToggleRow("Numery domów na mapie", "Widoczne po mocnym przybliżeniu (poziom ulic)", nums) { CarMapStyle.setHouseNumbersPref(it) }
+    }
 
     RadioReportCard()
     Label("Kopia ustawień CAR OS", Modifier.padding(top = 6.dp))

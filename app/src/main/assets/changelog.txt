@@ -2,6 +2,11 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Numery domów na mapie
+- Na wszystkich mapach (parking, auto na żywo, podgląd trasy, trasy) numery domów po mocnym przybliżeniu
+- Przełącznik: Ustawienia → Wygląd → „Numery domów na mapie”
+
 ## 1.37 · 2026-11-15
 Zaplanuj wyjazd
 - W oknie „Wyślij do auta”: „Wyjadę o…” (podajesz godzinę wyjazdu) albo „Chcę być o…” – wtedy pokazuje, o której wyjechać, licząc korki prognozowane na tę godzinę

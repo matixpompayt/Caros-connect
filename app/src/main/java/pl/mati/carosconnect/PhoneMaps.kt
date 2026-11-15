@@ -94,6 +94,7 @@ private class MapHolder(ctx: Context, onStyle: (MapLibreMap, Style) -> Unit) {
             }
             m.setStyle(Style.Builder().fromUri(CarMapStyle.STYLE_URL)) { st ->
                 CarMapStyle.apply(st, C.isLight)
+                CarMapStyle.addHouseNumbers(st, C.isLight)
                 onStyle(m, st)
                 style = st
                 ready = true
@@ -107,6 +108,8 @@ private fun rememberMapLifecycle(h: MapHolder) {
     // jasny / ciemny wygląd mapy razem z aplikacją
     val light = C.isLight
     LaunchedEffect(light, h.ready) { if (h.ready) h.style?.let { CarMapStyle.apply(it, light) } }
+    val nums by CarMapStyle.houseNumbers.collectAsState()
+    LaunchedEffect(nums, h.ready) { if (h.ready) h.style?.let { CarMapStyle.setHouseNumbers(it, nums) } }
     // w oknie dialogowym kontekst bywa opakowany – wtedy cykl życia z kompozycji
     val lifecycle = (LocalContext.current as? ComponentActivity)?.lifecycle ?: androidx.compose.ui.platform.LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
