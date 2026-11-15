@@ -2,6 +2,11 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Zasięg zawsze widoczny
+- Zasięg auta pokazuje się zawsze – gdy radio nie przyśle wyniku, telefon liczy go sam z tankowań, przebiegu i spalania
+- Po dodaniu tankowania w telefonie zasięg od razu się przelicza (bez czekania na radio)
+
 ## 1.41 · 2026-11-15
 CamSam w końcu działa
 - CamSam naprawiony: ostrzeżenia CamSam PLUS są w pływającym okienku, nie w powiadomieniu – teraz aplikacja czyta to okienko (ikona znaku, pasek odległości, ulica) i wysyła je do radia

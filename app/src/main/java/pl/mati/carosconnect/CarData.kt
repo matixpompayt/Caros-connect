@@ -299,7 +299,9 @@ object CarData {
                         Fill(x.optString("id"), x.optLong("t"), x.optInt("o"), x.optDouble("l"), x.optDouble("c"), x.optBoolean("f", true))
                     },
                     if (f.isNull("avg")) null else f.optDouble("avg"),
-                    if (f.isNull("range")) null else f.optDouble("range"),
+                    // radio nie przysłało zasięgu albo tankowanie dodane w telefonie czeka na radio – liczymy sami
+                    (if (f.isNull("range") || o.optBoolean("pending")) null else f.optDouble("range"))
+                        ?: localRange(f, if (o.isNull("odo")) null else o.optInt("odo")),
                     if (f.isNull("ckm")) null else f.optDouble("ckm"),
                     f.optBoolean("est", true),
                 )
@@ -318,6 +320,24 @@ object CarData {
         )
     } catch (_: Exception) {
         null
+    }
+
+    /**
+     * Zasięg jak w CAR OS: pełny bak przy ostatnim tankowaniu „do pełna” + dolane później
+     * − spalone wg przebiegu (średnie spalanie z radia albo domyślne).
+     */
+    private fun localRange(f: JSONObject, odo: Int?): Double? {
+        val a = f.optJSONArray("fills") ?: return null
+        val fills = (0 until a.length()).map { a.getJSONObject(it) }.sortedBy { it.optInt("o") }
+        val lastFull = fills.lastOrNull { it.optBoolean("f", true) && it.optInt("o") > 0 } ?: return null
+        val tank = f.optInt("tank", 60).toDouble()
+        val use = (if (!f.isNull("use")) f.optDouble("use") else if (!f.isNull("avg")) f.optDouble("avg") else 7.5)
+            .takeIf { it in 2.0..30.0 } ?: 7.5
+        val lfOdo = lastFull.optInt("o")
+        val now = odo?.takeIf { it >= lfOdo } ?: fills.maxOf { it.optInt("o") }
+        val added = fills.filter { it.optInt("o") > lfOdo }.sumOf { it.optDouble("l", 0.0) }
+        val left = (tank + added - (now - lfOdo) * use / 100).coerceIn(0.0, tank)
+        return left / use * 100
     }
 
     // ---------- trasy ----------
