@@ -60,7 +60,8 @@ object CarMapStyle {
             if (below != null) style.addLayerBelow(layer, below) else style.addLayer(layer)
         }
         recolorHouseNumbers(style, light)
-        setHouseNumbers(style, houseNumbers.value)
+        // budynki 3D zasłaniają napisy mapy – numery rysuje HouseNumbersOverlay
+        setHouseNumbers(style, false)
     }
 
     private fun recolorHouseNumbers(style: Style, light: Boolean) {

@@ -108,8 +108,8 @@ private fun rememberMapLifecycle(h: MapHolder) {
     // jasny / ciemny wygląd mapy razem z aplikacją
     val light = C.isLight
     LaunchedEffect(light, h.ready) { if (h.ready) h.style?.let { CarMapStyle.apply(it, light) } }
-    val nums by CarMapStyle.houseNumbers.collectAsState()
-    LaunchedEffect(nums, h.ready) { if (h.ready) h.style?.let { CarMapStyle.setHouseNumbers(it, nums) } }
+    // numery rysuje HouseNumbersOverlay (nad budynkami 3D) – zwykła warstwa ukryta
+    LaunchedEffect(h.ready) { if (h.ready) h.style?.let { CarMapStyle.setHouseNumbers(it, false) } }
     // w oknie dialogowym kontekst bywa opakowany – wtedy cykl życia z kompozycji
     val lifecycle = (LocalContext.current as? ComponentActivity)?.lifecycle ?: androidx.compose.ui.platform.LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
@@ -236,6 +236,7 @@ fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier, l
 
     Box(modifier) {
         AndroidView(factory = { h.view }, modifier = Modifier.fillMaxSize())
+        HouseNumbers(h)
         Column(Modifier.align(Alignment.BottomEnd).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             MapBtn({ is3d = !is3d }) { Text(if (is3d) "3D" else "2D", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = if (is3d) C.Accent else C.Text) }
             MapBtn({
@@ -326,7 +327,10 @@ fun TripMap(pts: List<LatLng>, modifier: Modifier) {
             try { h.map?.moveCamera(CameraUpdateFactory.newLatLngBounds(b.build(), (40 * h.density).toInt())) } catch (_: Exception) {}
         }
     }
-    AndroidView(factory = { h.view }, modifier = modifier)
+    Box(modifier) {
+        AndroidView(factory = { h.view }, modifier = Modifier.fillMaxSize())
+        HouseNumbers(h)
+    }
 }
 
 /** Podgląd trasy przed wysłaniem do auta: linia trasy, korki na trasie, start (auto) i cel. */
@@ -418,6 +422,15 @@ fun RouteMap(pts: List<LatLng>, jams: List<RoutePreview.Jam>, modifier: Modifier
             }),
         )
     }
-    AndroidView(factory = { h.view }, modifier = modifier)
+    Box(modifier) {
+        AndroidView(factory = { h.view }, modifier = Modifier.fillMaxSize())
+        HouseNumbers(h)
+    }
 }
 
+/** Numery domów nad mapą – budynki 3D zasłaniałyby zwykłą warstwę napisów. */
+@Composable
+private fun HouseNumbers(h: MapHolder) {
+    val on by CarMapStyle.houseNumbers.collectAsState()
+    HouseNumbersOverlay(if (h.ready) h.map else null, if (h.ready) h.style else null, on, C.isLight, Modifier.fillMaxSize())
+}
