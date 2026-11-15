@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.36 · 2026-11-15
 Podgląd trasy przy „Wyślij do auta”
 - Po udostępnieniu miejsca z Map Google okno pokazuje mapę z trasą – start z miejsca zaparkowanego auta (gdy jesteś w aucie: z jego aktualnej pozycji)
 - Godzina przyjazdu, czas i długość trasy
