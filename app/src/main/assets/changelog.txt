@@ -2,6 +2,12 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+- CamSam naprawiony: ostrzeżenia CamSam PLUS są w pływającym okienku, nie w powiadomieniu – teraz aplikacja czyta to okienko (ikona znaku, pasek odległości, ulica) i wysyła je do radia
+- Nowe uprawnienie: Ustawienia → Ostrzeżenia drogowe → „Odczyt okienka CamSam” (ułatwienia dostępu, czyta tylko CamSam/Yanosika)
+- Podgląd na żywo, co aplikacja widzi w okienku CamSam (do sprawdzenia, czy działa)
+- Radio dostaje informację, że CamSam jest włączony na telefonie – na mapie CAR OS pokazuje się znaczek
+
 ## 1.39 · 2026-11-15
 Numery domów nad budynkami 3D
 - Budynki 3D nie zasłaniają już numerów domów – numery są rysowane nad mapą, zawsze na wierzchu, bez nachodzenia na siebie

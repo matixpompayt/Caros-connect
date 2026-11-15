@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,7 +45,9 @@ object CamSamRelay {
 
     private var sp: SharedPreferences? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val out = Channel<JSONObject>(Channel.CONFLATED)
+    // kolejka (kilka wiadomości naraz: stan + ostrzeżenie), najstarsze odpadają
+    private val out = Channel<JSONObject>(8, BufferOverflow.DROP_OLDEST)
+    private var app: Context? = null
     private var worker: Job? = null
     private var keepalive: Job? = null
 
@@ -80,8 +83,41 @@ object CamSamRelay {
         if (sp != null) return
         val p = ctx.applicationContext.getSharedPreferences("camsam", Context.MODE_PRIVATE)
         sp = p
+        app = ctx.applicationContext
         enabled.value = p.getBoolean("on", true)
         lastSent.value = p.getLong("sent_at", 0L)
+        startWatch()
+    }
+
+    /**
+     * Co 20 s: czy CamSam działa (jego stałe powiadomienie albo okienko). Po wejściu do auta
+     * stan idzie od razu – powiadomienie CamSam zwykle wisi już wcześniej i nie przychodzi ponownie.
+     */
+    private fun startWatch() {
+        scope.launch {
+            var wasInCar = false
+            while (isActive) {
+                try {
+                    val ctx = app
+                    if (ctx != null && enabled.value && Store.pairing.value != null) {
+                        val car = inCar(ctx)
+                        if (car && !wasInCar) synchronized(this@CamSamRelay) { runningOn = false; runningSentAt = 0L }
+                        wasInCar = car
+                        if (car) {
+                            val notif = CamSamListener.camsamPosted()
+                            val hudNow = CamSamAccess.hud.value?.let { System.currentTimeMillis() - it.at < 30_000 } == true
+                            when {
+                                notif == true || hudNow -> markRunning()
+                                notif == false -> setRunning(false)
+                                // null: brak dostępu do powiadomień – decyduje samo okienko
+                            }
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+                delay(20_000)
+            }
+        }
     }
 
     fun setEnabled(v: Boolean) {
@@ -141,6 +177,8 @@ object CamSamRelay {
         val isAlert = ALERT.containsMatchIn(all) && !IDLE.containsMatchIn(all)
         lastSeen.value = Seen(app, title, text, isAlert, System.currentTimeMillis())
         if (!enabled.value || Store.pairing.value == null) return
+        // samo powiadomienie CamSam = aplikacja działa
+        if (inCar(ctx)) markRunning()
         if (isAlert) {
             if (!inCar(ctx)) return
             alert(sbn.packageName, app, title.ifBlank { app }, text)
@@ -151,6 +189,114 @@ object CamSamRelay {
 
     fun onRemoved(sbn: StatusBarNotification) {
         if (activePkg == sbn.packageName) end()
+        // CamSam wyłączony (zniknęło jego stałe powiadomienie, a okienka nie ma)
+        if (sbn.isOngoing && CamSamAccess.hud.value == null) setRunning(false)
+    }
+
+    // ---------- „CamSam działa” (znaczek w radiu) ----------
+
+    private var runningOn = false
+    private var runningSentAt = 0L
+
+    @Synchronized
+    fun markRunning() = setRunning(true)
+
+    @Synchronized
+    private fun setRunning(on: Boolean) {
+        if (!enabled.value || Store.pairing.value == null) return
+        val now = System.currentTimeMillis()
+        // zmiana od razu; podtrzymanie co 5 min (radio gasi znaczek po 12 min ciszy)
+        if (on == runningOn && (!on || now - runningSentAt < 5 * 60_000L)) return
+        runningOn = on
+        runningSentAt = now
+        val name = activeApp.ifBlank { app?.let { installed(it) }?.let { appName(it) } ?: "CamSam" }
+        enqueue(JSONObject().put("type", "camsam").put("on", on).put("app", name).put("t", now))
+    }
+
+    // ---------- pływające okienko CamSam (ułatwienia dostępu) ----------
+
+    private var hudAlert = false
+    private var hudIcon = ""
+    private var hudBar = ""
+    private var hudSentAt = 0L
+
+    /** Prosty „odcisk” ikony 8×8 – ta sama ikona = ten sam znak. */
+    private fun iconHash(b: android.graphics.Bitmap): String {
+        val s = android.graphics.Bitmap.createScaledBitmap(b, 8, 8, true)
+        val px = IntArray(64) { i -> val c = s.getPixel(i % 8, i / 8); (android.graphics.Color.red(c) + android.graphics.Color.green(c) + android.graphics.Color.blue(c)) / 3 }
+        val avg = px.average()
+        var h = 0L
+        for (i in 0 until 64) if (px[i] > avg) h = h or (1L shl i)
+        return java.lang.Long.toHexString(h)
+    }
+
+    private fun hamming(a: String, b: String): Int = try {
+        java.lang.Long.bitCount(java.lang.Long.parseUnsignedLong(a, 16) xor java.lang.Long.parseUnsignedLong(b, 16))
+    } catch (_: Exception) {
+        64
+    }
+
+    private fun street(texts: List<String>): String =
+        texts.filter { t -> !t.startsWith("[") && t.any { it.isLetter() } && !t.equals("km/h", true) && t.length >= 3 }
+            .maxByOrNull { it.length }.orEmpty()
+
+    /** CamSam otwarty na telefonie (pełny ekran) – działa, ale okienka ostrzeżeń nie ma. */
+    fun appVisible() {
+        val ctx = app ?: return
+        if (enabled.value && Store.pairing.value != null && inCar(ctx)) markRunning()
+    }
+
+    private var hudQuiet = 0
+
+    @Synchronized
+    fun onHud(h: CamSamAccess.Hud) {
+        val ctx = app ?: return
+        if (!enabled.value || Store.pairing.value == null || !inCar(ctx)) return
+        markRunning()
+        val icon = h.icon
+        // ostrzeżenie: w miejscu ikony coś jest (bez wycinka ekranu – po napisach)
+        val alert = if (icon != null) !h.iconBlank else h.texts.any { ALERT.containsMatchIn(it) && !IDLE.containsMatchIn(it) }
+        val now = System.currentTimeMillis()
+        if (!alert) {
+            // koniec dopiero po 3 kolejnych „spokojnych” odczytach (~3 s) – pojedyncza klatka nie gasi banera
+            if (hudAlert && ++hudQuiet >= 3) {
+                hudAlert = false
+                hudQuiet = 0
+                enqueue(JSONObject().put("type", "camsam_hud").put("alert", false).put("t", now))
+            }
+            return
+        }
+        hudQuiet = 0
+        var ih = icon?.let { iconHash(it) } ?: ""
+        // inny znak = wyraźnie inna ikona (miganie/animacja ikony to nie nowe ostrzeżenie), najwyżej co 5 s
+        val otherSign = hudAlert && ih.isNotEmpty() && hudIcon.isNotEmpty() && hamming(ih, hudIcon) > 14 && now - hudSentAt >= 5000
+        if (hudAlert && !otherSign && hudIcon.isNotEmpty()) ih = hudIcon
+        val fresh = !hudAlert || otherSign
+        val barChanged = h.bar != hudBar
+        val due = fresh || (barChanged && now - hudSentAt >= 3000) || now - hudSentAt >= 20_000
+        if (!due) return
+        if (!fresh && !barChanged && !underBudget()) return
+        hudAlert = true
+        hudIcon = ih
+        hudBar = h.bar
+        hudSentAt = now
+        val o = JSONObject().put("type", "camsam_hud").put("alert", true).put("app", h.app)
+            .put("bar", h.bar).put("street", street(h.texts)).put("ih", ih).put("t", now)
+            .put("txt", h.texts.filter { !it.startsWith("[") }.joinToString(" · ").take(120))
+        // obrazek ikony przy nowym ostrzeżeniu / zmianie znaku (ok. 1 KB)
+        if (icon != null && ih.isNotEmpty() && fresh) {
+            try { iconB64(icon).takeIf { it.isNotEmpty() }?.let { o.put("icon", it) } } catch (_: Exception) {}
+        }
+        enqueue(o)
+    }
+
+    /** Okienko CamSam zniknęło (aplikacja zamknięta albo ekran wyłączony). */
+    @Synchronized
+    fun hudGone() {
+        if (hudAlert) {
+            hudAlert = false
+            enqueue(JSONObject().put("type", "camsam_hud").put("alert", false).put("t", System.currentTimeMillis()))
+        }
     }
 
     private fun texts(v: View, out: MutableSet<String>) {
@@ -253,12 +399,17 @@ object CamSamRelay {
 class CamSamListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
+        instance = this
         Store.init(this)
         CamSamRelay.init(this)
         try {
             activeNotifications?.forEach { if (CamSamRelay.appName(it.packageName) != null) CamSamRelay.onPosted(this, it) }
         } catch (_: Exception) {
         }
+    }
+
+    override fun onListenerDisconnected() {
+        if (instance === this) instance = null
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -277,5 +428,15 @@ class CamSamListener : NotificationListenerService() {
 
     companion object {
         fun component(ctx: Context) = ComponentName(ctx, CamSamListener::class.java)
+
+        @Volatile
+        private var instance: CamSamListener? = null
+
+        /** Czy CamSam / Yanosik ma teraz powiadomienie (null – nasłuch nieaktywny). */
+        fun camsamPosted(): Boolean? = try {
+            instance?.activeNotifications?.any { CamSamRelay.appName(it.packageName) != null }
+        } catch (_: Exception) {
+            null
+        }
     }
 }

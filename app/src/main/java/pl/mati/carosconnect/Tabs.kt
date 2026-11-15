@@ -67,6 +67,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.ContentCopy
@@ -1500,13 +1502,16 @@ private fun CamSamSection() {
     val on by CamSamRelay.enabled.collectAsState()
     val pairing by Store.pairing.collectAsState()
     var access by remember { mutableStateOf(CamSamRelay.hasAccess(ctx)) }
+    var a11y by remember { mutableStateOf(CamSamAccess.enabled(ctx)) }
     // odświeżenie po powrocie z ustawień systemu
     LaunchedEffect(Unit) {
         while (true) {
             access = CamSamRelay.hasAccess(ctx)
+            a11y = CamSamAccess.enabled(ctx)
             delay(1500)
         }
     }
+    val hud by CamSamAccess.hud.collectAsState()
     val seen by CamSamRelay.lastSeen.collectAsState()
     val sent by CamSamRelay.lastSent.collectAsState()
     val err by CamSamRelay.lastError.collectAsState()
@@ -1527,6 +1532,17 @@ private fun CamSamSection() {
         if (access) "Włączony – aplikacja widzi powiadomienia CamSam" else "Wyłączony – dotknij i włącz „CAR OS Connect”",
         highlight = !access,
     ) { openListenerSettings(ctx) }
+    // pływające okienko CamSam – tylko przez ułatwienia dostępu
+    SettingItem(
+        Icons.Rounded.Visibility, "Odczyt okienka CamSam",
+        if (a11y) "Włączony – ostrzeżenia z okienka CamSam idą do radia"
+        else "Wyłączony – dotknij → Zainstalowane aplikacje → „CAR OS Connect – okienko CamSam” → włącz. " +
+            "Gdy jest wyszarzone: Ustawienia → Aplikacje → CAR OS Connect → ⋮ → „Zezwól na ustawienia z ograniczeniami”",
+        highlight = !a11y,
+    ) {
+        try { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {}
+    }
+    hud?.let { h -> CamSamHudPreview(h) }
     val fmt = SimpleDateFormat("H:mm:ss", PL)
     val lines = buildList {
         add(app?.let { "Na telefonie: " + (CamSamRelay.appName(it) ?: it) } ?: "Nie znaleziono CamSam ani Yanosika na telefonie")
@@ -1534,10 +1550,44 @@ private fun CamSamSection() {
         seen?.let { add("Ostatnio z ${it.app} (${fmt.format(Date(it.time))}): " + listOf(it.title, it.text).filter { t -> t.isNotBlank() }.joinToString(" · ").take(90) + if (it.alert) " → ostrzeżenie" else " → pominięte (to nie ostrzeżenie)") }
         if (sent > 0) add("Wysłano do auta: ${fmt.format(Date(sent))} · dziś ${CamSamRelay.sentToday()} wiad.")
         err?.let { add("Błąd wysyłki: $it") }
-        add("Wysyłane tylko, gdy telefon jest połączony z radiem. W CamSam włącz powiadomienia z ostrzeżeniami.")
+        add("Wysyłane tylko, gdy telefon jest połączony z radiem. Ikona ostrzeżenia i pasek odległości są czytane z okienka CamSam – ekran telefonu musi być włączony.")
     }
     Text(lines.joinToString("\n"), fontSize = 13.sp, color = C.Muted, modifier = Modifier.padding(horizontal = 4.dp))
     if (pairing != null) SecondaryButton("Wyślij próbne ostrzeżenie do auta", Icons.Rounded.NotificationsActive) { CamSamRelay.test() }
+}
+
+/** Podgląd: co aplikacja widzi w okienku CamSam (do sprawdzenia, czy odczyt działa). */
+@Composable
+private fun CamSamHudPreview(h: CamSamAccess.Hud) {
+    var more by remember { mutableStateOf(false) }
+    Card {
+        Text("Okienko ${h.app} – odczyt ${SimpleDateFormat("H:mm:ss", PL).format(Date(h.at))}", fontSize = 13.sp, color = C.Muted)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            val ic = h.icon
+            if (ic != null) androidx.compose.foundation.Image(ic.asImageBitmap(), null, Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    when {
+                        ic == null -> "Bez wycinka ekranu (Android 11+ potrzebny do ikony)"
+                        h.iconBlank -> "Brak ostrzeżenia"
+                        else -> "Ostrzeżenie – idzie do radia"
+                    },
+                    fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = if (ic != null && !h.iconBlank) C.Orange else C.Text,
+                )
+                if (h.bar.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    h.bar.forEach { c ->
+                        Box(Modifier.size(width = 22.dp, height = 6.dp).clip(RoundedCornerShape(2.dp)).background(
+                            when (c) { 'R' -> Color(0xFFE53935); 'Y' -> Color(0xFFFFC107); 'G' -> Color(0xFF43A047); else -> C.Raised },
+                        ))
+                    }
+                }
+            }
+        }
+        Text(h.texts.joinToString(" · ").take(160), fontSize = 12.sp, color = C.Muted)
+        Text(if (more) "Ukryj szczegóły" else "Szczegóły (do diagnostyki)", fontSize = 12.sp, color = C.Accent,
+            modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable { more = !more }.padding(vertical = 4.dp))
+        if (more) Text(h.nodes.joinToString("\n").take(1500), fontSize = 11.sp, color = C.Text2)
+    }
 }
 
 // ======================= Korki (TomTom) → CAR OS =======================

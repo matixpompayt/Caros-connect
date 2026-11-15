@@ -4,4 +4,6 @@
     <string name="widget_desc">Gdzie stoi auto i prowadzenie do niego</string>
     <string name="widget_fuel_desc">Maksymalne ceny paliw dziś i jutro</string>
     <string name="send_to_car">Wyślij do auta</string>
+    <string name="camsam_access_name">CAR OS Connect – okienko CamSam</string>
+    <string name="camsam_access_desc">Odczytuje wyłącznie pływające okienko CamSam / Yanosika (ikonę ostrzeżenia, pasek odległości i nazwę ulicy) i wysyła je do radia CAR OS. Nie czyta innych aplikacji.</string>
 </resources>
