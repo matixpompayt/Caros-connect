@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.44 · 2026-11-18
 Dziennik zdarzeń ze statystykami
 - Nowa strona: Ustawienia → Dziennik zdarzeń
 - Statystyki za dziś / 7 / 30 dni: połączenia z radiem, parkowania, ostrzeżenia CamSam, wysłane cele, wiadomości do radia, dane z radia, błędy
