@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.NewReleases
+import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.LocalGasStation
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.CloudDownload
@@ -1286,6 +1287,12 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
 
     Label("Aplikacja", Modifier.padding(top = 6.dp))
     var changelog by remember { mutableStateOf(false) }
+    val evs by EventLog.events.collectAsState()
+    SettingItem(
+        Icons.Rounded.Insights, "Dziennik zdarzeń",
+        "Statystyki i historia: jazdy, parkowanie, CamSam, wysłane cele, błędy" +
+            (evs.firstOrNull()?.let { " · ostatnio " + SimpleDateFormat("d.MM HH:mm", PL).format(Date(it.time)) } ?: ""),
+    ) { LogPage.show() }
     SettingItem(Icons.Rounded.NewReleases, "Co nowego", "Lista zmian w kolejnych wersjach") { changelog = true }
     if (changelog) ChangelogDialog { changelog = false }
     UpdateItem()

@@ -143,8 +143,8 @@ object LiveFeed {
                 c.setRequestProperty("Accept", "text/event-stream")
                 try {
                     val code = c.responseCode
-                    if (code == 401 || code == 403) { fbState.value = "Baza odrzuca odczyt – sprawdź reguły"; delay(30_000); continue }
-                    if (code !in 200..299) { fbState.value = "Firebase: błąd $code"; delay(backoff); backoff = (backoff * 2).coerceAtMost(60_000); continue }
+                    if (code == 401 || code == 403) { fbState.value = "Baza odrzuca odczyt – sprawdź reguły"; EventLog.add(EventLog.Cat.LIVE, "Pozycja na żywo: " + "Baza odrzuca odczyt – sprawdź reguły", err = true, throttleKey = "fb", throttleMs = 30 * 60_000L); delay(30_000); continue }
+                    if (code !in 200..299) { fbState.value = "Firebase: błąd $code"; EventLog.add(EventLog.Cat.LIVE, "Pozycja na żywo: " + "Firebase: błąd $code", err = true, throttleKey = "fb", throttleMs = 30 * 60_000L); delay(backoff); backoff = (backoff * 2).coerceAtMost(60_000); continue }
                     fbState.value = "Połączono z bazą"
                     backoff = 2000L
                     val rd = c.inputStream.bufferedReader()
@@ -184,7 +184,7 @@ object LiveFeed {
                                             }
                                         }
                                     }
-                                    "cancel", "auth_revoked" -> { fbState.value = "Baza zamknęła dostęp – sprawdź reguły"; break }
+                                    "cancel", "auth_revoked" -> { fbState.value = "Baza zamknęła dostęp – sprawdź reguły"; EventLog.add(EventLog.Cat.LIVE, "Pozycja na żywo: " + "Baza zamknęła dostęp – sprawdź reguły", err = true, throttleKey = "fb", throttleMs = 30 * 60_000L); break }
                                 }
                             }
                         }
@@ -193,7 +193,7 @@ object LiveFeed {
                     c.disconnect()
                 }
             } catch (e: Exception) {
-                fbState.value = "Brak połączenia z bazą – ponawiam"
+                fbState.value = "Brak połączenia z bazą – ponawiam"; EventLog.add(EventLog.Cat.LIVE, "Pozycja na żywo: " + "Brak połączenia z bazą – ponawiam", err = true, throttleKey = "fb", throttleMs = 30 * 60_000L)
             }
             delay(backoff)
             backoff = (backoff * 2).coerceAtMost(60_000)

@@ -108,7 +108,7 @@ object Link {
                 try {
                     c.outputStream.use { it.write(body.toByteArray()) }
                     val code = c.responseCode
-                    if (code in 200..299) return
+                    if (code in 200..299) { EventLog.onSent(o); return }
                     last = IOException("HTTP $code")
                     if (code == 429) Thread.sleep(6000)
                 } finally {
@@ -119,6 +119,7 @@ object Link {
                 Thread.sleep(2000)
             }
         }
+        EventLog.onSendFailed(o, last)
         throw last ?: IOException("Brak połączenia")
     }
 

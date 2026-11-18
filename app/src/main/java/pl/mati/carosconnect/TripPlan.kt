@@ -70,11 +70,13 @@ object TripPlan {
     }
 
     fun set(ctx: Context, p: Plan) {
+        EventLog.add(EventLog.Cat.NAV, "Zaplanowano wyjazd: ${p.name} – wyjazd ${RoutePreview.hhmm(p.depart)}, przyjazd ${RoutePreview.hhmm(p.arrive)}")
         persist(ctx, p)
         schedule(ctx)
     }
 
     fun cancel(ctx: Context) {
+        plan.value?.let { EventLog.add(EventLog.Cat.NAV, "Odwołano wyjazd: ${it.name}") }
         persist(ctx, null)
         ctx.getSystemService(AlarmManager::class.java)?.cancel(alarmIntent(ctx))
         try { ctx.getSystemService(NotificationManager::class.java)?.cancel(ID) } catch (_: Exception) {}
@@ -130,6 +132,7 @@ object TripPlan {
             q.delayS?.let { d -> append(if (d >= 60) " · korki +${(d / 60.0).roundToInt()} min" else " · bez korków") }
             if (late && q.arriveBy) append(" – już po czasie, jedź od razu")
         }
+        EventLog.add(EventLog.Cat.NAV, "Przypomnienie o wyjeździe: $title – $text")
         notify(ctx, title, text)
         // przypomnienie zrobione – plan zostaje do przyjazdu (widać go w aplikacji), bez kolejnych alarmów
     }

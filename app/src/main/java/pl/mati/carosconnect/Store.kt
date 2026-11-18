@@ -86,6 +86,8 @@ object Store {
         sp = p
         carMac.value = p.getString("car_mac", null)
         loadLog()
+        EventLog.init(ctx)
+        EventLog.importOld(parkLog.value)
         carName.value = p.getString("car_name", null)
         theme.value = p.getString("theme", "auto") ?: "auto"
         spotNote.value = p.getString("spot_note", "") ?: ""
@@ -200,6 +202,7 @@ object Store {
             if (System.currentTimeMillis() - s.time < 3 * 60_000L) return
         }
         log(ctx, "Radio: " + (if (final) "miejsce po zgaszeniu auta" else "ostatni postój auta (zapas)") + " – zapisane")
+        EventLog.bump(EventLog.Metric.PARKS)
         clearNotesIfNew(s)
         spot.value = s
         history.value = (listOf(s) + history.value.filterNot { it.time == s.time }).take(20)
@@ -219,6 +222,8 @@ object Store {
         parkLog.value = list
         sp?.edit()?.putString("park_log", JSONArray(list).toString())?.apply()
         android.util.Log.i("CarOsConnect", msg)
+        EventLog.add(EventLog.catOfParkLine(msg), msg, EventLog.isErrorText(msg))
+        if (msg.startsWith("Połączono z radiem")) EventLog.bump(EventLog.Metric.DRIVES)
     }
 
     fun loadLog() {
@@ -231,6 +236,7 @@ object Store {
     /** Zapisuje nowe miejsce, dopisuje do historii i w tle ustala adres. */
     fun saveSpot(ctx: Context, s: Spot) {
         init(ctx)
+        EventLog.bump(EventLog.Metric.PARKS)
         clearNotesIfNew(s)
         spot.value = s
         history.value = (listOf(s) + history.value.filterNot { it.time == s.time }).take(20)

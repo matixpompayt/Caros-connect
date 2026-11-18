@@ -50,11 +50,21 @@ object Sync {
                 inbox.stop?.let { Store.offerCarSpot(ctx, it, final = false) }
                 inbox.carIcon?.let { (b, p) -> CarData.setCarIcon(b, p) }
                 inbox.status?.let { CarData.setStatusJson(it) }
+                if (CarData.status.value?.time != beforeStatus) EventLog.bump(EventLog.Metric.IN)
                 try { checkBattery(ctx) } catch (_: Exception) {}
                 try { checkLive(ctx) } catch (_: Exception) {}
                 inbox.live?.let { CarData.setLive(it) }
                 try { WorkReminder.schedule(ctx) } catch (_: Exception) {}
+                val tripsBefore = CarData.trips.value.map { it.start }.toSet()
                 CarData.mergeTrips(inbox.trips)
+                val newTrips = CarData.trips.value.filter { it.start !in tripsBefore }
+                if (newTrips.isNotEmpty()) {
+                    EventLog.bump(EventLog.Metric.IN)
+                    EventLog.add(
+                        EventLog.Cat.CAR,
+                        "Nowe trasy z radia: ${newTrips.size} (" + String.format(Locale("pl"), "%.1f km", newTrips.sumOf { it.distanceM } / 1000.0) + ")",
+                    )
+                }
                 inbox.backup?.let { (text, created, car) -> CarData.setBackup(text, created, car) }
                 inbox.report?.let { (text, t) -> RadioReport.save(ctx, text, t) }
                 CarData.setLastSync(System.currentTimeMillis())
@@ -63,7 +73,8 @@ object Sync {
                     CarData.status.value?.time != beforeStatus -> "Pobrano aktualne dane auta"
                     else -> "Odświeżono – brak nowych danych z CAR OS"
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                EventLog.add(EventLog.Cat.SYNC, "Brak połączenia z przekaźnikiem (${e.message ?: e.javaClass.simpleName})", err = true, throttleKey = "inbox", throttleMs = 30 * 60_000L)
                 "Brak połączenia z przekaźnikiem"
             }
         }
@@ -141,6 +152,7 @@ object Sync {
         }
         if (sp.getBoolean("live_notified", false)) return
         sp.edit().putBoolean("live_notified", true).apply()
+        EventLog.add(EventLog.Cat.CAR, "Auto ruszyło – jedzie ${l!!.speed} km/h (telefonu nie ma w aucie)")
         if (!CarData.notifLive.value || DriveService.running) return
         Notifs.live(ctx, "Auto ruszyło", "Jedzie teraz ${l!!.speed} km/h – dotknij, żeby zobaczyć na mapie, gdzie jest")
     }

@@ -70,6 +70,7 @@ class CamSamAccess : AccessibilityService() {
         Store.init(this)
         CamSamRelay.init(this)
         running.value = true
+        EventLog.add(EventLog.Cat.CAMSAM, "Odczyt okienka CamSam działa", throttleKey = "cs_access", throttleMs = 6 * 3_600_000L)
         handler.post(poll)
     }
 

@@ -294,8 +294,15 @@ fun ParkApp(perms: Perms, actions: Actions) {
         var tab by rememberSaveable { mutableIntStateOf(0) }
         var trip by remember { mutableStateOf<CarData.Trip?>(null) }
         val openTab by OpenTab.collectAsState()
-        LaunchedEffect(openTab) { openTab?.let { tab = it; trip = null; OpenTab.value = null } }
-        BackHandler(enabled = trip != null || tab != 0) { if (trip != null) trip = null else tab = 0 }
+        val logOpen by LogPage.open.collectAsState()
+        LaunchedEffect(openTab) { openTab?.let { tab = it; trip = null; LogPage.close(); OpenTab.value = null } }
+        BackHandler(enabled = logOpen || trip != null || tab != 0) {
+            when {
+                logOpen -> LogPage.close()
+                trip != null -> trip = null
+                else -> tab = 0
+            }
+        }
 
         // pociągnij w dół = odśwież (dane z CAR OS, uprawnienia, Bluetooth, aktualizacje)
         val pull = rememberPullToRefreshState()
@@ -311,7 +318,7 @@ fun ParkApp(perms: Perms, actions: Actions) {
         }
         Column(Modifier.fillMaxSize().then(if (glass) Modifier else Modifier.background(C.Bg))) {
             Box(Modifier.weight(1f).fillMaxWidth().nestedScroll(pull.nestedScrollConnection)) {
-                val scroll = remember(tab, trip) { ScrollState(0) }
+                val scroll = remember(tab, trip, logOpen) { ScrollState(0) }
                 Column(
                     Modifier.fillMaxSize().statusBarsPadding().verticalScroll(scroll).padding(horizontal = 18.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -326,12 +333,13 @@ fun ParkApp(perms: Perms, actions: Actions) {
                         StatusPill(driving, car)
                     }
                     AnimatedContent(
-                        targetState = tab to trip,
+                        targetState = Triple(tab, trip, logOpen),
                         transitionSpec = {
-                            val (t0, tr0) = initialState
-                            val (t1, tr1) = targetState
-                            // w prawo/lewo zgodnie z kolejnością zakładek; szczegóły trasy wjeżdżają z prawej
+                            val (t0, tr0, lg0) = initialState
+                            val (t1, tr1, lg1) = targetState
+                            // w prawo/lewo zgodnie z kolejnością zakładek; szczegóły trasy i dziennik wjeżdżają z prawej
                             val dir = when {
+                                lg1 != lg0 -> if (lg1) 1 else -1
                                 t1 != t0 -> if (t1 > t0) 1 else -1
                                 tr1 != null && tr0 == null -> 1
                                 else -> -1
@@ -340,10 +348,10 @@ fun ParkApp(perms: Perms, actions: Actions) {
                                 (fadeOut(tween(140)) + slideOutHorizontally(tween(220)) { w -> -dir * w / 8 })
                         },
                         label = "tab",
-                    ) { (t, tr) ->
+                    ) { (t, tr, lg) ->
                         CompositionLocalProvider(LocalStagger provides remember { StaggerCounter() }) {
                             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                                when (t) {
+                                if (lg) EventLogPage { LogPage.close() } else when (t) {
                                     0 -> ParkingTab(perms, actions) { picker = true }
                                     1 -> CarTab(actions)
                                     2 -> TripsTab(tr) { trip = it }
@@ -361,7 +369,7 @@ fun ParkApp(perms: Perms, actions: Actions) {
                     contentColor = C.Accent,
                 )
             }
-            BottomBar(tab) { tab = it; trip = null }
+            BottomBar(tab) { tab = it; trip = null; LogPage.close() }
         }
 
         if (picker) DevicePicker(actions, onDismiss = { picker = false })
@@ -1160,27 +1168,14 @@ private fun rememberAzimuth(me: Location?, enabled: Boolean): Float? {
     return az
 }
 
-/** „Co się działo przy parkowaniu” – dziennik zdarzeń (połączenie z radiem, zapis, błędy). */
+/** „Co się działo przy parkowaniu” – otwiera dziennik zdarzeń z filtrem „Parkowanie”. */
 @Composable
 private fun ParkLogLink() {
     val log by Store.parkLog.collectAsState()
-    var open by remember { mutableStateOf(false) }
     Text(
         "Dziennik parkowania" + (log.firstOrNull()?.let { " · ostatnio: " + it.substringAfter("  ").take(40) } ?: ""),
         fontSize = 13.sp, color = C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { open = true }.padding(horizontal = 4.dp, vertical = 6.dp),
-    )
-    if (open) AlertDialog(
-        onDismissRequest = { open = false },
-        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
-        title = { Text("Dziennik parkowania", color = C.Text) },
-        text = {
-            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (log.isEmpty()) Text("Jeszcze nic – zapisze się przy następnym połączeniu z radiem.", color = C.Muted, fontSize = 14.sp)
-                log.forEach { Text(it, color = C.Text, fontSize = 13.sp) }
-            }
-        },
-        confirmButton = { TextButton(onClick = { open = false }) { Text("Zamknij") } },
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { LogPage.show(EventLog.Cat.PARK) }.padding(horizontal = 4.dp, vertical = 6.dp),
     )
 }
 

@@ -2,6 +2,15 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Dziennik zdarzeń ze statystykami
+- Nowa strona: Ustawienia → Dziennik zdarzeń
+- Statystyki za dziś / 7 / 30 dni: połączenia z radiem, parkowania, ostrzeżenia CamSam, wysłane cele, wiadomości do radia, dane z radia, błędy
+- Wykres dzień po dniu – dotknij kafelek, żeby go pokazać
+- Historia zdarzeń pogrupowana po dniach, filtry (parkowanie, CamSam, cele, pozycja na żywo, połączenie, tylko błędy)
+- Udostępnianie dziennika jako tekst i czyszczenie
+- „Dziennik parkowania” na Parkingu otwiera tę stronę z filtrem parkowania
+
 ## 1.42 · 2026-11-15
 Zasięg zawsze widoczny
 - Zasięg auta pokazuje się zawsze – gdy radio nie przyśle wyniku, telefon liczy go sam z tankowań, przebiegu i spalania
