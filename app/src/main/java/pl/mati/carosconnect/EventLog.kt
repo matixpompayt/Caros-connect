@@ -194,7 +194,7 @@ object EventLog {
         }
     }
 
-    /** Suma licznika w dniach [fromDay..toDay] (yyyyMMdd). */
+    /** Suma licznika od dnia fromDay do toDay włącznie (yyyyMMdd). */
     fun sum(m: Metric, fromDay: String, toDay: String): Int =
         counters.value.entries.filter { it.key in fromDay..toDay }.sumOf { it.value[m.key] ?: 0 }
 
