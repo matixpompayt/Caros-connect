@@ -1243,6 +1243,7 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
         val nums by CarMapStyle.houseNumbers.collectAsState()
         ToggleRow("Numery domów na mapie", "Widoczne po mocnym przybliżeniu (poziom ulic)", nums) { CarMapStyle.setHouseNumbersPref(it) }
     }
+    MapThemeChooser()
 
     RadioReportCard()
     Label("Kopia ustawień CAR OS", Modifier.padding(top = 6.dp))
@@ -1594,6 +1595,50 @@ private fun CamSamHudPreview(h: CamSamAccess.Hud) {
         Text(if (more) "Ukryj szczegóły" else "Szczegóły (do diagnostyki)", fontSize = 12.sp, color = C.Accent,
             modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable { more = !more }.padding(vertical = 4.dp))
         if (more) Text(h.nodes.joinToString("\n").take(1500), fontSize = 11.sp, color = C.Text2)
+    }
+}
+
+/** Styl mapy w telefonie: standardowy albo Miami (podgląd w kolorach dnia/nocy wg wyglądu aplikacji). */
+@Composable
+private fun MapThemeChooser() {
+    val theme by CarMapStyle.theme.collectAsState()
+    val light = C.isLight
+    Text("Styl mapy", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text, modifier = Modifier.padding(top = 4.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        listOf(CarMapStyle.THEME_STD to "Standardowy", CarMapStyle.THEME_MIAMI to "Miami").forEach { (k, name) ->
+            val on = theme == k
+            val miami = k == CarMapStyle.THEME_MIAMI
+            val c = when {
+                miami && light -> listOf(0xFFF6E6D6, 0xFF4FCFDF, 0xFFB3E3C0, 0xFFFF5C9E, 0xFFFFAE55, 0xFFFFFFFF)
+                miami -> listOf(0xFF130B26, 0xFF0A1838, 0xFF0E2129, 0xFFFF3D9A, 0xFFFF8A3D, 0xFF22C3D6)
+                light -> listOf(0xFFDADFE4, 0xFFA9C6DC, 0xFFC4D9C3, 0xFFF1D9A0, 0xFFF7F8FA, 0xFFF4F5F7)
+                else -> listOf(0xFF0B0E12, 0xFF0C1A25, 0xFF0E1914, 0xFF677180, 0xFF535C69, 0xFF434B56)
+            }.map { Color(it) }
+            Column(
+                Modifier.weight(1f).clip(RoundedCornerShape(18.dp))
+                    .surface(RoundedCornerShape(18.dp), C.Raised, border = if (on) C.Accent else null, borderWidth = if (on) 2.dp else 1.dp)
+                    .clickable { CarMapStyle.setTheme(k) }.padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(78.dp).clip(RoundedCornerShape(12.dp))) {
+                    val w = size.width
+                    val h = size.height
+                    drawRect(c[0])
+                    drawCircle(c[1], radius = h * 0.75f, center = androidx.compose.ui.geometry.Offset(w * 1.02f, h * 1.05f))
+                    drawRect(c[2], topLeft = androidx.compose.ui.geometry.Offset(w * 0.08f, h * 0.1f), size = androidx.compose.ui.geometry.Size(w * 0.22f, h * 0.3f))
+                    fun road(col: Color, x0: Float, y0: Float, x1: Float, y1: Float, width: Float) {
+                        val a = androidx.compose.ui.geometry.Offset(x0 * w, y0 * h)
+                        val b = androidx.compose.ui.geometry.Offset(x1 * w, y1 * h)
+                        if (miami && !light) drawLine(col.copy(alpha = 0.28f), a, b, strokeWidth = width * 4.5f, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                        drawLine(col, a, b, strokeWidth = width, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                    }
+                    road(c[5], 0.55f, -0.1f, 0.4f, 1.1f, 4f)
+                    road(c[4], -0.1f, 0.62f, 1.1f, 0.42f, 6f)
+                    road(c[3], -0.1f, 0.2f, 1.1f, 0.95f, 8f)
+                }
+                Text(name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = if (on) C.Accent else C.Text, modifier = Modifier.padding(horizontal = 4.dp))
+            }
+        }
     }
 }
 

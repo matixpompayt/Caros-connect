@@ -107,7 +107,8 @@ private class MapHolder(ctx: Context, onStyle: (MapLibreMap, Style) -> Unit) {
 private fun rememberMapLifecycle(h: MapHolder) {
     // jasny / ciemny wygląd mapy razem z aplikacją
     val light = C.isLight
-    LaunchedEffect(light, h.ready) { if (h.ready) h.style?.let { CarMapStyle.apply(it, light) } }
+    val theme by CarMapStyle.theme.collectAsState()
+    LaunchedEffect(light, theme, h.ready) { if (h.ready) h.style?.let { CarMapStyle.apply(it, light) } }
     // numery rysuje HouseNumbersOverlay (nad budynkami 3D) – zwykła warstwa ukryta
     LaunchedEffect(h.ready) { if (h.ready) h.style?.let { CarMapStyle.setHouseNumbers(it, false) } }
     // w oknie dialogowym kontekst bywa opakowany – wtedy cykl życia z kompozycji

@@ -31,6 +31,17 @@ object CarMapStyle {
         if (prefs != null) return
         prefs = ctx.applicationContext.getSharedPreferences("map", android.content.Context.MODE_PRIVATE)
         houseNumbers.value = prefs?.getBoolean("housenum", true) ?: true
+        theme.value = prefs?.getString("theme", THEME_STD) ?: THEME_STD
+    }
+
+    /** Styl mapy: standardowy (dzień/noc) albo „Miami” (zachód słońca / neon). */
+    const val THEME_STD = "std"
+    const val THEME_MIAMI = "miami"
+    val theme = kotlinx.coroutines.flow.MutableStateFlow(THEME_STD)
+
+    fun setTheme(v: String) {
+        theme.value = v
+        prefs?.edit()?.putString("theme", v)?.apply()
     }
 
     fun setHouseNumbersPref(v: Boolean) {
@@ -67,8 +78,8 @@ object CarMapStyle {
     private fun recolorHouseNumbers(style: Style, light: Boolean) {
         try {
             (style.getLayer(HOUSENUM) as? SymbolLayer)?.setProperties(
-                PropertyFactory.textColor(Color.parseColor(if (light) "#4A5460" else "#9CA6B3")),
-                PropertyFactory.textHaloColor(Color.parseColor(if (light) "#EEF1F4" else "#0A0C0F")),
+                PropertyFactory.textColor(Color.parseColor(pal(light).hn)),
+                PropertyFactory.textHaloColor(Color.parseColor(pal(light).hnHalo)),
             )
         } catch (_: Exception) {
         }
@@ -86,6 +97,9 @@ object CarMapStyle {
         val lSecondary: String, val lPath: String, val lAero: String, val lRoad: String,
         val text: String, val textPoi: String, val textWater: String, val halo: String,
         val b0: String, val b1: String, val b2: String,
+        val hn: String, val hnHalo: String,
+        /** Poświata pod głównymi drogami (Miami nocą). */
+        val glow: Boolean = false,
     )
 
     private val DARK = MapColors(
@@ -93,6 +107,7 @@ object CarMapStyle {
         "#15344B", "#3A404A", "#262C34", "#06080B", "#677180", "#535C69", "#434B56", "#232931", "#2B313A", "#333A44",
         "#C3C9D0", "#8C96A3", "#4E7FA3", "#0A0C0F",
         "#1B212A", "#232B36", "#2C3644",
+        "#9CA6B3", "#0A0C0F",
     )
 
     /** Dzień: jasna, ale stonowana (nie biała) – pasuje do jasnego interfejsu CAR OS. */
@@ -101,11 +116,38 @@ object CarMapStyle {
         "#8FB6D3", "#A3A9B2", "#B3B8C0", "#B9BFC7", "#F1D9A0", "#F7F8FA", "#F4F5F7", "#C9CED5", "#C3C8CF", "#EEF0F3",
         "#2F3640", "#56606C", "#3C6F96", "#EEF1F4",
         "#C9CED6", "#BCC3CC", "#AEB7C2",
+        "#4A5460", "#EEF1F4",
     )
+
+    /** Miami – dzień: piasek, turkusowa woda, pastelowe budynki, różowo-pomarańczowe drogi. */
+    private val MIAMI_DAY = MapColors(
+        "#F6E6D6", "#4FCFDF", "#B3E3C0", "#F2CEC3", "#EED9CC", "#EAD4C6", "#F4E4D4",
+        "#36BACF", "#D59BBB", "#CDB4C6", "#E4A7BD", "#FF5C9E", "#FFAE55", "#FFF3E6", "#E6CBC1", "#E4C6D3", "#FFFFFF",
+        "#4A2140", "#7A4A6E", "#16788F", "#FFF6EE",
+        "#F7D2CA", "#F2B5C6", "#C7A2E0",
+        "#6E3A60", "#FFF6EE",
+    )
+
+    /** Miami – noc: granatowo-fioletowo, neonowe drogi z poświatą. */
+    private val MIAMI_NIGHT = MapColors(
+        "#130B26", "#0A1838", "#0E2129", "#25163E", "#1D1234", "#1B1031", "#170E2C",
+        "#1F4F8E", "#5C3A88", "#3B2A5E", "#090410", "#FF3D9A", "#FF8A3D", "#22C3D6", "#3D2B60", "#4B3672", "#6A4CA0",
+        "#F4E8FF", "#C8A6F0", "#6ED0FF", "#0D0619",
+        "#2B1A4A", "#3D2266", "#5C2D8A",
+        "#D8B8FF", "#0D0619",
+        glow = true,
+    )
+
+    private const val GLOW = "caros-road-glow"
+
+    private fun pal(light: Boolean): MapColors = when (theme.value) {
+        THEME_MIAMI -> if (light) MIAMI_DAY else MIAMI_NIGHT
+        else -> if (light) LIGHT else DARK
+    }
 
     /** Przemalowanie warstw stylu „Liberty”: ciemno (noc) albo jasno (dzień). */
     fun apply(style: Style, light: Boolean) {
-        val p = if (light) LIGHT else DARK
+        val p = pal(light)
         for (layer in style.layers) {
             val id = layer.id.lowercase()
             try {
@@ -162,9 +204,63 @@ object CarMapStyle {
         }
         swapBuildings(style, light)
         recolorHouseNumbers(style, light)
+        setGlow(style, p)
     }
 
-    private fun buildingsId(light: Boolean) = BUILDINGS_3D + if (light) "-l" else "-d"
+    /** Neonowa poświata: szeroka, rozmyta linia pod autostradami i głównymi drogami. */
+    private fun setGlow(style: Style, p: MapColors) {
+        try {
+            val cur = style.getLayer(GLOW)
+            if (!p.glow) {
+                cur?.let { style.removeLayer(it) }
+                return
+            }
+            if (cur != null) return
+            val firstRoad = style.layers.firstOrNull { it is LineLayer && it.sourceLayer == "transportation" && !it.id.startsWith("caros-") } ?: return
+            val src = (firstRoad as LineLayer).sourceId
+            val cls = Expression.get("class")
+            val layer = LineLayer(GLOW, src).withSourceLayer("transportation").withProperties(
+                PropertyFactory.lineColor(
+                    Expression.match(
+                        cls,
+                        Expression.literal("motorway"), Expression.color(Color.parseColor(p.lMotorway)),
+                        Expression.literal("trunk"), Expression.color(Color.parseColor(p.lMotorway)),
+                        Expression.literal("primary"), Expression.color(Color.parseColor(p.lPrimary)),
+                        Expression.color(Color.parseColor(p.lSecondary)),
+                    ),
+                ),
+                PropertyFactory.lineWidth(
+                    Expression.interpolate(
+                        Expression.exponential(1.35f), Expression.zoom(),
+                        Expression.stop(6, 3f), Expression.stop(10, 8f), Expression.stop(13, 14f), Expression.stop(15, 24f), Expression.stop(17, 44f), Expression.stop(19, 100f),
+                    ),
+                ),
+                PropertyFactory.lineBlur(
+                    Expression.interpolate(
+                        Expression.exponential(1.35f), Expression.zoom(),
+                        Expression.stop(6, 3f), Expression.stop(10, 7f), Expression.stop(13, 12f), Expression.stop(15, 20f), Expression.stop(17, 38f), Expression.stop(19, 84f),
+                    ),
+                ),
+                PropertyFactory.lineOpacity(0.32f),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            )
+            layer.setFilter(
+                Expression.match(
+                    cls,
+                    Expression.literal("motorway"), Expression.literal(true),
+                    Expression.literal("trunk"), Expression.literal(true),
+                    Expression.literal("primary"), Expression.literal(true),
+                    Expression.literal("secondary"), Expression.literal(true),
+                    Expression.literal(false),
+                ),
+            )
+            style.addLayerBelow(layer, firstRoad.id)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun buildingsId(light: Boolean) = BUILDINGS_3D + "-" + theme.value + if (light) "-l" else "-d"
 
     /**
      * Kolor budynków zależy od wysokości (wyrażenie per budynek), a MapLibre „wypieka” go
@@ -210,7 +306,7 @@ object CarMapStyle {
     fun applyDark(style: Style) = apply(style, false)
 
     private fun buildingColor(light: Boolean): Expression {
-        val p = if (light) LIGHT else DARK
+        val p = pal(light)
         return Expression.interpolate(
             Expression.linear(), Expression.get("render_height"),
             Expression.stop(0, Expression.color(Color.parseColor(p.b0))),
