@@ -2,6 +2,11 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Miami: palmy i zachód słońca
+- Styl mapy Miami: palmy wzdłuż ulic, poświata zachodu słońca nad horyzontem
+- Budynki w ciepłym świetle, wieczorem neonowe obrysy, żółte linie na głównych drogach
+
 ## 1.45 · 2026-11-19
 Styl mapy Miami
 - Nowy styl mapy „Miami” w telefonie: Ustawienia → Wygląd → Styl mapy

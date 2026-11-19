@@ -433,5 +433,8 @@ fun RouteMap(pts: List<LatLng>, jams: List<RoutePreview.Jam>, modifier: Modifier
 @Composable
 private fun HouseNumbers(h: MapHolder) {
     val on by CarMapStyle.houseNumbers.collectAsState()
+    val theme by CarMapStyle.theme.collectAsState()
+    // styl Miami: palmy wzdłuż ulic i poświata zachodu słońca (w widoku pochylonym)
+    MiamiOverlay(if (h.ready) h.map else null, if (h.ready) h.style else null, theme == CarMapStyle.THEME_MIAMI, C.isLight, null, Modifier.fillMaxSize())
     HouseNumbersOverlay(if (h.ready) h.map else null, if (h.ready) h.style else null, on, C.isLight, Modifier.fillMaxSize())
 }
