@@ -108,7 +108,8 @@ private fun rememberMapLifecycle(h: MapHolder) {
     // jasny / ciemny wygląd mapy razem z aplikacją
     val light = C.isLight
     val theme by CarMapStyle.theme.collectAsState()
-    LaunchedEffect(light, theme, h.ready) { if (h.ready) h.style?.let { CarMapStyle.apply(it, light) } }
+    val realBld by CarMapStyle.realBuildings.collectAsState()
+    LaunchedEffect(light, theme, realBld, h.ready) { if (h.ready) h.style?.let { CarMapStyle.apply(it, light) } }
     // numery rysuje HouseNumbersOverlay (nad budynkami 3D) – zwykła warstwa ukryta
     LaunchedEffect(h.ready) { if (h.ready) h.style?.let { CarMapStyle.setHouseNumbers(it, false) } }
     // w oknie dialogowym kontekst bywa opakowany – wtedy cykl życia z kompozycji

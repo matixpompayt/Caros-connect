@@ -1244,6 +1244,10 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
         ToggleRow("Numery domów na mapie", "Widoczne po mocnym przybliżeniu (poziom ulic)", nums) { CarMapStyle.setHouseNumbersPref(it) }
     }
     MapThemeChooser()
+    run {
+        val real by CarMapStyle.realBuildings.collectAsState()
+        ToggleRow("Realistyczne budynki", "Domy, bloki, hale i wieżowce z oknami i dachami (wieczorem świecą okna)", real) { CarMapStyle.setRealBuildings(it) }
+    }
 
     RadioReportCard()
     Label("Kopia ustawień CAR OS", Modifier.padding(top = 6.dp))

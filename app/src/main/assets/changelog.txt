@@ -2,6 +2,11 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Realistyczne budynki 3D
+- Na mapach budynki zamiast brył: domy, bloki z balkonami, hale, wieżowce, sklepy na parterze; wieczorem świecą okna
+- Przełącznik: Ustawienia → Wygląd → Realistyczne budynki
+
 ## 1.46 · 2026-11-19
 Miami: palmy i zachód słońca
 - Styl mapy Miami: palmy wzdłuż ulic, poświata zachodu słońca nad horyzontem
