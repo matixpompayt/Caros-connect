@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.49 · 2026-11-19
 Różnorodne budynki
 - Budynki na mapach dużo bardziej różnorodne: domy (tynk, cegła, siding, nowoczesne), kamienice, hale i fabryki, biurowce, bloki z balkonami i kolorowymi pasami, wieżowce z różnym szkłem
 - 3 rodzaje sklepów na parterze, dachy w różnych kolorach i wysokościach
