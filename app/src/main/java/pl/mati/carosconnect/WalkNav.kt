@@ -45,6 +45,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,7 +59,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import org.maplibre.android.geometry.LatLng
 import java.net.HttpURLConnection
@@ -110,9 +113,16 @@ object WalkNav {
      * Trasa piesza: najpierw Valhalla (profil pieszy, woli chodniki i ścieżki dla pieszych, przejścia,
      * omija podjazdy i zaułki), a gdy nie odpowie – OSRM z profilem pieszym.
      */
+    /** Ostatni błąd wyznaczania trasy (pokazywany, gdy trasy nie ma). */
+    val error = MutableStateFlow("")
+
     suspend fun route(from: Location, to: Store.Spot): Route? = withContext(Dispatchers.IO) {
-        (try { valhalla(from, to) } catch (_: Exception) { null })?.also { source.value = "chodnikami" }
-            ?: (try { osrm(from, to) } catch (_: Exception) { null })?.also { source.value = "pieszo" }
+        var e1 = ""
+        var e2 = ""
+        val r = (try { valhalla(from, to) } catch (e: Exception) { e1 = e.message ?: e.javaClass.simpleName; null })?.also { source.value = "chodnikami" }
+            ?: (try { osrm(from, to) } catch (e: Exception) { e2 = e.message ?: e.javaClass.simpleName; null })?.also { source.value = "pieszo" }
+        error.value = if (r == null) "Valhalla: $e1 · OSRM: $e2" else ""
+        r
     }
 
     private const val UA = "CAROSConnect/1.0 (Android phone companion app for CAR OS; pl.mati.carosconnect)"
@@ -431,26 +441,34 @@ fun WalkNavScreen(perms: Perms, actions: Actions) {
     }
     LaunchedEffect(perms.loc) { if (!perms.loc) actions.requestLoc() }
 
-    // trasa: pierwsza przy pierwszej pozycji, nowa po zejściu z trasy (najwyżej co 15 s)
-    // (gdy się nie udało – ponawia co 20 s, a do tego czasu strzałka w linii prostej)
-    val needRoute = me != null && !arrived && !routing && (route == null || offCount >= 2) &&
-        System.currentTimeMillis() - lastRouteAt > (if (route == null && failed) 20_000 else 15_000)
-    LaunchedEffect(needRoute) {
-        val l = me ?: return@LaunchedEffect
-        if (!needRoute) return@LaunchedEffect
-        routing = true
-        lastRouteAt = System.currentTimeMillis()
-        val r = WalkNav.route(l, s)
-        routing = false
-        if (r != null) {
-            val reroute = route != null
-            route = r
-            failed = false
-            offCount = 0
-            spokenStep = -1
-            warnedStep = -1
-            if (reroute) WalkNav.say("Nowa trasa")
-        } else if (route == null) failed = true
+    // trasa: pierwsza przy pierwszej pozycji, nowa po zejściu z trasy (najwyżej co 15 s),
+    // po nieudanej próbie – ponownie co 20 s. Jedna pętla – wcześniej efekt kasował sam siebie
+    // (zmiana „routing” zmieniała klucz efektu) i zostawało „Wyznaczam trasę…” w linii prostej.
+    val meNow by rememberUpdatedState(me)
+    LaunchedEffect(s.lat, s.lon) {
+        while (true) {
+            val l = meNow
+            val wait = if (route == null && failed) 20_000L else 15_000L
+            if (l != null && !arrived && (route == null || offCount >= 2) && System.currentTimeMillis() - lastRouteAt > wait) {
+                routing = true
+                lastRouteAt = System.currentTimeMillis()
+                val r = withTimeoutOrNull(30_000) { WalkNav.route(l, s) }
+                routing = false
+                if (r != null) {
+                    val reroute = route != null
+                    route = r
+                    failed = false
+                    offCount = 0
+                    spokenStep = -1
+                    warnedStep = -1
+                    if (reroute) WalkNav.say("Nowa trasa")
+                } else {
+                    if (route == null) failed = true
+                    if (offCount >= 2) offCount = 0 // nie męcz serwera co sekundę – następna próba za 15 s
+                }
+            }
+            delay(1000)
+        }
     }
 
     // postęp na trasie
@@ -538,13 +556,18 @@ fun WalkNavScreen(perms: Perms, actions: Actions) {
                         near -> "Auto jest blisko" to "${WalkNav.distText(direct!!)} – rozejrzyj się"
                         routing && route == null -> "Wyznaczam trasę…" to WalkNav.distText(direct ?: 0.0) + " w linii prostej"
                         next != null && toNext != null -> WalkNav.distText(toNext) to WalkNav.text(next)
-                        failed || route == null -> WalkNav.distText(direct ?: 0.0) to "Idź w kierunku strzałki (bez trasy pieszej)"
+                        failed || route == null -> WalkNav.distText(direct ?: 0.0) to "Nie mam trasy pieszej – ponawiam. Idź za strzałką"
                         else -> WalkNav.distText(remaining ?: 0.0) to "Idź dalej"
                     }
                     Text(big, fontSize = 30.sp, fontWeight = FontWeight.Bold, color = C.Bg, maxLines = 1)
                     if (small.isNotBlank()) Text(small, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = C.Bg.copy(alpha = 0.85f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
+            val err by WalkNav.error.collectAsState()
+            if (failed && route == null && err.isNotBlank()) Text(
+                err, fontSize = 12.sp, color = C.Text, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(10.dp)).background(C.Dialog).padding(horizontal = 10.dp, vertical = 6.dp),
+            )
         }
 
         // przyciski po prawej
