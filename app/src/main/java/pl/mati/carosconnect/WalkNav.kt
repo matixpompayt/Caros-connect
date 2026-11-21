@@ -230,12 +230,23 @@ object WalkNav {
 
     // ---------- głos ----------
 
+    /** Przybliżenie kamery w nawigacji – domyślnie blisko (jak „przy aucie”), zapamiętuje Twoje. */
+    const val DEFAULT_ZOOM = 19.6
+    val zoom = MutableStateFlow(DEFAULT_ZOOM)
+
+    fun saveZoom(ctx: Context, z: Double) {
+        zoom.value = z.coerceIn(16.5, 21.0)
+        ctx.getSharedPreferences("walknav", Context.MODE_PRIVATE).edit().putFloat("zoom", zoom.value.toFloat()).apply()
+    }
+
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     val voice = MutableStateFlow(true)
 
     fun initVoice(ctx: Context) {
-        voice.value = ctx.getSharedPreferences("walknav", Context.MODE_PRIVATE).getBoolean("voice", true)
+        val sp = ctx.getSharedPreferences("walknav", Context.MODE_PRIVATE)
+        voice.value = sp.getBoolean("voice", true)
+        zoom.value = sp.getFloat("zoom", DEFAULT_ZOOM.toFloat()).toDouble()
         if (tts != null) return
         tts = TextToSpeech(ctx.applicationContext) { st ->
             if (st == TextToSpeech.SUCCESS) {

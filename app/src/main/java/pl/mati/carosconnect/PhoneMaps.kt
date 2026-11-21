@@ -264,6 +264,9 @@ fun WalkMap(
     val ctx = LocalContext.current
     val accent = C.Accent.toArgb()
     val pan by androidx.compose.runtime.rememberUpdatedState(onUserPan)
+    val navZoom by WalkNav.zoom.collectAsState()
+    // przesunięte / przybliżone palcem – przy „Wyśrodkuj” zostaje Twoje przybliżenie
+    val moved = remember { booleanArrayOf(false) }
     val h = remember {
         MapHolder(ctx) { m, st ->
             val below = CarMapStyle.firstSymbolId(st)
@@ -332,10 +335,13 @@ fun WalkMap(
                     PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
                 ),
             )
-            m.cameraPosition = CameraPosition.Builder().target(LatLng(s.lat, s.lon)).zoom(17.0).tilt(50.0).build()
+            m.cameraPosition = CameraPosition.Builder().target(LatLng(s.lat, s.lon)).zoom(WalkNav.zoom.value).tilt(60.0).build()
             // przesunięcie mapy palcem wyłącza podążanie
             m.addOnCameraMoveStartedListener { reason ->
-                if (reason == org.maplibre.android.maps.MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) pan()
+                if (reason == org.maplibre.android.maps.MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
+                    moved[0] = true
+                    pan()
+                }
             }
         }
     }
@@ -353,12 +359,19 @@ fun WalkMap(
         if (me == null) src.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
         else src.setGeoJson(Feature.fromGeometry(point(me.latitude, me.longitude)))
     }
-    // kamera za Tobą: pozycja + kierunek (co 6°, żeby nie drgała)
+    // „Wyśrodkuj” po przybliżeniu palcem: zapamiętaj to przybliżenie (też na następny raz)
+    LaunchedEffect(follow) {
+        if (follow && moved[0]) {
+            moved[0] = false
+            h.map?.cameraPosition?.zoom?.let { WalkNav.saveZoom(ctx, it) }
+        }
+    }
+    // kamera za Tobą: pozycja + kierunek (co 6°, żeby nie drgała), blisko i mocno pochylona
     val hdgStep = heading?.let { (it / 6f).roundToInt() }
-    LaunchedEffect(me?.latitude, me?.longitude, hdgStep, follow, h.ready) {
+    LaunchedEffect(me?.latitude, me?.longitude, hdgStep, follow, navZoom, h.ready) {
         if (!h.ready || !follow) return@LaunchedEffect
         val l = me ?: return@LaunchedEffect
-        val cam = CameraPosition.Builder().target(LatLng(l.latitude, l.longitude)).zoom(18.0).tilt(55.0)
+        val cam = CameraPosition.Builder().target(LatLng(l.latitude, l.longitude)).zoom(navZoom).tilt(60.0)
             .bearing((heading ?: h.map?.cameraPosition?.bearing?.toFloat() ?: 0f).toDouble())
             .padding(0.0, 260.0 * h.density, 0.0, 0.0)
             .build()
