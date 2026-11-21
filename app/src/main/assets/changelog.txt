@@ -2,6 +2,10 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Korki przy trasie z punktami
+- Naprawione: po dodaniu punktu po drodze korki pokazywały „TomTom błąd 400” – teraz liczą się dla całej trasy przez punkty
+
 ## 1.54 · 2026-11-21
 Punkty po drodze
 - W „Wyślij do auta” lista trasy jak w Mapach Google: start, punkty po drodze i cel

@@ -104,28 +104,49 @@ object RoutePreview {
         val at = if (depart - System.currentTimeMillis() > 2 * 60_000) {
             "&departAt=" + java.net.URLEncoder.encode(SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).format(Date(depart)), "UTF-8")
         } else ""
-        // start : punkty po drodze : cel (trasa i tak odtwarzana z punktów pomocniczych)
-        val locs = (listOf(a) + via + b).joinToString(":") { String.format(Locale.US, "%.6f,%.6f", it.latitude, it.longitude) }
+        // TomTom przy punktach pomocniczych przyjmuje tylko start i cel – punkty po drodze
+        // podajemy jako „pointWaypoints” (indeksy w punktach pomocniczych), inaczej błąd 400
         val url = String.format(
             Locale.US,
-            "https://api.tomtom.com/routing/1/calculateRoute/%s/json?key=%s&traffic=true&travelMode=car&routeType=fastest" +
+            "https://api.tomtom.com/routing/1/calculateRoute/%.6f,%.6f:%.6f,%.6f/json?key=%s&traffic=true&travelMode=car&routeType=fastest" +
                 "&sectionType=traffic&routeRepresentation=polyline&computeTravelTimeFor=all%s",
-            locs, java.net.URLEncoder.encode(key, "UTF-8"), at,
+            a.latitude, a.longitude, b.latitude, b.longitude, java.net.URLEncoder.encode(key, "UTF-8"), at,
         )
-        val c = URL(url).openConnection() as HttpURLConnection
-        c.connectTimeout = 10_000
-        c.readTimeout = 20_000
-        c.requestMethod = "POST"
-        c.doOutput = true
-        c.setRequestProperty("Content-Type", "application/json")
-        val text = try {
-            c.outputStream.use { it.write(body.toString().toByteArray()) }
-            val code = c.responseCode
-            if (code == 401 || code == 403) return Triple(null, emptyList(), "Korki: klucz TomTom nieprawidłowy")
-            if (code !in 200..299) return Triple(null, emptyList(), "Korki: TomTom błąd $code")
-            c.inputStream.bufferedReader().use { it.readText() }
-        } finally {
-            c.disconnect()
+        val wp = JSONArray()
+        var last = 0
+        for (v in via) {
+            val idx = (last + 1 until sp.lastIndex).minByOrNull { dist(sp[it], v) } ?: continue
+            if (idx <= last) continue
+            wp.put(JSONObject().put("supportingPointIndex", idx).put("waypointSourceType", "USER_DEFINED"))
+            last = idx
+        }
+        fun post(withWp: Boolean): Pair<Int, String> {
+            val b2 = JSONObject(body.toString())
+            if (withWp && wp.length() > 0) b2.put("pointWaypoints", wp)
+            val c = URL(url).openConnection() as HttpURLConnection
+            c.connectTimeout = 10_000
+            c.readTimeout = 20_000
+            c.requestMethod = "POST"
+            c.doOutput = true
+            c.setRequestProperty("Content-Type", "application/json")
+            return try {
+                c.outputStream.use { it.write(b2.toString().toByteArray()) }
+                val code = c.responseCode
+                val t = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+                code to t
+            } finally {
+                c.disconnect()
+            }
+        }
+        var (code, text) = post(withWp = true)
+        // bez punktów po drodze w zapytaniu – trasa i tak idzie po punktach pomocniczych
+        if (code == 400 && wp.length() > 0) post(withWp = false).let { code = it.first; text = it.second }
+        if (code == 401 || code == 403) return Triple(null, emptyList(), "Korki: klucz TomTom nieprawidłowy")
+        if (code !in 200..299) {
+            val why = try {
+                JSONObject(text).let { o -> o.optJSONObject("detailedError")?.optString("message")?.ifBlank { null } ?: o.optJSONObject("error")?.optString("description") }
+            } catch (_: Exception) { null }
+            return Triple(null, emptyList(), "Korki: TomTom błąd $code" + (why?.let { " – ${it.take(80)}" } ?: ""))
         }
         val route = JSONObject(text).getJSONArray("routes").getJSONObject(0)
         val sum = route.getJSONObject("summary")
