@@ -30,6 +30,24 @@ object RoutePreview {
     data class Jam(val pts: List<LatLng>, val delayS: Int, val magnitude: Int, val kind: String)
     data class Wx(val kind: String, val name: String, val fromKm: Double, val toKm: Double, val time: Long, val code: Int, val temp: Double?)
 
+    /** Podsumowanie korków na trasie: napis i poziom (0 – brak, 1 – małe, 2 – korki, 3 – duże / zamknięta droga; −1 – brak danych). */
+    fun trafficSummary(r: Result): Pair<String, Int> {
+        val d = r.delayS
+        if (d == null && r.jams.isEmpty()) return "Korki: brak danych" to -1
+        val closed = r.jams.count { it.kind == "ROAD_CLOSURE" }
+        // łączne opóźnienie TomTom bywa < 1 min, choć na trasie są odcinki z korkami – liczymy też z odcinków
+        val total = maxOf(d ?: 0, r.jams.sumOf { it.delayS })
+        val n = r.jams.size
+        val odc = if (n == 1) "odcinek" else if (n in 2..4) "odcinki" else "odcinków"
+        val worst = r.jams.maxOfOrNull { it.magnitude } ?: 0
+        return when {
+            closed > 0 -> ("Zamknięta droga na trasie" + if (total >= 60) " · korki +${(total / 60.0).roundToInt()} min" else "") to 3
+            n == 0 && total < 60 -> "Bez korków na trasie" to 0
+            else -> ("Korki" + (if (total >= 60) " +${(total / 60.0).roundToInt()} min" else "") + (if (n > 0) " · $n $odc na trasie" else "")) to
+                when { total >= 600 || worst >= 3 -> 3; total >= 120 || worst == 2 -> 2; else -> 1 }
+        }
+    }
+
     /** Wariant trasy z czasem z korkami. */
     data class Alt(
         val pts: List<LatLng>, val distanceM: Double, val baseS: Double,

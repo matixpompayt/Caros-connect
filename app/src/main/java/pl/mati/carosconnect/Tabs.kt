@@ -954,15 +954,12 @@ private fun RoutePreviewBlock(
                     Text("$dur · $km", fontSize = 13.sp, color = C.Muted, modifier = Modifier.padding(bottom = 2.dp))
                 }
             }
-            val d = r.delayS
-            when {
-                d != null && d >= 60 -> Text(
-                    "Korki +${(d / 60.0).roundToInt()} min" + (if (r.jams.isNotEmpty()) " · ${r.jams.size} ${if (r.jams.size == 1) "odcinek" else "odcinki"} na trasie" else ""),
-                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = if (d >= 600) Color(0xFFE5483F) else C.Orange,
-                )
-                d != null -> Text("Bez korków", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = C.Green)
-                r.trafficNote != null -> Text(r.trafficNote, fontSize = 12.sp, color = C.Muted)
-            }
+            val (tTxt, tLvl) = RoutePreview.trafficSummary(r)
+            if (tLvl < 0 && r.trafficNote != null) Text(r.trafficNote, fontSize = 12.sp, color = C.Muted)
+            else Text(
+                tTxt, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                color = when (tLvl) { 0 -> C.Green; 1 -> Color(0xFFF5A623); 2 -> C.Orange; 3 -> Color(0xFFE5483F); else -> C.Muted },
+            )
             val head = RoutePreview.headline(r)
             if (head != null) {
                 val bad = r.weather?.any { it.kind != "frost" } == true

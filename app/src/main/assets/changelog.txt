@@ -2,6 +2,10 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Poprawny opis korków
+- Naprawione: przy odcinkach z korkami pisało „Bez korków na trasie” – teraz liczy odcinki i ich opóźnienia, a zamkniętą drogę pokazuje na czerwono („Zamknięta droga na trasie”)
+
 ## 1.57 · 2026-11-21
 Lepsze trasy i przełączanie wariantów
 - Trasy liczy też TomTom (najszybsze z aktualnymi korkami) – znajduje krótsze drogi, których zwykła wyszukiwarka nie proponowała

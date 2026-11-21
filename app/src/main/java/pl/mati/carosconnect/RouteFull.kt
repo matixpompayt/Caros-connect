@@ -133,15 +133,12 @@ fun RouteFullScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 val d = r.delayS
+                val (tTxt, tLvl) = RoutePreview.trafficSummary(r)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        when {
-                            d == null -> "Korki: brak danych"
-                            d >= 60 -> "Korki +${(d / 60.0).roundToInt()} min"
-                            else -> "Bez korków na trasie"
-                        },
-                        fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                        color = when { d == null -> C.Muted; d >= 600 -> Color(0xFFE5483F); d >= 60 -> C.Orange; else -> C.Green },
+                        tTxt,
+                        fontSize = if (tTxt.length > 24) 16.sp else 20.sp, fontWeight = FontWeight.Bold,
+                        color = when (tLvl) { 0 -> C.Green; 1 -> Color(0xFFF5A623); 2 -> C.Orange; 3 -> Color(0xFFE5483F); else -> C.Muted },
                         modifier = Modifier.weight(1f),
                     )
                     if (key.isNotBlank()) Pill(if (flow) "Korki wszędzie" else "Tylko trasa", flow, Icons.Rounded.Traffic) { flow = !flow }
