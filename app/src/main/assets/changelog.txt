@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.52 · 2026-11-21
 Nawigacja do auta z bliska
 - Kamera w prowadzeniu do auta dużo bliżej i mocniej pochylona (widać ulicę, budynki i auto z bliska)
 - Jak przybliżysz albo oddalisz mapę palcem i dotkniesz „Wyśrodkuj”, nawigacja zapamięta to przybliżenie (też na następny raz)
