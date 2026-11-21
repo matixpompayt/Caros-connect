@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.56 · 2026-11-21
 Najlepsza trasa sama
 - Podgląd trasy liczy do 3 wariantów i sam wybiera najszybszy z korkami (przy podobnym czasie – krótszy); wcześniej brał pierwszy z wyszukiwarki tras, czasem dłuższy
 - Pod mapą warianty do wyboru („najszybsza”, „najkrótsza”), pozostałe trasy szare na mapie
