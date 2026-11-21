@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.53 · 2026-11-21
 Trasa na pełnym ekranie
 - W „Wyślij do auta” przycisk „Pełny ekran” na mapie trasy
 - Cała trasa na dużej mapie z korkami: odcinki z korkami na trasie w kolorach, a z kluczem TomTom także korki na wszystkich drogach (przełącznik „Korki wszędzie / Tylko trasa”)
