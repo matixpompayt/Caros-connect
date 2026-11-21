@@ -470,7 +470,14 @@ fun TripMap(pts: List<LatLng>, modifier: Modifier) {
 
 /** Podgląd trasy przed wysłaniem do auta: linia trasy, korki na trasie, start (auto) i cel. */
 @Composable
-fun RouteMap(pts: List<LatLng>, jams: List<RoutePreview.Jam>, modifier: Modifier) {
+fun RouteMap(
+    pts: List<LatLng>, jams: List<RoutePreview.Jam>, modifier: Modifier,
+    /** Kafelki korków TomTom na wszystkich drogach (null – bez). */
+    flowUrl: String? = null,
+    /** Pokaż tylko ten fragment (np. korek); null – cała trasa. */
+    focus: List<LatLng>? = null,
+    padTop: Int = 28, padBottom: Int = 28, padSide: Int = 28,
+) {
     val ctx = LocalContext.current
     val h = remember(pts) {
         MapHolder(ctx) { m, st ->
@@ -531,13 +538,36 @@ fun RouteMap(pts: List<LatLng>, jams: List<RoutePreview.Jam>, modifier: Modifier
         }
     }
     rememberMapLifecycle(h)
-    LaunchedEffect(h.ready) {
+    // kamera: cała trasa albo wybrany fragment (płynnie, gdy mapa już stoi)
+    var first by remember(pts) { mutableStateOf(true) }
+    LaunchedEffect(h.ready, focus, padTop, padBottom, padSide) {
         if (!h.ready) return@LaunchedEffect
+        val area = focus?.takeIf { it.size >= 2 } ?: pts
         val b = LatLngBounds.Builder()
-        pts.forEach { b.include(it) }
+        area.forEach { b.include(it) }
+        val d = h.density
         h.view.post {
-            try { h.map?.moveCamera(CameraUpdateFactory.newLatLngBounds(b.build(), (28 * h.density).toInt())) } catch (_: Exception) {}
+            try {
+                val upd = CameraUpdateFactory.newLatLngBounds(b.build(), (padSide * d).toInt(), (padTop * d).toInt(), (padSide * d).toInt(), (padBottom * d).toInt())
+                if (first) h.map?.moveCamera(upd) else h.map?.animateCamera(upd, 900)
+                first = false
+            } catch (_: Exception) {}
         }
+    }
+    // korki na wszystkich drogach (TomTom) – pod trasą
+    LaunchedEffect(flowUrl, h.ready) {
+        if (!h.ready) return@LaunchedEffect
+        val st = h.style ?: return@LaunchedEffect
+        try {
+            st.getLayer("caros-flow")?.let { st.removeLayer(it) }
+            st.getSource("caros-flow-src")?.let { st.removeSource(it) }
+            if (flowUrl != null) {
+                st.addSource(org.maplibre.android.style.sources.RasterSource("caros-flow-src", org.maplibre.android.style.sources.TileSet("tiles", flowUrl), 512))
+                val layer = org.maplibre.android.style.layers.RasterLayer("caros-flow", "caros-flow-src")
+                    .withProperties(PropertyFactory.rasterOpacity(0.9f))
+                if (st.getLayer("caros-rt-casing") != null) st.addLayerBelow(layer, "caros-rt-casing") else st.addLayer(layer)
+            }
+        } catch (_: Exception) {}
     }
     LaunchedEffect(jams, h.ready) {
         if (!h.ready) return@LaunchedEffect

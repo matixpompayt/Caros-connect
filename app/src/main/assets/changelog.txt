@@ -2,6 +2,12 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Trasa na pełnym ekranie
+- W „Wyślij do auta” przycisk „Pełny ekran” na mapie trasy
+- Cała trasa na dużej mapie z korkami: odcinki z korkami na trasie w kolorach, a z kluczem TomTom także korki na wszystkich drogach (przełącznik „Korki wszędzie / Tylko trasa”)
+- Lista korków: ile minut, na którym kilometrze i jak długi – dotknij, żeby zobaczyć korek na mapie; „Cała trasa” wraca do widoku całości
+
 ## 1.52 · 2026-11-21
 Nawigacja do auta z bliska
 - Kamera w prowadzeniu do auta dużo bliżej i mocniej pochylona (widać ulicę, budynki i auto z bliska)

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.NewReleases
+import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.LocalGasStation
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -845,11 +846,23 @@ private fun RoutePreviewBlock(place: CarData.Place) {
             Chip(if (mode == 2 && t != null) "Być o ${RoutePreview.hhmm(t)}" else "Chcę być o…", mode == 2, Modifier.weight(1f)) { pickTime(2) }
         }
         val r = res
+        var full by remember(place) { mutableStateOf(false) }
         Box(Modifier.fillMaxWidth().height(190.dp).clip(RoundedCornerShape(16.dp)).border(1.dp, C.Border, RoundedCornerShape(16.dp))) {
             if (r != null) RouteMap(r.pts, r.jams, Modifier.fillMaxSize())
             if (loading) CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.align(Alignment.Center).size(28.dp))
             else if (r == null) Text(err ?: "", color = C.Orange, fontSize = 13.sp, modifier = Modifier.align(Alignment.Center).padding(12.dp))
+            // trasa i korki na pełnym ekranie
+            if (r != null && !loading) Row(
+                Modifier.align(Alignment.BottomEnd).padding(8.dp).clip(RoundedCornerShape(12.dp)).background(C.Dialog.copy(alpha = 0.92f))
+                    .clickable { full = true }.padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Icon(Icons.Rounded.Fullscreen, null, tint = C.Accent, modifier = Modifier.size(18.dp))
+                Text("Pełny ekran", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+            }
         }
+        if (full && r != null) RouteFullScreen(place.name, r) { full = false }
         if (r != null && !loading) {
             val mins = (r.travelS / 60).roundToInt()
             val dur = if (mins >= 60) "${mins / 60} h ${"%02d".format(mins % 60)} min" else "$mins min"
