@@ -675,4 +675,7 @@ private fun HouseNumbers(h: MapHolder) {
     // styl Miami: palmy wzdłuż ulic i poświata zachodu słońca (w widoku pochylonym)
     MiamiOverlay(if (h.ready) h.map else null, if (h.ready) h.style else null, theme == CarMapStyle.THEME_MIAMI, C.isLight, null, Modifier.fillMaxSize())
     HouseNumbersOverlay(if (h.ready) h.map else null, if (h.ready) h.style else null, on, C.isLight, Modifier.fillMaxSize())
+    // skośne dachy, kominy, attyki (dla „budynków jak prawdziwe”)
+    val real by CarMapStyle.realBuildings.collectAsState()
+    BuildingRoofsOverlay(if (h.ready) h.map else null, if (h.ready) h.style else null, real)
 }
