@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.54 · 2026-11-21
 Punkty po drodze
 - W „Wyślij do auta” lista trasy jak w Mapach Google: start, punkty po drodze i cel
 - „Dodaj punkt” otwiera mapę – przytrzymaj palec w miejscu, przez które chcesz jechać (do 3 punktów)
