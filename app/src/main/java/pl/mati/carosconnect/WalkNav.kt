@@ -77,7 +77,7 @@ import kotlin.math.sqrt
 object WalkNav {
     val active = MutableStateFlow(false)
 
-    data class Step(val idx: Int, val type: String, val modifier: String, val name: String, val lat: Double, val lon: Double)
+    data class Step(val idx: Int, val type: String, val modifier: String, val name: String, val lat: Double, val lon: Double, val instr: String = "")
     data class Route(val pts: List<LatLng>, val cum: DoubleArray, val steps: List<Step>) {
         val length get() = cum.last()
     }
@@ -103,40 +103,154 @@ object WalkNav {
 
     // ---------- trasa ----------
 
+    /** Skąd jest trasa – do napisu na ekranie. */
+    val source = MutableStateFlow("")
+
+    /**
+     * Trasa piesza: najpierw Valhalla (profil pieszy, woli chodniki i ścieżki dla pieszych, przejścia,
+     * omija podjazdy i zaułki), a gdy nie odpowie – OSRM z profilem pieszym.
+     */
     suspend fun route(from: Location, to: Store.Spot): Route? = withContext(Dispatchers.IO) {
+        (try { valhalla(from, to) } catch (_: Exception) { null })?.also { source.value = "chodnikami" }
+            ?: (try { osrm(from, to) } catch (_: Exception) { null })?.also { source.value = "pieszo" }
+    }
+
+    private const val UA = "CAROSConnect/1.0 (Android phone companion app for CAR OS; pl.mati.carosconnect)"
+
+    private fun http(url: String): String {
+        val c = URL(url).openConnection() as HttpURLConnection
+        c.connectTimeout = 8000
+        c.readTimeout = 12000
+        c.setRequestProperty("User-Agent", UA)
+        c.setRequestProperty("Accept", "application/json")
         try {
-            val url = String.format(
-                Locale.US,
-                "https://routing.openstreetmap.de/routed-foot/route/v1/driving/%.6f,%.6f;%.6f,%.6f?overview=full&geometries=geojson&steps=true",
-                from.longitude, from.latitude, to.lon, to.lat,
-            )
-            val c = URL(url).openConnection() as HttpURLConnection
-            c.connectTimeout = 8000
-            c.readTimeout = 10000
-            c.setRequestProperty("User-Agent", "CarOSConnect")
-            val body = c.inputStream.bufferedReader().use { it.readText() }
-            val r = JSONObject(body).getJSONArray("routes").getJSONObject(0)
-            val coords = r.getJSONObject("geometry").getJSONArray("coordinates")
-            val pts = (0 until coords.length()).map { val p = coords.getJSONArray(it); LatLng(p.getDouble(1), p.getDouble(0)) }
-            if (pts.size < 2) return@withContext null
-            val cum = DoubleArray(pts.size)
-            for (i in 1 until pts.size) cum[i] = cum[i - 1] + dist(pts[i - 1].latitude, pts[i - 1].longitude, pts[i].latitude, pts[i].longitude)
-            val steps = ArrayList<Step>()
-            val legs = r.getJSONArray("legs")
-            for (l in 0 until legs.length()) {
-                val st = legs.getJSONObject(l).getJSONArray("steps")
-                for (i in 0 until st.length()) {
-                    val s = st.getJSONObject(i)
-                    val m = s.getJSONObject("maneuver")
-                    val loc = m.getJSONArray("location")
-                    val lat = loc.getDouble(1); val lon = loc.getDouble(0)
-                    steps += Step(nearestIdx(pts, lat, lon), m.optString("type"), m.optString("modifier"), s.optString("name"), lat, lon)
-                }
-            }
-            Route(pts, cum, steps)
-        } catch (_: Exception) {
-            null
+            if (c.responseCode !in 200..299) throw java.io.IOException("HTTP ${c.responseCode}")
+            return c.inputStream.bufferedReader().use { it.readText() }
+        } finally {
+            c.disconnect()
         }
+    }
+
+    private fun valhalla(from: Location, to: Store.Spot): Route? {
+        val ped = JSONObject()
+            .put("walkway_factor", 0.6)      // ścieżki i chodniki wydzielone – chętniej
+            .put("sidewalk_factor", 0.6)     // ulice z chodnikiem – chętniej
+            .put("alley_factor", 2.0)        // zaułki – niechętnie
+            .put("driveway_factor", 5.0)     // podjazdy / prywatne – prawie nigdy
+            .put("use_living_streets", 0.6)
+            .put("use_tracks", 0.3)
+            .put("service_penalty", 20)
+        val req = JSONObject()
+            .put("locations", org.json.JSONArray()
+                .put(JSONObject().put("lat", from.latitude).put("lon", from.longitude))
+                .put(JSONObject().put("lat", to.lat).put("lon", to.lon)))
+            .put("costing", "pedestrian")
+            .put("costing_options", JSONObject().put("pedestrian", ped))
+            .put("language", "pl-PL")
+            .put("units", "kilometers")
+        val js = JSONObject(http("https://valhalla1.openstreetmap.de/route?json=" + java.net.URLEncoder.encode(req.toString(), "UTF-8")))
+        val legs = js.getJSONObject("trip").getJSONArray("legs")
+        val pts = ArrayList<LatLng>()
+        val steps = ArrayList<Step>()
+        for (l in 0 until legs.length()) {
+            val leg = legs.getJSONObject(l)
+            val base = pts.size
+            pts += decode6(leg.getString("shape"))
+            if (pts.isEmpty()) continue
+            val ms = leg.getJSONArray("maneuvers")
+            for (i in 0 until ms.length()) {
+                val m = ms.getJSONObject(i)
+                val (type, mod) = vType(m.optInt("type"))
+                val idx = (base + m.optInt("begin_shape_index")).coerceIn(0, pts.lastIndex)
+                val name = m.optJSONArray("street_names")?.optString(0).orEmpty()
+                val instr = m.optString("instruction").trim().removeSuffix(".")
+                steps += Step(idx, type, mod, name, pts[idx].latitude, pts[idx].longitude, instr)
+            }
+        }
+        return build(pts, steps)
+    }
+
+    /** Typ manewru Valhalli → typ / kierunek jak w OSRM (strzałka, głos). */
+    private fun vType(t: Int): Pair<String, String> = when (t) {
+        1, 2, 3 -> "depart" to ""
+        4, 5, 6 -> "arrive" to ""
+        9, 20, 18 -> "turn" to "slight right"
+        10 -> "turn" to "right"
+        11 -> "turn" to "sharp right"
+        12, 13 -> "turn" to "uturn"
+        14 -> "turn" to "sharp left"
+        15 -> "turn" to "left"
+        16, 21, 19 -> "turn" to "slight left"
+        23 -> "fork" to "slight right"
+        24 -> "fork" to "slight left"
+        26, 27 -> "roundabout" to ""
+        else -> "continue" to "straight"
+    }
+
+    private fun osrm(from: Location, to: Store.Spot): Route? {
+        val url = String.format(
+            Locale.US,
+            "https://routing.openstreetmap.de/routed-foot/route/v1/driving/%.6f,%.6f;%.6f,%.6f?overview=full&geometries=geojson&steps=true",
+            from.longitude, from.latitude, to.lon, to.lat,
+        )
+        val r = JSONObject(http(url)).getJSONArray("routes").getJSONObject(0)
+        val coords = r.getJSONObject("geometry").getJSONArray("coordinates")
+        val pts = (0 until coords.length()).map { val p = coords.getJSONArray(it); LatLng(p.getDouble(1), p.getDouble(0)) }
+        if (pts.size < 2) return null
+        val steps = ArrayList<Step>()
+        val legs = r.getJSONArray("legs")
+        for (l in 0 until legs.length()) {
+            val st = legs.getJSONObject(l).getJSONArray("steps")
+            for (i in 0 until st.length()) {
+                val s = st.getJSONObject(i)
+                val m = s.getJSONObject("maneuver")
+                val loc = m.getJSONArray("location")
+                val lat = loc.getDouble(1); val lon = loc.getDouble(0)
+                steps += Step(nearestIdx(pts, lat, lon), m.optString("type"), m.optString("modifier"), s.optString("name"), lat, lon)
+            }
+        }
+        return build(pts, steps)
+    }
+
+    private fun build(pts: List<LatLng>, steps: List<Step>): Route? {
+        if (pts.size < 2) return null
+        val cum = DoubleArray(pts.size)
+        for (i in 1 until pts.size) cum[i] = cum[i - 1] + dist(pts[i - 1].latitude, pts[i - 1].longitude, pts[i].latitude, pts[i].longitude)
+        return Route(pts, cum, steps)
+    }
+
+    /** Polilinia z dokładnością 6 miejsc (Valhalla). */
+    private fun decode6(s: String): List<LatLng> {
+        val out = ArrayList<LatLng>()
+        var i = 0
+        var lat = 0L
+        var lon = 0L
+        while (i < s.length) {
+            for (k in 0..1) {
+                var shift = 0
+                var result = 0L
+                while (true) {
+                    val b = s[i++].code - 63
+                    result = result or ((b and 0x1f).toLong() shl shift)
+                    shift += 5
+                    if (b < 0x20) break
+                }
+                val d = if (result and 1L != 0L) (result shr 1).inv() else result shr 1
+                if (k == 0) lat += d else lon += d
+            }
+            out += LatLng(lat / 1e6, lon / 1e6)
+        }
+        return out
+    }
+
+    /** Pozostała część trasy od Twojego miejsca (rzut na trasę) do końca. */
+    fun remainingLine(r: Route, sn: Snap): List<LatLng> {
+        val i = sn.seg.coerceIn(0, r.pts.size - 2)
+        val a = r.pts[i]; val b = r.pts[i + 1]
+        val segLen = r.cum[i + 1] - r.cum[i]
+        val t = if (segLen < 0.01) 0.0 else ((sn.along - r.cum[i]) / segLen).coerceIn(0.0, 1.0)
+        val p = LatLng(a.latitude + (b.latitude - a.latitude) * t, a.longitude + (b.longitude - a.longitude) * t)
+        return listOf(p) + r.pts.subList(i + 1, r.pts.size)
     }
 
     private fun nearestIdx(pts: List<LatLng>, lat: Double, lon: Double): Int {
@@ -208,6 +322,8 @@ object WalkNav {
     }
 
     fun text(s: Step): String {
+        if (s.type == "arrive") return "Auto jest tutaj"
+        if (s.instr.isNotBlank()) return s.instr
         val name = s.name.trim()
         val into = if (name.isNotEmpty()) " w $name" else ""
         val along = if (name.isNotEmpty()) " – $name" else ""
@@ -316,8 +432,9 @@ fun WalkNavScreen(perms: Perms, actions: Actions) {
     LaunchedEffect(perms.loc) { if (!perms.loc) actions.requestLoc() }
 
     // trasa: pierwsza przy pierwszej pozycji, nowa po zejściu z trasy (najwyżej co 15 s)
-    val needRoute = me != null && !arrived && !routing && (route == null && !failed || offCount >= 2) &&
-        System.currentTimeMillis() - lastRouteAt > 15_000
+    // (gdy się nie udało – ponawia co 20 s, a do tego czasu strzałka w linii prostej)
+    val needRoute = me != null && !arrived && !routing && (route == null || offCount >= 2) &&
+        System.currentTimeMillis() - lastRouteAt > (if (route == null && failed) 20_000 else 15_000)
     LaunchedEffect(needRoute) {
         val l = me ?: return@LaunchedEffect
         if (!needRoute) return@LaunchedEffect
@@ -384,7 +501,17 @@ fun WalkNavScreen(perms: Perms, actions: Actions) {
     val heading = me?.takeIf { it.hasBearing() && it.hasSpeed() && it.speed > 1.2f }?.bearing ?: azimuth
 
     Box(Modifier.fillMaxSize().background(C.Bg)) {
-        WalkMap(s, me, heading, route?.pts.orEmpty(), follow, { follow = false }, Modifier.fillMaxSize())
+        // linia trasy: od Ciebie do auta (przebyta część znika); przerywana – dojście do trasy i od trasy do auta
+        val line = if (r != null && snap != null) WalkNav.remainingLine(r, snap) else r?.pts.orEmpty()
+        val gaps = ArrayList<List<LatLng>>()
+        if (r != null && line.isNotEmpty()) {
+            val e = r.pts.last()
+            if (WalkNav.dist(e.latitude, e.longitude, s.lat, s.lon) > 3) gaps += listOf(e, LatLng(s.lat, s.lon))
+            if (me != null && snap != null && snap.off > 8) gaps += listOf(LatLng(me.latitude, me.longitude), line.first())
+        } else if (me != null && !arrived) {
+            gaps += listOf(LatLng(me.latitude, me.longitude), LatLng(s.lat, s.lon))
+        }
+        WalkMap(s, me, heading, line, gaps, follow, { follow = false }, Modifier.fillMaxSize())
 
         // górna karta: manewr
         Column(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(12.dp).fillMaxWidth()) {
@@ -459,7 +586,8 @@ fun WalkNavScreen(perms: Perms, actions: Actions) {
                             Text("$min min", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = C.Green)
                             Text(WalkNav.distText(rem), fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = C.Text, modifier = Modifier.padding(bottom = 3.dp))
                         }
-                        Text("Na miejscu o $at · pieszo", fontSize = 15.sp, color = C.Muted)
+                        val src by WalkNav.source.collectAsState()
+                        Text("Na miejscu o $at · " + (if (route != null && src.isNotBlank()) src else "pieszo"), fontSize = 15.sp, color = C.Muted)
                     } else {
                         Text("Prowadzę do auta", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = C.Text)
                         Text(s.address ?: s.coords, fontSize = 14.sp, color = C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)

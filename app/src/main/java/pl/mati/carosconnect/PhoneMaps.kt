@@ -145,6 +145,28 @@ private fun carModel(ctx: Context, body: String, paint: Int?): android.graphics.
     Model3D.carIcon(body, paint ?: CarIcon.DEFAULT_COLOR, 35.0, 38.0, (96 * ctx.resources.displayMetrics.density).toInt())
 
 /** Ludzik 3D – Twoja pozycja. */
+/** Biała strzałka „>” na linię trasy pieszej (wskazuje kierunek marszu). */
+private fun walkArrow(ctx: Context): android.graphics.Bitmap {
+    val d = ctx.resources.displayMetrics.density
+    val sz = (22 * d).toInt().coerceAtLeast(16)
+    val b = android.graphics.Bitmap.createBitmap(sz, sz, android.graphics.Bitmap.Config.ARGB_8888)
+    val c = android.graphics.Canvas(b)
+    val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.WHITE
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = sz * 0.17f
+        strokeCap = android.graphics.Paint.Cap.ROUND
+        strokeJoin = android.graphics.Paint.Join.ROUND
+    }
+    val path = android.graphics.Path().apply {
+        moveTo(sz * 0.34f, sz * 0.22f)
+        lineTo(sz * 0.66f, sz * 0.5f)
+        lineTo(sz * 0.34f, sz * 0.78f)
+    }
+    c.drawPath(path, p)
+    return b
+}
+
 private fun personBitmap(ctx: Context) = Model3D.personIcon(0xFF2FD3F0.toInt(), (64 * ctx.resources.displayMetrics.density).toInt())
 
 /** Mapa parkingu: ciemna, 3D, pinezka auta i Twoja pozycja. */
@@ -258,7 +280,7 @@ fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier, l
 @SuppressLint("MissingPermission")
 @Composable
 fun WalkMap(
-    s: Store.Spot, me: android.location.Location?, heading: Float?, route: List<LatLng>,
+    s: Store.Spot, me: android.location.Location?, heading: Float?, route: List<LatLng>, gaps: List<List<LatLng>>,
     follow: Boolean, onUserPan: () -> Unit, modifier: Modifier,
 ) {
     val ctx = LocalContext.current
@@ -271,28 +293,44 @@ fun WalkMap(
         MapHolder(ctx) { m, st ->
             val below = CarMapStyle.firstSymbolId(st)
             CarMapStyle.add3dBuildings(st, below)
-            // trasa piesza: biała obwódka + kropki w kolorze akcentu
+            // trasa piesza: ciemna obwódka + pełna linia w kolorze akcentu + strzałki kierunku;
+            // przerywana cienka – dojście do trasy i od trasy do auta
             st.addSource(GeoJsonSource("caros-walk"))
-            val casing = LineLayer("caros-walk-casing", "caros-walk").withProperties(
-                PropertyFactory.lineColor(android.graphics.Color.WHITE),
-                PropertyFactory.lineWidth(Expression.interpolate(Expression.linear(), Expression.zoom(), Expression.stop(14, 5f), Expression.stop(19, 14f))),
-                PropertyFactory.lineOpacity(0.55f),
-                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
-                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-            )
-            val dots = LineLayer("caros-walk-line", "caros-walk").withProperties(
+            st.addSource(GeoJsonSource("caros-walk-gap"))
+            st.addImage("caros-walk-arrow", walkArrow(ctx))
+            val w = { a: Float, b: Float -> Expression.interpolate(Expression.linear(), Expression.zoom(), Expression.stop(14, a), Expression.stop(20, b)) }
+            val gap = LineLayer("caros-walk-gap-line", "caros-walk-gap").withProperties(
                 PropertyFactory.lineColor(accent),
-                PropertyFactory.lineWidth(Expression.interpolate(Expression.linear(), Expression.zoom(), Expression.stop(14, 4f), Expression.stop(19, 10f))),
-                PropertyFactory.lineDasharray(arrayOf(0f, 1.8f)),
+                PropertyFactory.lineWidth(w(2.5f, 5f)),
+                PropertyFactory.lineOpacity(0.85f),
+                PropertyFactory.lineDasharray(arrayOf(1.2f, 1.4f)),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+            )
+            val casing = LineLayer("caros-walk-casing", "caros-walk").withProperties(
+                PropertyFactory.lineColor(android.graphics.Color.parseColor("#0A2230")),
+                PropertyFactory.lineWidth(w(7f, 20f)),
+                PropertyFactory.lineOpacity(0.9f),
                 PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                 PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
             )
-            if (below != null) {
-                st.addLayerBelow(casing, below)
-                st.addLayerBelow(dots, below)
-            } else {
-                st.addLayer(casing)
-                st.addLayer(dots)
+            val main = LineLayer("caros-walk-line", "caros-walk").withProperties(
+                PropertyFactory.lineColor(accent),
+                PropertyFactory.lineWidth(w(4.5f, 14f)),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            )
+            val arrows = SymbolLayer("caros-walk-arrows", "caros-walk").withProperties(
+                PropertyFactory.symbolPlacement(Property.SYMBOL_PLACEMENT_LINE),
+                PropertyFactory.symbolSpacing(70f),
+                PropertyFactory.iconImage("caros-walk-arrow"),
+                PropertyFactory.iconSize(w(0.45f, 1.0f)),
+                PropertyFactory.iconAllowOverlap(true),
+                PropertyFactory.iconIgnorePlacement(true),
+                PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
+                PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_MAP),
+            )
+            for (l in listOf(gap, casing, main, arrows)) {
+                if (below != null) st.addLayerBelow(l, below) else st.addLayer(l)
             }
             // auto 3D + pinezka „P”
             st.addImage("caros-car-pin", carPin())
@@ -352,6 +390,11 @@ fun WalkMap(
         val src = h.style?.getSourceAs<GeoJsonSource>("caros-walk") ?: return@LaunchedEffect
         if (route.size < 2) src.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
         else src.setGeoJson(Feature.fromGeometry(LineString.fromLngLats(route.map { point(it.latitude, it.longitude) })))
+    }
+    LaunchedEffect(gaps, h.ready) {
+        if (!h.ready) return@LaunchedEffect
+        val src = h.style?.getSourceAs<GeoJsonSource>("caros-walk-gap") ?: return@LaunchedEffect
+        src.setGeoJson(FeatureCollection.fromFeatures(gaps.filter { it.size >= 2 }.map { g -> Feature.fromGeometry(LineString.fromLngLats(g.map { point(it.latitude, it.longitude) })) }))
     }
     LaunchedEffect(me?.latitude, me?.longitude, h.ready) {
         if (!h.ready) return@LaunchedEffect

@@ -2,6 +2,14 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Prowadzenie do auta: linia trasy chodnikami
+- Na mapie wyraźna linia trasy od Ciebie do auta ze strzałkami kierunku; przebyta część znika
+- Trasa piesza woli chodniki, ścieżki dla pieszych i przejścia, omija podjazdy i zaułki
+- Wskazówki po polsku z nazwami chodników i przejść; gdy serwer nie odpowie – zapasowa trasa piesza
+- Przerywana linia: dojście do trasy i ostatnie metry do auta
+- Gdy trasy nie udało się wyznaczyć, aplikacja ponawia co 20 s (wcześniej próbowała tylko raz)
+
 ## 1.61 · 2026-11-21
 Poprawka: stacje i przerwy przy trasie
 - Naprawione „Nie znalazłem stacji…” przy każdej trasie – zapytania do mapy OSM były odrzucane przez serwer
