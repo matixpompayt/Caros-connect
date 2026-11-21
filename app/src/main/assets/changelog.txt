@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.59 · 2026-11-21
 Inteligentny plan trasy
 - W podglądzie trasy karta „Inteligentny plan”
 - Omijanie korków i zamkniętych dróg: wybierana trasa bez zamknięć i z najkrótszym czasem z korkami; pokazuje, ile szybciej niż zwykła trasa
