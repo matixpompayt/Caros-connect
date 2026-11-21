@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.55 · 2026-11-21
 Korki przy trasie z punktami
 - Naprawione: po dodaniu punktu po drodze korki pokazywały „TomTom błąd 400” – teraz liczą się dla całej trasy przez punkty
 
