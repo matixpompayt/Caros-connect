@@ -2,6 +2,14 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Własna nawigacja do auta
+- „Prowadź do auta” otwiera teraz nawigację CAR OS Connect zamiast Map Google (też z powiadomienia „Zaparkowano” i z widżetu)
+- Trasa piesza na mapie 3D (kropki), auto 3D z pinezką, Twoja pozycja; kamera idzie za Tobą i obraca się tam, gdzie patrzysz
+- Wskazówki po polsku: „Za 40 m skręć w lewo w ul. …”, ile zostało metrów i minut, o której będziesz przy aucie
+- Głos (można wyciszyć), nowa trasa, gdy zejdziesz z drogi, wibracja i „Jesteś przy aucie” na miejscu
+- Ekran nie gaśnie w czasie prowadzenia; przycisk Map Google w nawigacji, gdyby był potrzebny
+
 ## 1.50 · 2026-11-19
 Białe linie na drogach
 - Przerywane linie na jezdni w stylu Miami są teraz białe

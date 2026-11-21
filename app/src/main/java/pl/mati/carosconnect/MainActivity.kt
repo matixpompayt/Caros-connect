@@ -74,7 +74,7 @@ class MainActivity : ComponentActivity(), Actions {
         FuelPrices.init(this)
         GlassTheme.init(this)
         SyncWorker.schedule(this)
-        if (savedInstanceState == null) { handleShare(intent); openTabFrom(intent) }
+        if (savedInstanceState == null) { handleShare(intent); openTabFrom(intent); walkFrom(intent) }
         setContent {
             androidx.compose.foundation.layout.Box {
                 ParkApp(perms.value, this@MainActivity)
@@ -137,6 +137,15 @@ class MainActivity : ComponentActivity(), Actions {
         super.onNewIntent(intent)
         handleShare(intent)
         openTabFrom(intent)
+        walkFrom(intent)
+    }
+
+    /** Powiadomienie „Zaparkowano” / widżet: od razu nawigacja piesza do auta. */
+    private fun walkFrom(i: Intent?) {
+        if (i?.getBooleanExtra("walk_to_car", false) == true) {
+            i.removeExtra("walk_to_car")
+            WalkNav.start()
+        }
     }
 
     /** Widżet może otworzyć konkretną zakładkę (np. ceny paliw → Auto). */

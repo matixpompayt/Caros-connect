@@ -383,6 +383,13 @@ fun ParkApp(perms: Perms, actions: Actions) {
         )
         share?.let { ShareDialog(it, actions) { Share.incoming.value = null } }
         WhatsNewDialog()
+        // nawigacja piesza do auta – na całym ekranie, nad wszystkim
+        val walking by WalkNav.active.collectAsState()
+        androidx.compose.animation.AnimatedVisibility(
+            walking,
+            enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.96f),
+            exit = androidx.compose.animation.fadeOut(),
+        ) { WalkNavScreen(perms, actions) }
       }
     }
 }
@@ -520,10 +527,10 @@ private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
             }
             NotePhotoCard()
             FinderCard(s, me, azimuth)
+            // nasza nawigacja piesza (Mapy Google – przycisk w nawigacji)
             PrimaryButton("Prowadź do auta", Icons.Rounded.DirectionsWalk) {
-                try { ctx.startActivity(Notifs.walkIntent(s)) } catch (_: Exception) {
-                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(s.mapsUrl)))
-                }
+                if (!perms.loc) actions.requestLoc()
+                WalkNav.start()
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1107,7 +1114,7 @@ private fun rememberVisible(): Boolean {
 
 @SuppressLint("MissingPermission")
 @Composable
-private fun rememberPhoneLocation(enabled: Boolean): Location? {
+internal fun rememberPhoneLocation(enabled: Boolean): Location? {
     val ctx = LocalContext.current
     var loc by remember { mutableStateOf<Location?>(null) }
     DisposableEffect(enabled) {
@@ -1133,7 +1140,7 @@ private fun rememberPhoneLocation(enabled: Boolean): Location? {
 
 /** Azymut telefonu (stopnie od północy geograficznej) z czujnika obrotu. */
 @Composable
-private fun rememberAzimuth(me: Location?, enabled: Boolean): Float? {
+internal fun rememberAzimuth(me: Location?, enabled: Boolean): Float? {
     val ctx = LocalContext.current
     var az by remember { mutableStateOf<Float?>(null) }
     var smooth by remember { mutableFloatStateOf(Float.NaN) }

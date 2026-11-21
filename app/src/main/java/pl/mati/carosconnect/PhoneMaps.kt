@@ -62,6 +62,9 @@ import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
+import kotlin.math.roundToInt
+import org.maplibre.android.style.expressions.Expression
+import androidx.compose.ui.graphics.toArgb
 
 /** Wspólne: MapView MapLibre w trybie TextureView (zaokrąglone rogi, animacje) + cykl życia. */
 private class MapHolder(ctx: Context, onStyle: (MapLibreMap, Style) -> Unit) {
@@ -248,6 +251,123 @@ fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier, l
                 me?.let { l -> h.map?.animateCamera(CameraUpdateFactory.newLatLng(LatLng(l.latitude, l.longitude)), 700) }
             }) { Icon(Icons.Rounded.MyLocation, "Moja pozycja", tint = C.Text, modifier = Modifier.size(22.dp)) }
         }
+    }
+}
+
+/** Mapa nawigacji pieszej do auta: trasa kropkami, auto 3D z pinezką, ludzik, kamera za Tobą. */
+@SuppressLint("MissingPermission")
+@Composable
+fun WalkMap(
+    s: Store.Spot, me: android.location.Location?, heading: Float?, route: List<LatLng>,
+    follow: Boolean, onUserPan: () -> Unit, modifier: Modifier,
+) {
+    val ctx = LocalContext.current
+    val accent = C.Accent.toArgb()
+    val pan by androidx.compose.runtime.rememberUpdatedState(onUserPan)
+    val h = remember {
+        MapHolder(ctx) { m, st ->
+            val below = CarMapStyle.firstSymbolId(st)
+            CarMapStyle.add3dBuildings(st, below)
+            // trasa piesza: biała obwódka + kropki w kolorze akcentu
+            st.addSource(GeoJsonSource("caros-walk"))
+            val casing = LineLayer("caros-walk-casing", "caros-walk").withProperties(
+                PropertyFactory.lineColor(android.graphics.Color.WHITE),
+                PropertyFactory.lineWidth(Expression.interpolate(Expression.linear(), Expression.zoom(), Expression.stop(14, 5f), Expression.stop(19, 14f))),
+                PropertyFactory.lineOpacity(0.55f),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            )
+            val dots = LineLayer("caros-walk-line", "caros-walk").withProperties(
+                PropertyFactory.lineColor(accent),
+                PropertyFactory.lineWidth(Expression.interpolate(Expression.linear(), Expression.zoom(), Expression.stop(14, 4f), Expression.stop(19, 10f))),
+                PropertyFactory.lineDasharray(arrayOf(0f, 1.8f)),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            )
+            if (below != null) {
+                st.addLayerBelow(casing, below)
+                st.addLayerBelow(dots, below)
+            } else {
+                st.addLayer(casing)
+                st.addLayer(dots)
+            }
+            // auto 3D + pinezka „P”
+            st.addImage("caros-car-pin", carPin())
+            st.addSource(GeoJsonSource("caros-car"))
+            CarData.carBody.value?.let { st.addImage("caros-car-3d", carModel(ctx, it, CarData.carPaint.value)) }
+            st.addLayer(
+                SymbolLayer("caros-car-3d-layer", "caros-car").withProperties(
+                    PropertyFactory.iconImage("caros-car-3d"),
+                    PropertyFactory.iconAnchor(Property.ICON_ANCHOR_CENTER),
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(true),
+                    PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
+                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
+                    PropertyFactory.visibility(if (CarData.carBody.value != null) Property.VISIBLE else Property.NONE),
+                ),
+            )
+            st.addLayer(
+                SymbolLayer("caros-car-layer", "caros-car").withProperties(
+                    PropertyFactory.iconImage("caros-car-pin"),
+                    PropertyFactory.iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+                    PropertyFactory.iconOffset(arrayOf(0f, if (CarData.carBody.value != null) -26f else 0f)),
+                    PropertyFactory.iconSize(0.8f),
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(true),
+                    PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
+                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
+                ),
+            )
+            st.getSourceAs<GeoJsonSource>("caros-car")?.setGeoJson(Feature.fromGeometry(point(s.lat, s.lon)))
+            st.addImage("caros-person", personBitmap(ctx))
+            st.addSource(GeoJsonSource("caros-me"))
+            st.addLayer(
+                SymbolLayer("caros-me-layer", "caros-me").withProperties(
+                    PropertyFactory.iconImage("caros-person"),
+                    PropertyFactory.iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+                    PropertyFactory.iconOffset(arrayOf(0f, 7f)),
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(true),
+                    PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
+                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
+                ),
+            )
+            m.cameraPosition = CameraPosition.Builder().target(LatLng(s.lat, s.lon)).zoom(17.0).tilt(50.0).build()
+            // przesunięcie mapy palcem wyłącza podążanie
+            m.addOnCameraMoveStartedListener { reason ->
+                if (reason == org.maplibre.android.maps.MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) pan()
+            }
+        }
+    }
+    rememberMapLifecycle(h)
+
+    LaunchedEffect(route, h.ready) {
+        if (!h.ready) return@LaunchedEffect
+        val src = h.style?.getSourceAs<GeoJsonSource>("caros-walk") ?: return@LaunchedEffect
+        if (route.size < 2) src.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+        else src.setGeoJson(Feature.fromGeometry(LineString.fromLngLats(route.map { point(it.latitude, it.longitude) })))
+    }
+    LaunchedEffect(me?.latitude, me?.longitude, h.ready) {
+        if (!h.ready) return@LaunchedEffect
+        val src = h.style?.getSourceAs<GeoJsonSource>("caros-me") ?: return@LaunchedEffect
+        if (me == null) src.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+        else src.setGeoJson(Feature.fromGeometry(point(me.latitude, me.longitude)))
+    }
+    // kamera za Tobą: pozycja + kierunek (co 6°, żeby nie drgała)
+    val hdgStep = heading?.let { (it / 6f).roundToInt() }
+    LaunchedEffect(me?.latitude, me?.longitude, hdgStep, follow, h.ready) {
+        if (!h.ready || !follow) return@LaunchedEffect
+        val l = me ?: return@LaunchedEffect
+        val cam = CameraPosition.Builder().target(LatLng(l.latitude, l.longitude)).zoom(18.0).tilt(55.0)
+            .bearing((heading ?: h.map?.cameraPosition?.bearing?.toFloat() ?: 0f).toDouble())
+            .padding(0.0, 260.0 * h.density, 0.0, 0.0)
+            .build()
+        h.map?.easeCamera(CameraUpdateFactory.newCameraPosition(cam), 700)
+    }
+
+    Box(modifier) {
+        AndroidView(factory = { h.view }, modifier = Modifier.fillMaxSize())
+        HouseNumbers(h)
     }
 }
 

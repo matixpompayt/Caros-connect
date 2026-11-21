@@ -107,7 +107,7 @@ object Notifs {
     fun parked(ctx: Context, s: Store.Spot) {
         channels(ctx)
         val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
-        val walk = PendingIntent.getActivity(ctx, 1, walkIntent(s), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val walk = PendingIntent.getActivity(ctx, 1, WalkNav.intent(ctx), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val n = Notification.Builder(ctx, CH_PARK)
             .setSmallIcon(android.R.drawable.ic_dialog_map)
             .setContentTitle("Zaparkowano")

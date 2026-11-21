@@ -58,7 +58,7 @@ class CarWidget : AppWidgetProvider() {
                 val end = CarData.meterEnd.value
                 if (end > System.currentTimeMillis()) parts += "parkometr do " + java.text.SimpleDateFormat("HH:mm", java.util.Locale("pl")).format(java.util.Date(end))
                 v.setTextViewText(R.id.w_info, parts.joinToString(" · "))
-                val walk = PendingIntent.getActivity(ctx, 11, Notifs.walkIntent(s), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+                val walk = PendingIntent.getActivity(ctx, 11, WalkNav.intent(ctx), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
                 v.setOnClickPendingIntent(R.id.w_nav, walk)
             }
             // paliwo, wyjazd do pracy, akumulator
