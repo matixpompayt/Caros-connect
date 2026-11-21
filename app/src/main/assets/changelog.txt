@@ -2,6 +2,14 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Inteligentny plan trasy
+- W podglądzie trasy karta „Inteligentny plan”
+- Omijanie korków i zamkniętych dróg: wybierana trasa bez zamknięć i z najkrótszym czasem z korkami; pokazuje, ile szybciej niż zwykła trasa
+- „Ułóż punkty w najlepszej kolejności” – przy kilku punktach po drodze układa je w najszybszej kolejności (cel zostaje na końcu)
+- „Kiedy najlepiej wyjechać?” – czas przejazdu przy wyjeździe co 15 min przez 3 godziny (prognoza ruchu), najlepsza godzina na zielono; dotknij słupka, żeby ją ustawić
+- Tankowanie i przerwy: gdy zasięg auta nie wystarczy – stacja przy trasie przed końcem zasięgu; na długiej trasie – przerwa co ok. 2 h (MOP / stacja); „Dodaj” wstawia postój do trasy
+
 ## 1.58 · 2026-11-21
 Poprawny opis korków
 - Naprawione: przy odcinkach z korkami pisało „Bez korków na trasie” – teraz liczy odcinki i ich opóźnienia, a zamkniętą drogę pokazuje na czerwono („Zamknięta droga na trasie”)

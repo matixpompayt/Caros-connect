@@ -971,6 +971,8 @@ private fun RoutePreviewBlock(
                 Text("Pogoda na trasie: brak danych", fontSize = 12.sp, color = C.Muted)
             }
             r.destTemp?.let { Text("Na miejscu ok. ${it.roundToInt()}°", fontSize = 12.sp, color = C.Muted) }
+            // inteligentny plan: omijanie korków, kolejność punktów, godzina wyjazdu, tankowanie i przerwy
+            SmartPlanCard(r, start?.first, points, onPoints) { t -> picked = t; mode = 1 }
             // przypomnienie 10 min przed wyjazdem
             val p = plan
             val samePlace = p != null && kotlin.math.abs(p.lat - place.lat) < 1e-4 && kotlin.math.abs(p.lon - place.lon) < 1e-4

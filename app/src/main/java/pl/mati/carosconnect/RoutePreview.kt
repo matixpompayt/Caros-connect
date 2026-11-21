@@ -72,6 +72,9 @@ object RoutePreview {
         /** Warianty trasy (gdy bez punktów po drodze) i który jest pokazany. */
         val alts: List<Alt> = emptyList(),
         val altIndex: Int = 0,
+        /** Ile szybsza od trasy, którą dałaby zwykła wyszukiwarka (s), i czy ominięto zamkniętą drogę. */
+        val savedS: Int = 0,
+        val avoidedClosure: Boolean = false,
     ) {
         val travelS: Double get() = trafficS?.toDouble() ?: baseS
         val arrive: Long get() = depart + (travelS * 1000).toLong()
@@ -80,7 +83,7 @@ object RoutePreview {
     fun tomtomKey(ctx: Context): String =
         ctx.getSharedPreferences("traffic", Context.MODE_PRIVATE).getString("tomtom", "")?.trim().orEmpty()
 
-    private fun dist(a: LatLng, b: LatLng): Double {
+    internal fun dist(a: LatLng, b: LatLng): Double {
         val kx = 111_320.0 * cos(Math.toRadians(a.latitude))
         return hypot((a.longitude - b.longitude) * kx, (a.latitude - b.latitude) * 110_540.0)
     }
@@ -119,9 +122,14 @@ object RoutePreview {
                 }
             }.map { it.await() }
             val alts = (ttAlts + osrmAlts).take(4)
+            // unikanie: trasy z zamkniętą drogą na końcu kolejki (chyba że innych nie ma)
+            fun closed(a: Alt) = a.jams.any { it.kind == "ROAD_CLOSURE" }
             // najszybszy z korkami; przy różnicy poniżej minuty – krótszy
-            val best = alts.indices.minWith(compareBy<Int>({ (alts[it].travelS / 60).roundToInt() }, { alts[it].distanceM }))
-            build(alts, best, depart, withWeather)
+            val best = alts.indices.minWith(compareBy<Int>({ if (closed(alts[it])) 1 else 0 }, { (alts[it].travelS / 60).roundToInt() }, { alts[it].distanceM }))
+            // porównanie z trasą zwykłej wyszukiwarki (pierwszy wariant OSRM)
+            val plain = alts.firstOrNull { same(it.pts, raw[0].first) }
+            val saved = plain?.let { (it.travelS - alts[best].travelS).roundToInt().coerceAtLeast(0) } ?: 0
+            build(alts, best, depart, withWeather).copy(savedS = saved, avoidedClosure = plain != null && closed(plain) && !closed(alts[best]))
         }
     }
 
@@ -153,7 +161,7 @@ object RoutePreview {
     // ---------- korki (TomTom) ----------
 
     /** ((czas z korkami, opóźnienie) albo null, korki, uwaga). */
-    private fun traffic(ctx: Context, pts: List<LatLng>, depart: Long, via: List<LatLng> = emptyList()): Triple<Pair<Int, Int>?, List<Jam>, String?> {
+    internal fun traffic(ctx: Context, pts: List<LatLng>, depart: Long, via: List<LatLng> = emptyList()): Triple<Pair<Int, Int>?, List<Jam>, String?> {
         val key = tomtomKey(ctx)
         if (key.isBlank()) return Triple(null, emptyList(), "Korki: dodaj klucz TomTom (Ustawienia → Korki w CAR OS)")
         val step = max(1, pts.size / 900)
@@ -273,7 +281,7 @@ object RoutePreview {
     }
 
     /** Czy dwie trasy jadą tą samą drogą (średnia odległość punktów < 150 m). */
-    private fun same(a: List<LatLng>, b: List<LatLng>): Boolean {
+    internal fun same(a: List<LatLng>, b: List<LatLng>): Boolean {
         val step = max(1, b.size / 500)
         var sum = 0.0
         val n = 24
@@ -389,7 +397,7 @@ object RoutePreview {
 
     fun hhmm(t: Long): String = SimpleDateFormat("H:mm", Locale.ROOT).format(Date(t))
 
-    private fun get(url: String): String {
+    internal fun get(url: String): String {
         val c = URL(url).openConnection() as HttpURLConnection
         c.connectTimeout = 10_000
         c.readTimeout = 20_000
