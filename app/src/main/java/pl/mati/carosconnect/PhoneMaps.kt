@@ -117,7 +117,7 @@ private fun rememberMapLifecycle(h: MapHolder) {
     LaunchedEffect(h.ready) { if (h.ready) h.style?.let { CarMapStyle.setHouseNumbers(it, false) } }
     // w oknie dialogowym kontekst bywa opakowany – wtedy cykl życia z kompozycji
     val lifecycle = (LocalContext.current as? ComponentActivity)?.lifecycle ?: androidx.compose.ui.platform.LocalLifecycleOwner.current.lifecycle
-    DisposableEffect(lifecycle) {
+    DisposableEffect(lifecycle, h) {
         val observer = LifecycleEventObserver { _, e ->
             when (e) {
                 Lifecycle.Event.ON_START -> h.view.onStart()
@@ -240,7 +240,7 @@ fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier, l
     }
 
     Box(modifier) {
-        AndroidView(factory = { h.view }, modifier = Modifier.fillMaxSize())
+        androidx.compose.runtime.key(h) { AndroidView(factory = { h.view }, modifier = Modifier.fillMaxSize()) }
         HouseNumbers(h)
         Column(Modifier.align(Alignment.BottomEnd).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             MapBtn({ is3d = !is3d }) { Text(if (is3d) "3D" else "2D", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = if (is3d) C.Accent else C.Text) }
@@ -379,7 +379,7 @@ fun WalkMap(
     }
 
     Box(modifier) {
-        AndroidView(factory = { h.view }, modifier = Modifier.fillMaxSize())
+        androidx.compose.runtime.key(h) { AndroidView(factory = { h.view }, modifier = Modifier.fillMaxSize()) }
         HouseNumbers(h)
     }
 }
@@ -463,7 +463,7 @@ fun TripMap(pts: List<LatLng>, modifier: Modifier) {
         }
     }
     Box(modifier) {
-        AndroidView(factory = { h.view }, modifier = Modifier.fillMaxSize())
+        androidx.compose.runtime.key(h) { AndroidView(factory = { h.view }, modifier = Modifier.fillMaxSize()) }
         HouseNumbers(h)
     }
 }
@@ -619,7 +619,7 @@ fun RouteMap(
         )
     }
     Box(modifier) {
-        AndroidView(factory = { h.view }, modifier = Modifier.fillMaxSize())
+        androidx.compose.runtime.key(h) { AndroidView(factory = { h.view }, modifier = Modifier.fillMaxSize()) }
         HouseNumbers(h)
     }
 }

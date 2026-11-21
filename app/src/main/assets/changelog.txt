@@ -2,6 +2,12 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Lepsze trasy i przełączanie wariantów
+- Trasy liczy też TomTom (najszybsze z aktualnymi korkami) – znajduje krótsze drogi, których zwykła wyszukiwarka nie proponowała
+- Naprawione: po wybraniu innego wariantu mapa w podglądzie teraz się zmienia
+- Wybrana trasa idzie do auta – CAR OS jedzie tą samą drogą (także po zjechaniu z trasy przelicza dalej tą drogą)
+
 ## 1.56 · 2026-11-21
 Najlepsza trasa sama
 - Podgląd trasy liczy do 3 wariantów i sam wybiera najszybszy z korkami (przy podobnym czasie – krótszy); wcześniej brał pierwszy z wyszukiwarki tras, czasem dłuższy

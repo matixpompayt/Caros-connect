@@ -90,13 +90,17 @@ object RoutePreview {
         }
         if (raw.isEmpty()) throw IllegalStateException("Brak trasy")
         coroutineScope {
-            // 2) korki dla każdego wariantu równolegle
-            val alts = raw.map { (pts, d, base) ->
+            // TomTom sam liczy najszybsze trasy z korkami – często inne (krótsze) niż warianty OSRM
+            val tom = if (via.isEmpty()) async { ttRoutes(ctx, from, to, depart) } else null
+            val ttAlts = tom?.await().orEmpty()
+            // 2) korki dla wariantów OSRM (te same drogi co TomTom pomijamy)
+            val osrmAlts = raw.filter { (pts, _, _) -> ttAlts.none { same(pts, it.pts) } }.map { (pts, d, base) ->
                 async {
                     val t = try { traffic(ctx, pts, depart, via) } catch (e: Exception) { Triple(null, emptyList<Jam>(), "Korki: brak danych (${e.message ?: "błąd"})") }
                     Alt(pts, d, base, t.first?.first, t.first?.second, t.second, t.third)
                 }
             }.map { it.await() }
+            val alts = (ttAlts + osrmAlts).take(4)
             // najszybszy z korkami; przy różnicy poniżej minuty – krótszy
             val best = alts.indices.minWith(compareBy<Int>({ (alts[it].travelS / 60).roundToInt() }, { alts[it].distanceM }))
             build(alts, best, depart, withWeather)
@@ -190,6 +194,12 @@ object RoutePreview {
             return Triple(null, emptyList(), "Korki: TomTom błąd $code" + (why?.let { " – ${it.take(80)}" } ?: ""))
         }
         val route = JSONObject(text).getJSONArray("routes").getJSONObject(0)
+        val a2 = parseTT(route)
+        return Triple(a2.trafficS!! to (a2.delayS ?: 0), a2.jams, null)
+    }
+
+    /** Trasa z odpowiedzi TomTom: punkty, czas z korkami i bez, korki. */
+    private fun parseTT(route: JSONObject): Alt {
         val sum = route.getJSONObject("summary")
         val tt = ArrayList<LatLng>()
         val legs = route.getJSONArray("legs")
@@ -211,7 +221,52 @@ object RoutePreview {
                 jams += Jam(tt.subList(si, ei + 1).toList(), s.optInt("delayInSeconds"), s.optInt("magnitudeOfDelay"), s.optString("simpleCategory", "JAM"))
             }
         }
-        return Triple(sum.optInt("travelTimeInSeconds") to sum.optInt("trafficDelayInSeconds"), jams, null)
+        val travel = sum.optInt("travelTimeInSeconds")
+        val delay = sum.optInt("trafficDelayInSeconds")
+        val base = sum.optInt("noTrafficTravelTimeInSeconds", travel - delay).toDouble()
+        return Alt(tt, sum.optDouble("lengthInMeters", 0.0), base, travel, delay, jams, null)
+    }
+
+    /** Trasy policzone przez TomTom (najszybsze z aktualnymi korkami + warianty). */
+    private fun ttRoutes(ctx: Context, from: LatLng, to: LatLng, depart: Long): List<Alt> {
+        val key = tomtomKey(ctx)
+        if (key.isBlank()) return emptyList()
+        val at = if (depart - System.currentTimeMillis() > 2 * 60_000) {
+            "&departAt=" + java.net.URLEncoder.encode(SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).format(Date(depart)), "UTF-8")
+        } else ""
+        val url = String.format(
+            Locale.US,
+            "https://api.tomtom.com/routing/1/calculateRoute/%.6f,%.6f:%.6f,%.6f/json?key=%s&traffic=true&travelMode=car&routeType=fastest" +
+                "&maxAlternatives=2&sectionType=traffic&routeRepresentation=polyline&computeTravelTimeFor=all%s",
+            from.latitude, from.longitude, to.latitude, to.longitude, java.net.URLEncoder.encode(key, "UTF-8"), at,
+        )
+        val c = URL(url).openConnection() as HttpURLConnection
+        c.connectTimeout = 10_000
+        c.readTimeout = 20_000
+        return try {
+            if (c.responseCode !in 200..299) return emptyList()
+            val arr = JSONObject(c.inputStream.bufferedReader().use { it.readText() }).getJSONArray("routes")
+            (0 until arr.length()).mapNotNull { i -> try { parseTT(arr.getJSONObject(i)).takeIf { it.pts.size >= 2 } } catch (_: Exception) { null } }
+        } catch (_: Exception) {
+            emptyList()
+        } finally {
+            c.disconnect()
+        }
+    }
+
+    /** Czy dwie trasy jadą tą samą drogą (średnia odległość punktów < 150 m). */
+    private fun same(a: List<LatLng>, b: List<LatLng>): Boolean {
+        val step = max(1, b.size / 500)
+        var sum = 0.0
+        val n = 24
+        for (k in 1..n) {
+            val p = a[(a.size - 1) * k / (n + 1)]
+            var m = Double.MAX_VALUE
+            var i = 0
+            while (i < b.size) { val d = dist(p, b[i]); if (d < m) m = d; i += step }
+            sum += m
+        }
+        return sum / n < 150
     }
 
     // ---------- pogoda (Open-Meteo) ----------
