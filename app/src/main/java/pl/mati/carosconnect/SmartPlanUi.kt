@@ -69,10 +69,22 @@ fun SmartPlanCard(
     var slots by remember(r.pts) { mutableStateOf<List<SmartPlan.Slot>?>(null) }
     var slotsBusy by remember(r.pts) { mutableStateOf(false) }
     var stops by remember(r.pts) { mutableStateOf<List<SmartPlan.Stop>?>(null) }
+    var stopsErr by remember(r.pts) { mutableStateOf<String?>(null) }
+    var stopsTry by remember(r.pts) { mutableStateOf(0) }
     val via = points.dropLast(1).map { LatLng(it.lat, it.lon) }
     val needStops = (range != null && range < r.distanceM / 1000 + 40) || r.travelS > 2 * 3600 + 20 * 60
-    LaunchedEffect(r.pts, range) {
-        stops = if (needStops) try { SmartPlan.stops(r, range) } catch (_: Exception) { emptyList() } else emptyList()
+    LaunchedEffect(r.pts, range, stopsTry) {
+        stopsErr = null
+        if (!needStops) { stops = emptyList(); return@LaunchedEffect }
+        stops = null
+        stops = try {
+            SmartPlan.stops(ctx, r, range)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            stopsErr = e.message ?: "błąd"
+            emptyList()
+        }
     }
 
     Column(
@@ -172,7 +184,14 @@ fun SmartPlanCard(
                 CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                 Text("Szukam stacji i miejsc na przerwę…", fontSize = 13.sp, color = C.Muted)
             }
-            st.isEmpty() -> Line(Icons.Rounded.LocalGasStation, C.Orange, "Nie znalazłem stacji ani miejsc na przerwę przy trasie")
+            st.isEmpty() && stopsErr != null -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Rounded.LocalGasStation, null, tint = C.Orange, modifier = Modifier.size(20.dp))
+                Text("Nie udało się pobrać stacji – serwery map nie odpowiadają ($stopsErr)", fontSize = 13.sp, color = C.Text, modifier = Modifier.weight(1f))
+                Box(
+                    Modifier.clip(RoundedCornerShape(10.dp)).background(C.Accent.copy(alpha = 0.18f)).clickable { stopsTry++ }.padding(horizontal = 10.dp, vertical = 6.dp),
+                ) { Text("Ponów", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.Accent) }
+            }
+            st.isEmpty() -> Line(Icons.Rounded.LocalGasStation, C.Muted, "Brak stacji i MOP-ów blisko trasy w miejscach, gdzie wypada postój")
             else -> st.forEach { s ->
                 val added = points.any { kotlin.math.abs(it.lat - s.place.lat) < 1e-5 && kotlin.math.abs(it.lon - s.place.lon) < 1e-5 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -183,7 +202,9 @@ fun SmartPlanCard(
                     }
                     if (!added && points.size < 4) Box(
                         Modifier.clip(RoundedCornerShape(10.dp)).background(C.Accent.copy(alpha = 0.18f)).clickable {
-                            onPoints(points.dropLast(1) + s.place + points.takeLast(1))
+                            val vp = points.dropLast(1)
+                            val at = SmartPlan.insertIndex(r, vp, s.atKm)
+                            onPoints(vp.take(at) + s.place + vp.drop(at) + points.takeLast(1))
                             Toast.makeText(ctx, "Dodano postój: ${s.place.name}", Toast.LENGTH_SHORT).show()
                         }.padding(horizontal = 10.dp, vertical = 6.dp),
                     ) { Text("Dodaj", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.Accent) }

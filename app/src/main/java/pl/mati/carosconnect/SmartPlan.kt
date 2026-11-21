@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.maplibre.android.geometry.LatLng
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
@@ -68,83 +69,65 @@ object SmartPlan {
 
     /**
      * Postoje: stacja, gdy zasięg nie wystarcza (z zapasem 40 km), i przerwa co ok. 2 h jazdy.
-     * Miejsca z OpenStreetMap (Overpass): stacje paliw, MOP-y / rest area.
+     * Miejsca przy samej trasie z OpenStreetMap (a gdy nie odpowiada – z TomTom).
+     * Rzuca [java.io.IOException], gdy nie udało się nic sprawdzić (brak internetu / serwery zajęte).
      */
-    suspend fun stops(r: RoutePreview.Result, rangeKm: Double?): List<Stop> = withContext(Dispatchers.IO) {
+    suspend fun stops(ctx: Context, r: RoutePreview.Result, rangeKm: Double?): List<Stop> = withContext(Dispatchers.IO) {
         val out = ArrayList<Stop>()
-        val cum = DoubleArray(r.pts.size)
-        for (k in 1 until r.pts.size) cum[k] = cum[k - 1] + RoutePreview.dist(r.pts[k - 1], r.pts[k])
-        val totalKm = cum.last() / 1000
-        val speed = cum.last() / r.travelS.coerceAtLeast(60.0) // m/s
-        fun pointAt(km: Double): Int = cum.indexOfFirst { it >= km * 1000 }.let { if (it < 0) cum.lastIndex else it }
-        fun timeAt(i: Int) = r.depart + (cum[i] / speed * 1000).toLong()
-        // tankowanie
-        if (rangeKm != null && rangeKm < totalKm + 40) {
-            val target = (rangeKm - 40).coerceIn(5.0, totalKm)
-            val idx = pointAt(target)
-            findNear(r.pts, idx, "fuel")?.let { (p, i) ->
-                out += Stop("fuel", p, cum[i] / 1000, timeAt(i), "Zasięg ok. ${rangeKm.roundToInt()} km – zatankuj tutaj")
+        val n = r.pts.size
+        if (n < 2) return@withContext out
+        val lats = DoubleArray(n) { r.pts[it].latitude }
+        val lons = DoubleArray(n) { r.pts[it].longitude }
+        val cum = DoubleArray(n)
+        for (k in 1 until n) cum[k] = cum[k - 1] + RoutePreview.dist(r.pts[k - 1], r.pts[k])
+        val total = cum.last()
+        val speed = total / r.travelS.coerceAtLeast(60.0) // m/s
+        val key = RoutePreview.tomtomKey(ctx)
+        var ok = 0
+        var err: Exception? = null
+        fun look(target: Double, back: Double, fwd: Double, kind: String): AlongRoute.Hit? = try {
+            AlongRoute.find(lats, lons, cum, target, back, fwd, kind, key).also { ok++ }
+        } catch (e: Exception) {
+            err = e
+            null
+        }
+        // tankowanie: najlepiej przed końcem zasięgu (zapas 40 km)
+        if (rangeKm != null && rangeKm < total / 1000 + 40) {
+            val target = ((rangeKm - 40) * 1000).coerceIn(5_000.0, total)
+            look(target, 60_000.0, 10_000.0, "fuel")?.let { h ->
+                out += Stop("fuel", CarData.Place(h.name, "Stacja paliw", h.lat, h.lon), h.atM / 1000, r.depart + (h.atM / speed * 1000).toLong(),
+                    "Zasięg ok. ${rangeKm.roundToInt()} km – zatankuj tutaj")
             }
         }
         // przerwy co ok. 2 h (najwyżej 3)
-        val twoH = 2 * 3600.0
-        var t = twoH
-        var n = 0
-        while (t < r.travelS - 20 * 60 && n < 3) {
-            val idx = pointAt(t * speed / 1000)
-            val near = findNear(r.pts, idx, "rest") ?: findNear(r.pts, idx, "fuel")
-            near?.let { (p, i) ->
-                if (out.none { kotlin.math.abs(it.atKm - cum[i] / 1000) < 15 }) {
-                    out += Stop("break", p, cum[i] / 1000, timeAt(i), "Po ok. ${(t / 3600).roundToInt()} h jazdy – przerwa 15 min")
+        var t = 2 * 3600.0
+        var i = 0
+        while (t < r.travelS - 20 * 60 && i < 3) {
+            val target = t * speed
+            if (out.none { abs(it.atKm * 1000 - target) < 25_000 }) {
+                look(target, 30_000.0, 20_000.0, "rest")?.let { h ->
+                    if (out.none { abs(it.atKm - h.atM / 1000) < 15 }) {
+                        out += Stop("break", CarData.Place(h.name, if (h.rest) "Miejsce na przerwę" else "Stacja paliw", h.lat, h.lon), h.atM / 1000,
+                            r.depart + (h.atM / speed * 1000).toLong(), "Po ok. ${(t / 3600).roundToInt()} h jazdy – przerwa 15 min")
+                    }
                 }
             }
-            t += twoH
-            n++
+            t += 2 * 3600.0
+            i++
         }
+        if (ok == 0 && err != null) throw java.io.IOException(err?.message ?: "brak odpowiedzi")
         out.sortedBy { it.atKm }
     }
 
-    /** Najbliższa stacja / miejsce odpoczynku przy trasie w okolicy punktu [idx] (do 3 km od trasy). */
-    private fun findNear(pts: List<LatLng>, idx: Int, kind: String): Pair<CarData.Place, Int>? {
-        val c = pts[idx]
-        val filter = if (kind == "fuel") "[amenity=fuel]" else "[highway~\"^(services|rest_area)$\"]"
-        val q = "[out:json][timeout:15];(node$filter(around:4000,${c.latitude},${c.longitude});way$filter(around:4000,${c.latitude},${c.longitude}););out center 25;"
-        val body = try {
-            RoutePreview.get("https://overpass-api.de/api/interpreter?data=" + java.net.URLEncoder.encode(q, "UTF-8"))
-        } catch (_: Exception) {
-            return null
-        }
-        val els = JSONObject(body).optJSONArray("elements") ?: return null
-        var best: Pair<CarData.Place, Int>? = null
-        var bestScore = Double.MAX_VALUE
-        // fragment trasy wokół punktu (żeby wybrać miejsce przy samej drodze)
-        val from = (idx - 400).coerceAtLeast(0)
-        val to = (idx + 400).coerceAtMost(pts.lastIndex)
-        for (i in 0 until els.length()) {
-            val e = els.getJSONObject(i)
-            val lat = e.optDouble("lat", e.optJSONObject("center")?.optDouble("lat") ?: Double.NaN)
-            val lon = e.optDouble("lon", e.optJSONObject("center")?.optDouble("lon") ?: Double.NaN)
-            if (lat.isNaN() || lon.isNaN()) continue
-            val ll = LatLng(lat, lon)
-            var dmin = Double.MAX_VALUE
-            var at = idx
-            var k = from
-            while (k <= to) {
-                val d = RoutePreview.dist(ll, pts[k])
-                if (d < dmin) { dmin = d; at = k }
-                k += 2
-            }
-            if (dmin > 1500) continue
-            val tags = e.optJSONObject("tags")
-            val name = listOfNotNull(tags?.optString("brand")?.ifBlank { null }, tags?.optString("name")?.ifBlank { null }).distinct().joinToString(" ")
-            // bliżej trasy i bliżej docelowego miejsca = lepiej
-            val score = dmin * 3 + kotlin.math.abs(at - idx) * 2.0
-            if (score < bestScore) {
-                bestScore = score
-                val label = name.ifBlank { if (kind == "fuel") "Stacja paliw" else "Miejsce odpoczynku" }
-                best = CarData.Place(label, if (kind == "fuel") "Stacja paliw" else "Przerwa", lat, lon) to at
-            }
-        }
-        return best
+    /** Gdzie wstawić postój na [atKm] km między punkty po drodze, żeby kolejność zgadzała się z trasą. */
+    fun insertIndex(r: RoutePreview.Result, via: List<CarData.Place>, atKm: Double): Int {
+        val n = r.pts.size
+        if (n < 2 || via.isEmpty()) return via.size
+        val lats = DoubleArray(n) { r.pts[it].latitude }
+        val lons = DoubleArray(n) { r.pts[it].longitude }
+        val cum = DoubleArray(n)
+        for (k in 1 until n) cum[k] = cum[k - 1] + RoutePreview.dist(r.pts[k - 1], r.pts[k])
+        val idx = via.indexOfFirst { AlongRoute.positionOf(it.lat, it.lon, lats, lons, cum) > atKm * 1000 }
+        return if (idx < 0) via.size else idx
     }
 }
