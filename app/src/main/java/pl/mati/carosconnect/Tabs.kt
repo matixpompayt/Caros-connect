@@ -10,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -660,7 +662,11 @@ private fun IconBtn(icon: ImageVector, desc: String, onClick: () -> Unit) {
 }
 
 /** Wysyła miejsce do radia (trasa / ulubione). */
-suspend fun sendToCar(ctx: android.content.Context, type: String, p: CarData.Place, via: List<CarData.Place> = emptyList()): Boolean {
+suspend fun sendToCar(
+    ctx: android.content.Context, type: String, p: CarData.Place, via: List<CarData.Place> = emptyList(),
+    /** Kilka punktów wybranego wariantu trasy – radio wybierze ten sam. */
+    shape: List<LatLng> = emptyList(),
+): Boolean {
     val pairing = Store.pairing.value
     if (pairing == null) {
         Toast.makeText(ctx, "Najpierw połącz z CAR OS kodem QR", Toast.LENGTH_LONG).show()
@@ -671,6 +677,9 @@ suspend fun sendToCar(ctx: android.content.Context, type: String, p: CarData.Pla
             val o = JSONObject().put("type", type).put("n", p.name).put("d", p.detail).put("lat", p.lat).put("lon", p.lon)
             if (via.isNotEmpty()) o.put("via", org.json.JSONArray().apply {
                 via.forEach { v -> put(JSONObject().put("n", v.name).put("d", v.detail).put("lat", v.lat).put("lon", v.lon)) }
+            })
+            if (shape.isNotEmpty()) o.put("shape", org.json.JSONArray().apply {
+                shape.forEach { q -> put(org.json.JSONArray().put(Math.round(q.latitude * 1e5) / 1e5).put(Math.round(q.longitude * 1e5) / 1e5)) }
             })
             Link.send(pairing, o)
             true
@@ -704,6 +713,8 @@ fun PlaceSheet(
     val place = picked
     // trasa: punkty po drodze + cel (kolejność jak w Mapach Google – ostatni to cel)
     var points by remember(place) { mutableStateOf(listOfNotNull(place)) }
+    // wariant trasy pokazany w podglądzie (do radia idzie jego kształt)
+    var routeShown by remember(place) { mutableStateOf<RoutePreview.Result?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
@@ -722,12 +733,13 @@ fun PlaceSheet(
                     else -> {
                         if (place.detail.isNotBlank()) Text(place.detail, color = C.Muted, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         // podgląd: trasa z miejsca parkowania, korki, pogoda, przyjazd
-                        RoutePreviewBlock(place, points) { points = it }
+                        RoutePreviewBlock(place, points, { points = it }) { routeShown = it }
                         PrimaryButton(if (sending) "Wysyłam…" else "Nawiguj w aucie", Icons.Rounded.Navigation) {
                             if (sending) return@PrimaryButton
                             sending = true
                             val dest = points.lastOrNull() ?: place
-                            scope.launch { if (sendToCar(ctx, "route", dest, points.dropLast(1))) onDismiss(); sending = false }
+                            val shape = routeShown?.let { RoutePreview.shape(it) }.orEmpty()
+                            scope.launch { if (sendToCar(ctx, "route", dest, points.dropLast(1), shape)) onDismiss(); sending = false }
                         }
                         SecondaryButton("Dodaj do ulubionych w aucie", Icons.Rounded.StarBorder, Modifier.fillMaxWidth()) {
                             if (sending) return@SecondaryButton
@@ -761,7 +773,10 @@ fun PlaceSheet(
 
 /** Podgląd trasy w oknie „Wyślij do auta”: start z miejsca parkowania, mapa, przyjazd, korki, pogoda. */
 @Composable
-private fun RoutePreviewBlock(place: CarData.Place, points: List<CarData.Place>, onPoints: (List<CarData.Place>) -> Unit) {
+private fun RoutePreviewBlock(
+    place: CarData.Place, points: List<CarData.Place>, onPoints: (List<CarData.Place>) -> Unit,
+    onRoute: (RoutePreview.Result?) -> Unit = {},
+) {
     val ctx = LocalContext.current
     val spot by Store.spot.collectAsState()
     val linked by Store.linked.collectAsState()
@@ -772,6 +787,7 @@ private fun RoutePreviewBlock(place: CarData.Place, points: List<CarData.Place>,
     var picked by remember(place) { mutableStateOf<Long?>(null) }
     val plan by TripPlan.plan.collectAsState()
     var res by remember(place) { mutableStateOf<RoutePreview.Result?>(null) }
+    LaunchedEffect(res) { onRoute(res) }
     var err by remember(place) { mutableStateOf<String?>(null) }
     var loading by remember(place) { mutableStateOf(true) }
     // start: telefon w aucie → jego pozycja (auto), inaczej miejsce zaparkowanego auta
@@ -860,7 +876,7 @@ private fun RoutePreviewBlock(place: CarData.Place, points: List<CarData.Place>,
         val r = res
         var full by remember(place) { mutableStateOf(false) }
         Box(Modifier.fillMaxWidth().height(190.dp).clip(RoundedCornerShape(16.dp)).border(1.dp, C.Border, RoundedCornerShape(16.dp))) {
-            if (r != null) RouteMap(r.pts, r.jams, Modifier.fillMaxSize(), stops = via)
+            if (r != null) RouteMap(r.pts, r.jams, Modifier.fillMaxSize(), stops = via, others = r.alts.filterIndexed { k, _ -> k != r.altIndex }.map { it.pts })
             if (loading) CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.align(Alignment.Center).size(28.dp))
             else if (r == null) Text(err ?: "", color = C.Orange, fontSize = 13.sp, modifier = Modifier.align(Alignment.Center).padding(12.dp))
             // trasa i korki na pełnym ekranie
@@ -872,6 +888,35 @@ private fun RoutePreviewBlock(place: CarData.Place, points: List<CarData.Place>,
             ) {
                 Icon(Icons.Rounded.Fullscreen, null, tint = C.Accent, modifier = Modifier.size(18.dp))
                 Text("Pełny ekran", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+            }
+        }
+        // warianty trasy: najszybszy wybrany sam, dotknij inny, żeby go pokazać
+        if (r != null && !loading && r.alts.size > 1) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val fastest = r.alts.indices.minByOrNull { r.alts[it].travelS }
+                val shortest = r.alts.indices.minByOrNull { r.alts[it].distanceM }
+                r.alts.forEachIndexed { i, a ->
+                    val on = i == r.altIndex
+                    val m = (a.travelS / 60).roundToInt()
+                    Column(
+                        Modifier.clip(RoundedCornerShape(12.dp)).background(if (on) C.Accent.copy(alpha = 0.2f) else C.Raised)
+                            .border(if (on) 1.5.dp else 0.dp, if (on) C.Accent else Color.Transparent, RoundedCornerShape(12.dp))
+                            .clickable(enabled = !on) {
+                                scope2.launch {
+                                    loading = true
+                                    res = try { RoutePreview.choose(r, i) } catch (_: Exception) { r }
+                                    loading = false
+                                }
+                            }
+                            .padding(horizontal = 12.dp, vertical = 7.dp),
+                    ) {
+                        Text(if (m >= 60) "${m / 60} h ${"%02d".format(m % 60)} min" else "$m min", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = if (on) C.Text else C.Text2)
+                        Text(
+                            "${(a.distanceM / 1000).roundToInt()} km" + when (i) { fastest -> " · najszybsza"; shortest -> " · najkrótsza"; else -> "" },
+                            fontSize = 11.sp, color = C.Muted, maxLines = 1,
+                        )
+                    }
+                }
             }
         }
         if (full && r != null) RouteFullScreen(dest.name, r, stops = via, onClose = { full = false })

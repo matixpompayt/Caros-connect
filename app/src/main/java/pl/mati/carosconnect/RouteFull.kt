@@ -92,6 +92,7 @@ fun RouteFullScreen(
             RouteMap(
                 r.pts, r.jams, Modifier.fillMaxSize(), flowUrl = flowUrl, focus = focus,
                 padTop = 150, padBottom = if (pick != null) 150 else 250, padSide = 36, stops = stops, onLongPress = pick,
+                others = r.alts.filterIndexed { k, _ -> k != r.altIndex }.map { it.pts },
             )
 
             // góra: cel, czas, zamknij

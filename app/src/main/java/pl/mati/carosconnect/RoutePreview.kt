@@ -30,6 +30,14 @@ object RoutePreview {
     data class Jam(val pts: List<LatLng>, val delayS: Int, val magnitude: Int, val kind: String)
     data class Wx(val kind: String, val name: String, val fromKm: Double, val toKm: Double, val time: Long, val code: Int, val temp: Double?)
 
+    /** Wariant trasy z czasem z korkami. */
+    data class Alt(
+        val pts: List<LatLng>, val distanceM: Double, val baseS: Double,
+        val trafficS: Int?, val delayS: Int?, val jams: List<Jam>, val trafficNote: String?,
+    ) {
+        val travelS: Double get() = trafficS?.toDouble() ?: baseS
+    }
+
     data class Result(
         val pts: List<LatLng>,
         val distanceM: Double,
@@ -43,6 +51,9 @@ object RoutePreview {
         val weather: List<Wx>?,
         val destTemp: Double?,
         val depart: Long,
+        /** Warianty trasy (gdy bez punktów po drodze) i który jest pokazany. */
+        val alts: List<Alt> = emptyList(),
+        val altIndex: Int = 0,
     ) {
         val travelS: Double get() = trafficS?.toDouble() ?: baseS
         val arrive: Long get() = depart + (travelS * 1000).toLong()
@@ -61,30 +72,60 @@ object RoutePreview {
         /** Punkty po drodze (w kolejności). */
         via: List<LatLng> = emptyList(),
     ): Result = withContext(Dispatchers.IO) {
-        // 1) trasa jak w radiu (przez punkty po drodze)
+        // 1) trasy jak w radiu: bez punktów po drodze – do 3 wariantów (OSRM sam wybiera po swoich prędkościach,
+        //    a bywa, że inny wariant jest krótszy i szybszy – wybieramy po czasie z korkami)
         val coords = (listOf(from) + via + to).joinToString(";") { String.format(Locale.US, "%.6f,%.6f", it.longitude, it.latitude) }
-        val osrm = JSONObject(get("https://router.project-osrm.org/route/v1/driving/$coords?overview=full&geometries=polyline"))
+        val alt = if (via.isEmpty()) "&alternatives=3" else ""
+        val osrm = JSONObject(get("https://router.project-osrm.org/route/v1/driving/$coords?overview=full&geometries=polyline$alt"))
         if (osrm.optString("code") != "Ok") throw IllegalStateException("Brak trasy (${osrm.optString("code")})")
-        val r0 = osrm.getJSONArray("routes").getJSONObject(0)
-        val pts = decodePolyline(r0.getString("geometry"))
-        if (pts.size < 2) throw IllegalStateException("Brak trasy")
-        val cum = DoubleArray(pts.size)
-        for (k in 1 until pts.size) cum[k] = cum[k - 1] + dist(pts[k - 1], pts[k])
-        val distance = r0.optDouble("distance", cum.last())
-        val baseS = r0.optDouble("duration", distance / 15.0)
-
-        coroutineScope {
-            // 2) korki i 3) pogoda równolegle
-            val traffic = async { try { traffic(ctx, pts, depart, via) } catch (e: Exception) { Triple(null, emptyList<Jam>(), "Korki: brak danych (${e.message ?: "błąd"})") } }
-            val t = traffic.await()
-            val travel = (t.first?.first?.toDouble() ?: baseS)
-            val wx = if (!withWeather) null else try { weather(pts, cum, depart, travel) } catch (_: Exception) { null }
-            Result(
-                pts = pts, distanceM = distance, baseS = baseS,
-                trafficS = t.first?.first, delayS = t.first?.second, jams = t.second, trafficNote = t.third,
-                weather = wx?.first, destTemp = wx?.second, depart = depart,
-            )
+        val arr = osrm.getJSONArray("routes")
+        val raw = (0 until arr.length()).mapNotNull { i ->
+            val r0 = arr.getJSONObject(i)
+            val pts = decodePolyline(r0.getString("geometry"))
+            if (pts.size < 2) return@mapNotNull null
+            var len = 0.0
+            for (k in 1 until pts.size) len += dist(pts[k - 1], pts[k])
+            val distance = r0.optDouble("distance", len)
+            Triple(pts, distance, r0.optDouble("duration", distance / 15.0))
         }
+        if (raw.isEmpty()) throw IllegalStateException("Brak trasy")
+        coroutineScope {
+            // 2) korki dla każdego wariantu równolegle
+            val alts = raw.map { (pts, d, base) ->
+                async {
+                    val t = try { traffic(ctx, pts, depart, via) } catch (e: Exception) { Triple(null, emptyList<Jam>(), "Korki: brak danych (${e.message ?: "błąd"})") }
+                    Alt(pts, d, base, t.first?.first, t.first?.second, t.second, t.third)
+                }
+            }.map { it.await() }
+            // najszybszy z korkami; przy różnicy poniżej minuty – krótszy
+            val best = alts.indices.minWith(compareBy<Int>({ (alts[it].travelS / 60).roundToInt() }, { alts[it].distanceM }))
+            build(alts, best, depart, withWeather)
+        }
+    }
+
+    /** Pokaż inny wariant (z pogodą dla niego). */
+    suspend fun choose(r: Result, i: Int): Result = withContext(Dispatchers.IO) {
+        if (i !in r.alts.indices) r else build(r.alts, i, r.depart, true)
+    }
+
+    private fun build(alts: List<Alt>, i: Int, depart: Long, withWeather: Boolean): Result {
+        val a = alts[i]
+        val cum = DoubleArray(a.pts.size)
+        for (k in 1 until a.pts.size) cum[k] = cum[k - 1] + dist(a.pts[k - 1], a.pts[k])
+        // 3) pogoda na wybranej trasie
+        val wx = if (!withWeather) null else try { weather(a.pts, cum, depart, a.travelS) } catch (_: Exception) { null }
+        return Result(
+            pts = a.pts, distanceM = a.distanceM, baseS = a.baseS,
+            trafficS = a.trafficS, delayS = a.delayS, jams = a.jams, trafficNote = a.trafficNote,
+            weather = wx?.first, destTemp = wx?.second, depart = depart,
+            alts = alts, altIndex = i,
+        )
+    }
+
+    /** Kilka punktów trasy (do radia – wybiera ten sam wariant). */
+    fun shape(r: Result, n: Int = 8): List<LatLng> {
+        if (r.pts.size < 3) return emptyList()
+        return (1..n).map { k -> r.pts[(r.pts.size - 1) * k / (n + 1)] }
     }
 
     // ---------- korki (TomTom) ----------

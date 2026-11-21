@@ -2,6 +2,12 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Najlepsza trasa sama
+- Podgląd trasy liczy do 3 wariantów i sam wybiera najszybszy z korkami (przy podobnym czasie – krótszy); wcześniej brał pierwszy z wyszukiwarki tras, czasem dłuższy
+- Pod mapą warianty do wyboru („najszybsza”, „najkrótsza”), pozostałe trasy szare na mapie
+- „Nawiguj w aucie” wysyła wybrany wariant – CAR OS wybiera tę samą drogę
+
 ## 1.55 · 2026-11-21
 Korki przy trasie z punktami
 - Naprawione: po dodaniu punktu po drodze korki pokazywały „TomTom błąd 400” – teraz liczą się dla całej trasy przez punkty

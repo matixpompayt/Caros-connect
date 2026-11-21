@@ -481,14 +481,33 @@ fun RouteMap(
     stops: List<LatLng> = emptyList(),
     /** Przytrzymanie palca na mapie (dodawanie punktu). */
     onLongPress: ((LatLng) -> Unit)? = null,
+    /** Inne warianty trasy (szare, pod wybraną). */
+    others: List<List<LatLng>> = emptyList(),
 ) {
     val ctx = LocalContext.current
     val lp = remember { arrayOfNulls<(LatLng) -> Unit>(1) }
     lp[0] = onLongPress
-    val h = remember(pts, stops) {
+    val h = remember(pts, stops, others) {
         MapHolder(ctx) { m, st ->
             val below = CarMapStyle.firstSymbolId(st)
             fun add(l: org.maplibre.android.style.layers.Layer) { if (below != null) st.addLayerBelow(l, below) else st.addLayer(l) }
+            if (others.isNotEmpty()) {
+                st.addSource(
+                    GeoJsonSource(
+                        "caros-rt-alts",
+                        FeatureCollection.fromFeatures(others.map { o -> Feature.fromGeometry(LineString.fromLngLats(o.map { Point.fromLngLat(it.longitude, it.latitude) })) }),
+                    ),
+                )
+                add(
+                    LineLayer("caros-rt-alts-line", "caros-rt-alts").withProperties(
+                        PropertyFactory.lineColor(android.graphics.Color.parseColor("#8A93A3")),
+                        PropertyFactory.lineWidth(5f),
+                        PropertyFactory.lineOpacity(0.75f),
+                        PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                        PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                    ),
+                )
+            }
             st.addSource(GeoJsonSource("caros-rt", Feature.fromGeometry(LineString.fromLngLats(pts.map { Point.fromLngLat(it.longitude, it.latitude) }))))
             add(
                 LineLayer("caros-rt-casing", "caros-rt").withProperties(
