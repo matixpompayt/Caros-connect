@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.62 · 2026-11-21
 Prowadzenie do auta: linia trasy chodnikami
 - Na mapie wyraźna linia trasy od Ciebie do auta ze strzałkami kierunku; przebyta część znika
 - Trasa piesza woli chodniki, ścieżki dla pieszych i przejścia, omija podjazdy i zaułki
