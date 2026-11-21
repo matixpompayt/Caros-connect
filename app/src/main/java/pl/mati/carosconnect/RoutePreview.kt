@@ -56,11 +56,14 @@ object RoutePreview {
         return hypot((a.longitude - b.longitude) * kx, (a.latitude - b.latitude) * 110_540.0)
     }
 
-    suspend fun compute(ctx: Context, from: LatLng, to: LatLng, depart: Long, withWeather: Boolean = true): Result = withContext(Dispatchers.IO) {
-        // 1) trasa jak w radiu
-        val osrm = JSONObject(
-            get(String.format(Locale.US, "https://router.project-osrm.org/route/v1/driving/%.6f,%.6f;%.6f,%.6f?overview=full&geometries=polyline", from.longitude, from.latitude, to.longitude, to.latitude)),
-        )
+    suspend fun compute(
+        ctx: Context, from: LatLng, to: LatLng, depart: Long, withWeather: Boolean = true,
+        /** Punkty po drodze (w kolejności). */
+        via: List<LatLng> = emptyList(),
+    ): Result = withContext(Dispatchers.IO) {
+        // 1) trasa jak w radiu (przez punkty po drodze)
+        val coords = (listOf(from) + via + to).joinToString(";") { String.format(Locale.US, "%.6f,%.6f", it.longitude, it.latitude) }
+        val osrm = JSONObject(get("https://router.project-osrm.org/route/v1/driving/$coords?overview=full&geometries=polyline"))
         if (osrm.optString("code") != "Ok") throw IllegalStateException("Brak trasy (${osrm.optString("code")})")
         val r0 = osrm.getJSONArray("routes").getJSONObject(0)
         val pts = decodePolyline(r0.getString("geometry"))
@@ -72,7 +75,7 @@ object RoutePreview {
 
         coroutineScope {
             // 2) korki i 3) pogoda równolegle
-            val traffic = async { try { traffic(ctx, pts, depart) } catch (e: Exception) { Triple(null, emptyList<Jam>(), "Korki: brak danych (${e.message ?: "błąd"})") } }
+            val traffic = async { try { traffic(ctx, pts, depart, via) } catch (e: Exception) { Triple(null, emptyList<Jam>(), "Korki: brak danych (${e.message ?: "błąd"})") } }
             val t = traffic.await()
             val travel = (t.first?.first?.toDouble() ?: baseS)
             val wx = if (!withWeather) null else try { weather(pts, cum, depart, travel) } catch (_: Exception) { null }
@@ -87,7 +90,7 @@ object RoutePreview {
     // ---------- korki (TomTom) ----------
 
     /** ((czas z korkami, opóźnienie) albo null, korki, uwaga). */
-    private fun traffic(ctx: Context, pts: List<LatLng>, depart: Long): Triple<Pair<Int, Int>?, List<Jam>, String?> {
+    private fun traffic(ctx: Context, pts: List<LatLng>, depart: Long, via: List<LatLng> = emptyList()): Triple<Pair<Int, Int>?, List<Jam>, String?> {
         val key = tomtomKey(ctx)
         if (key.isBlank()) return Triple(null, emptyList(), "Korki: dodaj klucz TomTom (Ustawienia → Korki w CAR OS)")
         val step = max(1, pts.size / 900)
@@ -101,11 +104,13 @@ object RoutePreview {
         val at = if (depart - System.currentTimeMillis() > 2 * 60_000) {
             "&departAt=" + java.net.URLEncoder.encode(SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).format(Date(depart)), "UTF-8")
         } else ""
+        // start : punkty po drodze : cel (trasa i tak odtwarzana z punktów pomocniczych)
+        val locs = (listOf(a) + via + b).joinToString(":") { String.format(Locale.US, "%.6f,%.6f", it.latitude, it.longitude) }
         val url = String.format(
             Locale.US,
-            "https://api.tomtom.com/routing/1/calculateRoute/%.6f,%.6f:%.6f,%.6f/json?key=%s&traffic=true&travelMode=car&routeType=fastest" +
+            "https://api.tomtom.com/routing/1/calculateRoute/%s/json?key=%s&traffic=true&travelMode=car&routeType=fastest" +
                 "&sectionType=traffic&routeRepresentation=polyline&computeTravelTimeFor=all%s",
-            a.latitude, a.longitude, b.latitude, b.longitude, java.net.URLEncoder.encode(key, "UTF-8"), at,
+            locs, java.net.URLEncoder.encode(key, "UTF-8"), at,
         )
         val c = URL(url).openConnection() as HttpURLConnection
         c.connectTimeout = 10_000

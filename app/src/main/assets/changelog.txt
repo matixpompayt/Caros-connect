@@ -2,6 +2,13 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Punkty po drodze
+- W „Wyślij do auta” lista trasy jak w Mapach Google: start, punkty po drodze i cel
+- „Dodaj punkt” otwiera mapę – przytrzymaj palec w miejscu, przez które chcesz jechać (do 3 punktów)
+- Kolejność zmieniasz, przeciągając za uchwyt ═ (cel też można przesunąć – ostatni punkt to cel), × usuwa punkt
+- Czas, korki i pogoda liczą się dla całej trasy przez punkty; „Nawiguj w aucie” wysyła trasę z punktami do CAR OS
+
 ## 1.53 · 2026-11-21
 Trasa na pełnym ekranie
 - W „Wyślij do auta” przycisk „Pełny ekran” na mapie trasy

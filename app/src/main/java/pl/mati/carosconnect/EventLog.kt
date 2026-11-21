@@ -208,7 +208,11 @@ object EventLog {
         try {
             bump(Metric.OUT)
             when (o.optString("type")) {
-                "route", "nav" -> { bump(Metric.NAV); add(Cat.NAV, "Wysłano cel do auta: " + o.optString("n").ifBlank { "punkt na mapie" }) }
+                "route", "nav" -> {
+                    bump(Metric.NAV)
+                    val via = o.optJSONArray("via")?.length() ?: 0
+                    add(Cat.NAV, "Wysłano cel do auta: " + o.optString("n").ifBlank { "punkt na mapie" } + (if (via > 0) " (przez $via pkt)" else ""))
+                }
                 "fav" -> add(Cat.NAV, "Dodano do ulubionych w radiu: " + o.optString("n"))
                 "place_set" -> add(Cat.NAV, "Ustawiono adres " + (if (o.optString("slot") == "work") "pracy" else "domu") + " w radiu")
                 "alert" -> {

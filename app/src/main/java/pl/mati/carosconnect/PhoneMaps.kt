@@ -477,9 +477,15 @@ fun RouteMap(
     /** Pokaż tylko ten fragment (np. korek); null – cała trasa. */
     focus: List<LatLng>? = null,
     padTop: Int = 28, padBottom: Int = 28, padSide: Int = 28,
+    /** Punkty po drodze (kropki pomarańczowe). */
+    stops: List<LatLng> = emptyList(),
+    /** Przytrzymanie palca na mapie (dodawanie punktu). */
+    onLongPress: ((LatLng) -> Unit)? = null,
 ) {
     val ctx = LocalContext.current
-    val h = remember(pts) {
+    val lp = remember { arrayOfNulls<(LatLng) -> Unit>(1) }
+    lp[0] = onLongPress
+    val h = remember(pts, stops) {
         MapHolder(ctx) { m, st ->
             val below = CarMapStyle.firstSymbolId(st)
             fun add(l: org.maplibre.android.style.layers.Layer) { if (below != null) st.addLayerBelow(l, below) else st.addLayer(l) }
@@ -516,7 +522,7 @@ fun RouteMap(
                         listOf(
                             Feature.fromGeometry(point(pts.first().latitude, pts.first().longitude)).also { it.addStringProperty("k", "s") },
                             Feature.fromGeometry(point(pts.last().latitude, pts.last().longitude)).also { it.addStringProperty("k", "e") },
-                        ),
+                        ) + stops.map { v -> Feature.fromGeometry(point(v.latitude, v.longitude)).also { it.addStringProperty("k", "v") } },
                     ),
                 ),
             )
@@ -528,6 +534,7 @@ fun RouteMap(
                             org.maplibre.android.style.expressions.Expression.get("k"),
                             org.maplibre.android.style.expressions.Expression.color(android.graphics.Color.WHITE),
                             org.maplibre.android.style.expressions.Expression.stop("s", org.maplibre.android.style.expressions.Expression.color(android.graphics.Color.parseColor("#7CF06B"))),
+                            org.maplibre.android.style.expressions.Expression.stop("v", org.maplibre.android.style.expressions.Expression.color(android.graphics.Color.parseColor("#FFB347"))),
                         ),
                     ),
                     PropertyFactory.circleStrokeColor(android.graphics.Color.parseColor("#0A0C0F")),
@@ -535,6 +542,11 @@ fun RouteMap(
                 ),
             )
             m.uiSettings.isRotateGesturesEnabled = false
+            m.addOnMapLongClickListener { ll ->
+                val cb = lp[0] ?: return@addOnMapLongClickListener false
+                cb(ll)
+                true
+            }
         }
     }
     rememberMapLifecycle(h)

@@ -660,7 +660,7 @@ private fun IconBtn(icon: ImageVector, desc: String, onClick: () -> Unit) {
 }
 
 /** Wysyła miejsce do radia (trasa / ulubione). */
-suspend fun sendToCar(ctx: android.content.Context, type: String, p: CarData.Place): Boolean {
+suspend fun sendToCar(ctx: android.content.Context, type: String, p: CarData.Place, via: List<CarData.Place> = emptyList()): Boolean {
     val pairing = Store.pairing.value
     if (pairing == null) {
         Toast.makeText(ctx, "Najpierw połącz z CAR OS kodem QR", Toast.LENGTH_LONG).show()
@@ -668,7 +668,11 @@ suspend fun sendToCar(ctx: android.content.Context, type: String, p: CarData.Pla
     }
     val ok = withContext(Dispatchers.IO) {
         try {
-            Link.send(pairing, JSONObject().put("type", type).put("n", p.name).put("d", p.detail).put("lat", p.lat).put("lon", p.lon))
+            val o = JSONObject().put("type", type).put("n", p.name).put("d", p.detail).put("lat", p.lat).put("lon", p.lon)
+            if (via.isNotEmpty()) o.put("via", org.json.JSONArray().apply {
+                via.forEach { v -> put(JSONObject().put("n", v.name).put("d", v.detail).put("lat", v.lat).put("lon", v.lon)) }
+            })
+            Link.send(pairing, o)
             true
         } catch (_: Exception) {
             false
@@ -678,7 +682,7 @@ suspend fun sendToCar(ctx: android.content.Context, type: String, p: CarData.Pla
         ctx,
         if (!ok) "Nie udało się wysłać – sprawdź internet"
         else when (type) {
-            "route" -> "Wysłano do auta: ${p.name}. Trasa pojawi się w CAR OS (radio musi mieć internet)"
+            "route" -> "Wysłano do auta: ${p.name}" + (if (via.isNotEmpty()) " przez ${via.size} ${if (via.size == 1) "punkt" else "punkty"}" else "") + ". Trasa pojawi się w CAR OS (radio musi mieć internet)"
             "fav_add" -> "Dodano do ulubionych w aucie"
             else -> "Usunięto z ulubionych w aucie"
         },
@@ -698,6 +702,8 @@ fun PlaceSheet(
     var sending by remember { mutableStateOf(false) }
     var picked by remember(place0) { mutableStateOf(place0) }
     val place = picked
+    // trasa: punkty po drodze + cel (kolejność jak w Mapach Google – ostatni to cel)
+    var points by remember(place) { mutableStateOf(listOfNotNull(place)) }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
@@ -716,11 +722,12 @@ fun PlaceSheet(
                     else -> {
                         if (place.detail.isNotBlank()) Text(place.detail, color = C.Muted, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         // podgląd: trasa z miejsca parkowania, korki, pogoda, przyjazd
-                        RoutePreviewBlock(place)
+                        RoutePreviewBlock(place, points) { points = it }
                         PrimaryButton(if (sending) "Wysyłam…" else "Nawiguj w aucie", Icons.Rounded.Navigation) {
                             if (sending) return@PrimaryButton
                             sending = true
-                            scope.launch { if (sendToCar(ctx, "route", place)) onDismiss(); sending = false }
+                            val dest = points.lastOrNull() ?: place
+                            scope.launch { if (sendToCar(ctx, "route", dest, points.dropLast(1))) onDismiss(); sending = false }
                         }
                         SecondaryButton("Dodaj do ulubionych w aucie", Icons.Rounded.StarBorder, Modifier.fillMaxWidth()) {
                             if (sending) return@SecondaryButton
@@ -754,7 +761,7 @@ fun PlaceSheet(
 
 /** Podgląd trasy w oknie „Wyślij do auta”: start z miejsca parkowania, mapa, przyjazd, korki, pogoda. */
 @Composable
-private fun RoutePreviewBlock(place: CarData.Place) {
+private fun RoutePreviewBlock(place: CarData.Place, points: List<CarData.Place>, onPoints: (List<CarData.Place>) -> Unit) {
     val ctx = LocalContext.current
     val spot by Store.spot.collectAsState()
     val linked by Store.linked.collectAsState()
@@ -778,7 +785,9 @@ private fun RoutePreviewBlock(place: CarData.Place) {
             else -> null
         }
     }
-    LaunchedEffect(place, offsetMin, mode, picked, start?.first) {
+    val dest = points.lastOrNull() ?: place
+    val via = points.dropLast(1).map { LatLng(it.lat, it.lon) }
+    LaunchedEffect(place, points, offsetMin, mode, picked, start?.first) {
         val st = start
         if (st == null) {
             loading = false
@@ -787,23 +796,23 @@ private fun RoutePreviewBlock(place: CarData.Place) {
         }
         loading = true
         err = null
-        val to = LatLng(place.lat, place.lon)
+        val to = LatLng(dest.lat, dest.lon)
         val now = System.currentTimeMillis()
         res = try {
             val t = picked
             when {
-                mode == 1 && t != null -> RoutePreview.compute(ctx, st.first, to, t)
+                mode == 1 && t != null -> RoutePreview.compute(ctx, st.first, to, t, via = via)
                 mode == 2 && t != null -> {
                     // być o [t]: najpierw czas przejazdu teraz, potem z prognozą ruchu na wyliczoną godzinę wyjazdu
-                    val r1 = RoutePreview.compute(ctx, st.first, to, now, withWeather = false)
+                    val r1 = RoutePreview.compute(ctx, st.first, to, now, withWeather = false, via = via)
                     val dep1 = t - (r1.travelS * 1000).toLong()
-                    if (dep1 <= now + 2 * 60_000) RoutePreview.compute(ctx, st.first, to, now)
+                    if (dep1 <= now + 2 * 60_000) RoutePreview.compute(ctx, st.first, to, now, via = via)
                     else {
-                        val r2 = RoutePreview.compute(ctx, st.first, to, dep1)
+                        val r2 = RoutePreview.compute(ctx, st.first, to, dep1, via = via)
                         r2.copy(depart = t - (r2.travelS * 1000).toLong())
                     }
                 }
-                else -> RoutePreview.compute(ctx, st.first, to, now + offsetMin * 60_000L)
+                else -> RoutePreview.compute(ctx, st.first, to, now + offsetMin * 60_000L, via = via)
             }
         } catch (e: Exception) {
             err = "Nie udało się wyznaczyć trasy" + (e.message?.let { ": $it" } ?: "")
@@ -825,8 +834,11 @@ private fun RoutePreviewBlock(place: CarData.Place) {
             mode = kind
         }, c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE), true).show()
     }
+    var pickOpen by remember(place) { mutableStateOf(false) }
+    val scope2 = rememberCoroutineScope()
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        start?.let { Text("Start " + it.second, fontSize = 12.sp, color = C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        // trasa: start, punkty po drodze, cel – przeciąganie za uchwyt zmienia kolejność
+        WaypointList(start?.second, points, onPoints, onAdd = { pickOpen = true }, canAdd = res != null && points.size < 4)
         // godzina wyjazdu: szybkie wybory albo konkretna godzina wyjazdu / przyjazdu
         @Composable
         fun Chip(label: String, sel: Boolean, mod: Modifier, onClick: () -> Unit) {
@@ -848,7 +860,7 @@ private fun RoutePreviewBlock(place: CarData.Place) {
         val r = res
         var full by remember(place) { mutableStateOf(false) }
         Box(Modifier.fillMaxWidth().height(190.dp).clip(RoundedCornerShape(16.dp)).border(1.dp, C.Border, RoundedCornerShape(16.dp))) {
-            if (r != null) RouteMap(r.pts, r.jams, Modifier.fillMaxSize())
+            if (r != null) RouteMap(r.pts, r.jams, Modifier.fillMaxSize(), stops = via)
             if (loading) CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.align(Alignment.Center).size(28.dp))
             else if (r == null) Text(err ?: "", color = C.Orange, fontSize = 13.sp, modifier = Modifier.align(Alignment.Center).padding(12.dp))
             // trasa i korki na pełnym ekranie
@@ -862,7 +874,21 @@ private fun RoutePreviewBlock(place: CarData.Place) {
                 Text("Pełny ekran", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
             }
         }
-        if (full && r != null) RouteFullScreen(place.name, r) { full = false }
+        if (full && r != null) RouteFullScreen(dest.name, r, stops = via, onClose = { full = false })
+        // „Dodaj punkt”: mapa na pełnym ekranie, przytrzymaj palec w miejscu punktu
+        if (pickOpen && r != null) RouteFullScreen(
+            dest.name, r, stops = via, onClose = { pickOpen = false },
+            pick = { ll ->
+                pickOpen = false
+                scope2.launch {
+                    val name = withContext(Dispatchers.IO) { Locator.address(ctx, ll.latitude, ll.longitude) }
+                    val p = CarData.Place(name?.substringBefore(",")?.ifBlank { null } ?: "Punkt na mapie", name ?: "", ll.latitude, ll.longitude)
+                    // nowy punkt przed celem (kolejność można potem zmienić)
+                    onPoints(points.dropLast(1) + p + points.takeLast(1))
+                    Toast.makeText(ctx, "Dodano punkt: ${p.name}", Toast.LENGTH_SHORT).show()
+                }
+            },
+        )
         if (r != null && !loading) {
             val mins = (r.travelS / 60).roundToInt()
             val dur = if (mins >= 60) "${mins / 60} h ${"%02d".format(mins % 60)} min" else "$mins min"
@@ -920,7 +946,7 @@ private fun RoutePreviewBlock(place: CarData.Place) {
                     TripPlan.set(
                         ctx,
                         TripPlan.Plan(
-                            place.name, place.detail, place.lat, place.lon, st.first.latitude, st.first.longitude,
+                            dest.name, dest.detail, dest.lat, dest.lon, st.first.latitude, st.first.longitude,
                             r.depart, r.arrive, mode == 2, r.delayS,
                         ),
                     )

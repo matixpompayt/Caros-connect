@@ -21,6 +21,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Route
 import androidx.compose.material.icons.rounded.Traffic
+import androidx.compose.material.icons.rounded.TouchApp
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.DragHandle
+import androidx.compose.material.icons.rounded.Place
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.zIndex
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,7 +60,13 @@ import kotlin.math.sqrt
  * lista korków – dotknięcie pokazuje dany korek na mapie.
  */
 @Composable
-fun RouteFullScreen(title: String, r: RoutePreview.Result, onClose: () -> Unit) {
+fun RouteFullScreen(
+    title: String, r: RoutePreview.Result,
+    stops: List<LatLng> = emptyList(),
+    /** Tryb „Dodaj punkt”: przytrzymanie palca na mapie wybiera miejsce. */
+    pick: ((LatLng) -> Unit)? = null,
+    onClose: () -> Unit,
+) {
     val ctx = LocalContext.current
     val key = remember { RoutePreview.tomtomKey(ctx) }
     var flow by remember { mutableStateOf(key.isNotBlank()) }
@@ -72,7 +89,10 @@ fun RouteFullScreen(title: String, r: RoutePreview.Result, onClose: () -> Unit) 
 
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Box(Modifier.fillMaxSize().background(C.Bg)) {
-            RouteMap(r.pts, r.jams, Modifier.fillMaxSize(), flowUrl = flowUrl, focus = focus, padTop = 150, padBottom = 250, padSide = 36)
+            RouteMap(
+                r.pts, r.jams, Modifier.fillMaxSize(), flowUrl = flowUrl, focus = focus,
+                padTop = 150, padBottom = if (pick != null) 150 else 250, padSide = 36, stops = stops, onLongPress = pick,
+            )
 
             // góra: cel, czas, zamknij
             Row(
@@ -81,7 +101,7 @@ fun RouteFullScreen(title: String, r: RoutePreview.Result, onClose: () -> Unit) 
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(title, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(if (pick != null) "Dodaj punkt" else title, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     val mins = (r.travelS / 60).roundToInt()
                     val dur = if (mins >= 60) "${mins / 60} h ${"%02d".format(mins % 60)} min" else "$mins min"
                     val km = if (r.distanceM >= 10_000) "${(r.distanceM / 1000).roundToInt()} km" else "%.1f km".format(r.distanceM / 1000).replace('.', ',')
@@ -92,8 +112,21 @@ fun RouteFullScreen(title: String, r: RoutePreview.Result, onClose: () -> Unit) 
                 }
             }
 
+            // tryb „Dodaj punkt”: podpowiedź zamiast korków
+            if (pick != null) Row(
+                Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(12.dp).fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp)).background(C.Accent).padding(horizontal = 18.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(Icons.Rounded.TouchApp, null, tint = C.Bg, modifier = Modifier.size(30.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Przytrzymaj palec na mapie", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = C.Bg)
+                    Text("w miejscu, przez które chcesz jechać – punkt doda się przed celem", fontSize = 14.sp, color = C.Bg.copy(alpha = 0.85f))
+                }
+            }
             // dół: korki
-            Column(
+            if (pick == null) Column(
                 Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(12.dp).fillMaxWidth()
                     .clip(RoundedCornerShape(24.dp)).background(C.Dialog).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -187,4 +220,91 @@ private fun m(a: LatLng, b: LatLng): Double {
     val dy = (b.latitude - a.latitude) * 111_320.0
     val dx = (b.longitude - a.longitude) * 111_320.0 * cos(Math.toRadians((a.latitude + b.latitude) / 2))
     return sqrt(dx * dx + dy * dy)
+}
+
+/**
+ * Lista punktów trasy jak w Mapach Google: start (stały), punkty po drodze i cel.
+ * Przeciągnij za uchwyt ═, żeby zmienić kolejność (ostatni = cel), × usuwa punkt.
+ */
+@Composable
+fun WaypointList(
+    startLabel: String?, points: List<CarData.Place>, onPoints: (List<CarData.Place>) -> Unit,
+    onAdd: () -> Unit, canAdd: Boolean,
+) {
+    val rowH = 50.dp
+    val rowPx = with(LocalDensity.current) { rowH.toPx() }
+    var dragIdx by remember { mutableStateOf(-1) }
+    var dragDy by remember { mutableStateOf(0f) }
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Raised).padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        // start
+        Row(Modifier.fillMaxWidth().height(rowH), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(14.dp).clip(CircleShape).background(Color(0xFF7CF06B)))
+            }
+            Text("Start " + (startLabel ?: "– brak"), fontSize = 14.sp, color = C.Text2, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        }
+        val target = if (dragIdx >= 0) (dragIdx + (dragDy / rowPx).roundToInt()).coerceIn(0, points.lastIndex) else -1
+        points.forEachIndexed { i, p ->
+            val isDest = i == points.lastIndex
+            val shift = when {
+                dragIdx < 0 || i == dragIdx -> 0f
+                i in (dragIdx + 1)..target -> -rowPx
+                i in target until dragIdx -> rowPx
+                else -> 0f
+            }
+            Row(
+                Modifier.fillMaxWidth().height(rowH)
+                    .zIndex(if (i == dragIdx) 1f else 0f)
+                    .graphicsLayer { translationY = if (i == dragIdx) dragDy else shift }
+                    .then(if (i == dragIdx) Modifier.shadow(8.dp, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)).background(C.Dialog) else Modifier),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
+                    // po kolejności: pośrednie A, B, C…; cel – pinezka
+                    if (isDest) Icon(Icons.Rounded.Place, null, tint = Color(0xFFE5483F), modifier = Modifier.size(24.dp))
+                    else Box(Modifier.size(22.dp).clip(CircleShape).background(Color(0xFFFFB347)), contentAlignment = Alignment.Center) {
+                        Text(('A' + i).toString(), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1205))
+                    }
+                }
+                Text(p.name, fontSize = 15.sp, fontWeight = if (isDest) FontWeight.SemiBold else FontWeight.Normal, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                if (points.size > 1) {
+                    Box(
+                        Modifier.size(40.dp).clip(CircleShape).pointerInput(points, i) {
+                            detectDragGestures(
+                                onDragStart = { dragIdx = i; dragDy = 0f },
+                                onDragEnd = {
+                                    val to = (i + (dragDy / rowPx).roundToInt()).coerceIn(0, points.lastIndex)
+                                    if (to != i) onPoints(points.toMutableList().apply { add(to, removeAt(i)) })
+                                    dragIdx = -1; dragDy = 0f
+                                },
+                                onDragCancel = { dragIdx = -1; dragDy = 0f },
+                                onDrag = { ch, amount -> ch.consume(); dragDy += amount.y },
+                            )
+                        },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Rounded.DragHandle, "Przeciągnij, żeby zmienić kolejność", tint = C.Muted, modifier = Modifier.size(24.dp)) }
+                    Box(
+                        Modifier.size(36.dp).clip(CircleShape).clickable { onPoints(points.filterIndexed { k, _ -> k != i }) },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Rounded.Close, "Usuń punkt", tint = C.Muted, modifier = Modifier.size(20.dp)) }
+                }
+            }
+        }
+        if (points.size < 4) Row(
+            Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(12.dp)).clickable(enabled = canAdd, onClick = onAdd),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.Add, null, tint = if (canAdd) C.Accent else C.Muted, modifier = Modifier.size(22.dp))
+            }
+            Text(
+                if (canAdd) "Dodaj punkt" else "Dodaj punkt (po wyznaczeniu trasy)",
+                fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = if (canAdd) C.Accent else C.Muted,
+            )
+        }
+    }
 }
