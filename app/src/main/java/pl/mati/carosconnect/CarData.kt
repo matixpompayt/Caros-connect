@@ -81,7 +81,7 @@ object CarData {
         fun toJson(): JSONObject = JSONObject().put("id", id).put("t", time).put("o", odo).put("l", liters).put("c", cost).put("f", full)
     }
 
-    data class Fuel(val tank: Int, val fills: List<Fill>, val avg: Double?, val range: Double?, val costKm: Double?, val estimated: Boolean)
+    data class Fuel(val tank: Int, val fills: List<Fill>, val avg: Double?, val range: Double?, val costKm: Double?, val estimated: Boolean, val left: Double? = null)
 
     val live = MutableStateFlow<Live?>(null)
 
@@ -212,6 +212,20 @@ object CarData {
         fuel.put("fills", n)
     }
 
+    /** Pojemność baku zmieniona w telefonie (zaraz potwierdzi ją CAR OS). */
+    fun setTankLocal(l: Int) = editLocal { o ->
+        val fuel = o.optJSONObject("fuel") ?: JSONObject().also { o.put("fuel", it) }
+        fuel.put("tank", l.coerceIn(20, 150))
+    }
+
+    /** Ile litrów zostało w baku: zasięg × spalanie (jak liczy CAR OS). */
+    fun litersLeft(f: Fuel): Double? {
+        f.left?.let { return it.coerceIn(0.0, f.tank.toDouble().coerceAtLeast(1.0)) }
+        val r = f.range ?: return null
+        val use = f.avg?.takeIf { it in 2.0..30.0 } ?: 7.5
+        return (r * use / 100).coerceIn(0.0, f.tank.toDouble().coerceAtLeast(1.0))
+    }
+
     fun removeFillLocal(id: String) = editLocal { o ->
         val fuel = o.optJSONObject("fuel") ?: return@editLocal
         val a = fuel.optJSONArray("fills") ?: return@editLocal
@@ -304,6 +318,8 @@ object CarData {
                         ?: localRange(f, if (o.isNull("odo")) null else o.optInt("odo")),
                     if (f.isNull("ckm")) null else f.optDouble("ckm"),
                     f.optBoolean("est", true),
+                    // litry w baku z radia (nowszy CAR OS); po zmianie w telefonie – liczymy sami
+                    if (!f.has("left") || f.isNull("left") || o.optBoolean("pending")) null else f.optDouble("left"),
                 )
             },
             home = addrFrom(o.optJSONObject("home")),

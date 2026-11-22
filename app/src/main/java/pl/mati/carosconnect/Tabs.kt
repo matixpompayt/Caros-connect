@@ -257,10 +257,15 @@ private fun BatteryCard(b: CarData.Battery) {
 }
 
 @Composable
-private fun StatBox(label: String, value: String, modifier: Modifier) {
-    Column(modifier.clip(RoundedCornerShape(14.dp)).surface(RoundedCornerShape(14.dp), C.Raised).padding(horizontal = 12.dp, vertical = 10.dp)) {
-        Text(label, fontSize = 12.sp, color = C.Muted)
+private fun StatBox(label: String, value: String, modifier: Modifier, sub: String? = null, subColor: Color? = null, onClick: (() -> Unit)? = null) {
+    Column(
+        modifier.clip(RoundedCornerShape(14.dp)).surface(RoundedCornerShape(14.dp), C.Raised)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Text(label, fontSize = 12.sp, color = C.Muted, maxLines = 1)
         Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = C.Text, maxLines = 1)
+        if (sub != null) Text(sub, fontSize = 12.sp, color = subColor ?: C.Muted, maxLines = 1)
     }
 }
 
@@ -379,6 +384,29 @@ private fun FuelSection(s: CarData.Status) {
         StatBox(if (f.estimated) "Zasięg (szac.)" else "Zasięg", f.range?.let { "${it.roundToInt()} km" } ?: "—", Modifier.weight(1f))
         StatBox("Koszt km", f.costKm?.let { String.format(PL, "%.0f gr", it * 100) } ?: "—", Modifier.weight(1f))
     }
+    // ile paliwa zostało (z zasięgu i spalania – tak jak liczy CAR OS) i pojemność baku (do zmiany)
+    var tankEdit by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        val left = CarData.litersLeft(f)
+        val pct = left?.let { if (f.tank > 0) (it / f.tank * 100).roundToInt().coerceIn(0, 100) else null }
+        val reserve = Store.minRange.value
+        StatBox(
+            if (f.estimated) "W baku (szac.)" else "W baku",
+            left?.let { String.format(PL, "%.1f l", it) } ?: "—",
+            Modifier.weight(1f),
+            sub = pct?.let { "$it% baku" },
+            subColor = f.range?.let { r -> if (r < reserve) Color(0xFFFF5A5F) else if (r < reserve * 1.6) C.Orange else null },
+        )
+        StatBox(
+            "Pojemność baku", "${f.tank} l", Modifier.weight(1f),
+            sub = "zmień", subColor = C.Accent, onClick = { tankEdit = true },
+        )
+        StatBox(
+            "Do pełna", left?.let { String.format(PL, "%.0f l", (f.tank - it).coerceAtLeast(0.0)) } ?: "—", Modifier.weight(1f),
+            sub = left?.let { l2 -> f.fills.maxByOrNull { it.time }?.takeIf { it.liters > 0 }?.let { x -> String.format(PL, "≈ %.0f zł", (f.tank - l2).coerceAtLeast(0.0) * x.cost / x.liters) } },
+        )
+    }
+    if (tankEdit) TankDialog(f.tank) { tankEdit = false }
     if (f.fills.isEmpty()) {
         Card {
             Text("Brak tankowań", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
@@ -410,6 +438,35 @@ private fun FuelSection(s: CarData.Status) {
     if (adding) FuelDialog(s.odo) { adding = false }
 }
 
+/** Pojemność baku – zapis w telefonie i w CAR OS (zasięg liczy się od pełnego baku). */
+@Composable
+private fun TankDialog(cur: Int, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var v by remember { mutableStateOf(cur.toString()) }
+    val n = v.toIntOrNull()
+    val ok = n != null && n in 20..150
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
+        title = { Text("Pojemność baku", color = C.Text) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                NumField("Litry", v, { v = it.filter(Char::isDigit).take(3) }, "np. 60")
+                Text("Touran 2.0 TDI ma bak 60 l. Od pojemności zależy zasięg i ile paliwa zostało.", fontSize = 13.sp, color = C.Muted)
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = ok, onClick = {
+                CarData.setTankLocal(n!!)
+                scope.launch { sendSvc(ctx, JSONObject().put("type", "fuel_tank").put("l", n)) }
+                onDismiss()
+            }) { Text("Zapisz") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Anuluj") } },
+    )
+}
+
 @Composable
 private fun FuelDialog(odo: Int?, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
@@ -434,6 +491,17 @@ private fun FuelDialog(odo: Int?, onDismiss: () -> Unit) {
                 NumField("Przebieg (km)", km, { km = it.filter(Char::isDigit).take(7) }, "z licznika")
                 ToggleRow("Do pełna", "Zatankowane do odbicia pistoletu", full) { full = it }
                 if (l != null && c != null && l > 0) Text(String.format(PL, "Cena: %.2f zł/l", c / l), fontSize = 14.sp, color = C.Muted)
+                CarData.status.value?.fuel?.let { fu ->
+                    val left = CarData.litersLeft(fu)
+                    Text(
+                        "Bak ${fu.tank} l" + (left?.let { String.format(PL, " · było ok. %.1f l · do pełna ok. %.0f l", it, (fu.tank - it).coerceAtLeast(0.0)) } ?: ""),
+                        fontSize = 13.sp, color = C.Muted,
+                    )
+                    if (l != null && left != null && l > fu.tank - left + 3) Text(
+                        String.format(PL, "Więcej niż mieści bak (%.0f l wolnego) – sprawdź pojemność baku", fu.tank - left),
+                        fontSize = 13.sp, color = C.Orange,
+                    )
+                }
             }
         },
         confirmButton = {

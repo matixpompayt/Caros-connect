@@ -232,6 +232,7 @@ object EventLog {
                 "camsam" -> add(Cat.CAMSAM, o.optString("app").ifBlank { "CamSam" } + if (o.optBoolean("on")) " włączony – radio pokazuje znaczek" else " wyłączony")
                 "fuel_add" -> add(Cat.APP, "Tankowanie wysłane do radia")
                 "fuel_del" -> add(Cat.APP, "Usunięto tankowanie w radiu")
+                "fuel_tank" -> add(Cat.APP, "Pojemność baku wysłana do radia")
                 "svc_done", "svc_item", "svc_odo" -> add(Cat.APP, "Zmiana serwisu wysłana do radia")
                 "cfg" -> add(Cat.APP, "Ustawienia wysłane do radia", throttleKey = "cfg", throttleMs = 60_000)
                 "rs" -> if (o.optInt("i") == 0) add(Cat.APP, "Kopia ustawień wysyłana do radia")
