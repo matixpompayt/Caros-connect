@@ -77,6 +77,7 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Send
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -1297,6 +1298,30 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
             )
         }
     }
+    run {
+        val fav by FuelPrices.fav.collectAsState()
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card).padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("Paliwo w aucie", fontSize = 16.sp, color = C.Text)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FuelPrices.Fuel.entries.forEach { f ->
+                    val on = f == fav
+                    Box(
+                        Modifier.weight(1f).height(42.dp).clip(RoundedCornerShape(12.dp))
+                            .background(if (on) C.Accent else C.Raised).clickable { FuelPrices.setFavorite(ctx, f) },
+                        contentAlignment = Alignment.Center,
+                    ) { Text(f.short, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = if (on) C.Bg else C.Text) }
+                }
+            }
+            Text(
+                "Postoje na trasie pokazują tylko stacje z tym paliwem, jego cenę i najtańszą stację (to samo paliwo co w cenach paliw)",
+                fontSize = 13.sp, color = C.Muted,
+            )
+        }
+    }
+    TankerkoenigSection()
 
     Label("Powiadomienia", Modifier.padding(top = 6.dp))
     ToggleRow("Przypomnienia serwisowe", "Olej, przegląd, ubezpieczenie – z danych CAR OS", nService) { CarData.setNotifService(it) }
@@ -1749,6 +1774,58 @@ private fun MapThemeChooser() {
 }
 
 // ======================= Korki (TomTom) → CAR OS =======================
+
+@Composable
+private fun TankerkoenigSection() {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val saved by StationPrices.tkKey.collectAsState()
+    var key by remember(saved) { mutableStateOf(saved) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card).padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("Ceny na stacjach w Niemczech", fontSize = 16.sp, color = C.Text)
+        Text(
+            "Aktualne ceny z każdej niemieckiej stacji (oficjalne dane MTS-K przez Tankerkönig). Darmowy klucz: creativecommons.tankerkoenig.de → API-KEY → " +
+                "wypełnij formularz, klucz przyjdzie mailem. W Polsce nie ma publicznych cen poszczególnych stacji.",
+            fontSize = 13.sp, color = C.Muted,
+        )
+        OutlinedTextField(
+            value = key, onValueChange = { key = it.filter { c -> c.isLetterOrDigit() || c == '-' }.take(40) },
+            placeholder = { Text("Klucz Tankerkönig (xxxxxxxx-xxxx-…)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = C.Accent, unfocusedBorderColor = C.Border,
+                focusedTextColor = C.Text, unfocusedTextColor = C.Text, cursorColor = C.Accent,
+            ),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecondaryButton("Załóż klucz", Icons.Rounded.OpenInNew, Modifier.weight(1f)) {
+                try {
+                    ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://creativecommons.tankerkoenig.de/")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (_: Exception) {
+                }
+            }
+            SecondaryButton(if (busy) "Sprawdzam…" else "Zapisz", Icons.Rounded.Check, Modifier.weight(1f)) {
+                if (busy) return@SecondaryButton
+                StationPrices.setKey(ctx, key)
+                if (key.isBlank()) { status = "Klucz usunięty"; return@SecondaryButton }
+                busy = true
+                scope.launch {
+                    val err = StationPrices.test(key)
+                    busy = false
+                    status = if (err == null) "Klucz działa – ceny z Niemiec będą przy stacjach" else "Klucz nie działa: $err"
+                }
+            }
+        }
+        status?.let { Text(it, fontSize = 13.sp, color = if (it.startsWith("Klucz działa")) C.Green else C.Muted) }
+    }
+}
 
 @Composable
 private fun TrafficKeySection() {

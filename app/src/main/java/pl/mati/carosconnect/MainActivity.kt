@@ -72,6 +72,7 @@ class MainActivity : ComponentActivity(), Actions {
         TripPlan.load(this)
         CarMapStyle.init(this)
         FuelPrices.init(this)
+        StationPrices.init(this)
         GlassTheme.init(this)
         SyncWorker.schedule(this)
         if (savedInstanceState == null) { handleShare(intent); openTabFrom(intent); walkFrom(intent) }

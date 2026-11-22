@@ -73,6 +73,8 @@ fun SmartPlanCard(
     val range = status?.fuel?.range
     val fullKm = SmartPlan.fullRangeKm(status?.fuel)
     val reserve by Store.minRange.collectAsState()
+    val fuelSel by FuelPrices.fav.collectAsState()
+    val tk by StationPrices.tkKey.collectAsState()
     var ordering by remember { mutableStateOf(false) }
     var slots by remember(r.pts) { mutableStateOf<List<SmartPlan.Slot>?>(null) }
     var slotsBusy by remember(r.pts) { mutableStateOf(false) }
@@ -81,12 +83,12 @@ fun SmartPlanCard(
     var stopsTry by remember(r.pts) { mutableStateOf(0) }
     val via = points.dropLast(1).map { LatLng(it.lat, it.lon) }
     val needStops = (range != null && range < r.distanceM / 1000 + reserve) || r.travelS > 2 * 3600 + 20 * 60
-    LaunchedEffect(r.pts, range, reserve, stopsTry) {
+    LaunchedEffect(r.pts, range, reserve, fuelSel, tk, stopsTry) {
         stopsErr = null
         if (!needStops) { stops = SmartPlan.Stops(emptyList(), r.distanceM / 1000.0); return@LaunchedEffect }
         stops = null
         stops = try {
-            SmartPlan.stops(ctx, r, range, reserve)
+            SmartPlan.stops(ctx, r, range, reserve, fuelSel, tk)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -252,7 +254,7 @@ private fun StopsPicker(
                     Icon(if (on) Icons.Rounded.CheckBox else Icons.Rounded.CheckBoxOutlineBlank, null, tint = if (on) C.Accent else C.Muted, modifier = Modifier.size(22.dp))
                     Icon(if (g.kind == "fuel") Icons.Rounded.LocalGasStation else Icons.Rounded.Coffee, null, tint = if (g.kind == "fuel") C.Orange else C.Accent, modifier = Modifier.size(20.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(if (g.kind == "fuel") "Tankowanie" else "Przerwa po ok. ${g.hours} h jazdy", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+                        Text(if (g.kind == "fuel") "Tankowanie · ${st.fuel.label}" else "Przerwa po ok. ${g.hours} h jazdy", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
                         val sub = if (g.kind == "fuel") {
                             if (range != null) {
                                 val short = totalKmOf(st) + reserve - range
@@ -264,9 +266,10 @@ private fun StopsPicker(
                         Text(sub, fontSize = 12.sp, color = C.Muted)
                     }
                 }
+                if (g.kind == "fuel") FuelPriceNote(st)
                 if (g.options.isEmpty()) {
                     Text(
-                        if (g.kind == "fuel") "Nie ma stacji blisko trasy w tym miejscu" else "Nie ma MOP-u ani stacji blisko trasy w tym miejscu",
+                        if (g.kind == "fuel") "Nie ma stacji z tym paliwem blisko trasy w tym miejscu" else "Nie ma MOP-u ani stacji blisko trasy w tym miejscu",
                         fontSize = 12.sp, color = C.Muted, modifier = Modifier.padding(start = 30.dp),
                     )
                 } else if (on) {
@@ -289,6 +292,7 @@ private fun StopsPicker(
                                 if (g.kind == "break" && !o.rest) parts += "stacja"
                                 val left = if (g.kind == "fuel") range?.minus(o.atKm) else rangeAt(o.atKm)
                                 Text(parts.joinToString(" · "), fontSize = 11.sp, color = C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                if (g.kind == "fuel") PriceLine(o, oi == 0 && o.price != null && o.open && g.options.count { it.price != null } > 1)
                                 if (left != null) Text(
                                     if (left >= 0) "W baku zostanie ok. ${left.roundToInt()} km" else "Zabraknie ok. ${(-left).roundToInt()} km przed tym miejscem",
                                     fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
@@ -339,6 +343,45 @@ private fun StopsPicker(
 }
 
 private fun totalKmOf(st: SmartPlan.Stops) = st.totalKm
+
+private fun money(v: Double, digits: Int = 2) = String.format(java.util.Locale("pl"), "%.${digits}f", v)
+
+/** Cena wybranego paliwa na stacji (Niemcy – z Tankerkönig) albo podpowiedź o tańszej sieci. */
+@Composable
+private fun PriceLine(o: SmartPlan.Opt, cheapest: Boolean) {
+    val txt = when {
+        o.price != null && o.cur == "EUR" -> "${money(o.price, 3)} €/l" + (o.pln?.let { " ≈ ${money(it)} zł" } ?: "") + (if (!o.open) " · teraz zamknięta" else "")
+        o.price != null -> "${money(o.price)} zł/l"
+        o.cheap -> "zwykle tańsza sieć"
+        else -> null
+    } ?: return
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            txt, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+            color = when { o.price != null && !o.open -> C.Muted; o.price != null -> C.Accent; else -> C.Text2 },
+        )
+        if (cheapest) Text(
+            "najtańsza", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF06210F),
+            modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(C.Green).padding(horizontal = 6.dp, vertical = 1.dp),
+        )
+    }
+}
+
+/** Cena w Polsce dziś i skąd są ceny na stacjach. */
+@Composable
+private fun FuelPriceNote(st: SmartPlan.Stops) {
+    val lines = ArrayList<String>()
+    st.plMax?.let { lines += "Polska dziś: ${if (st.fuel == FuelPrices.Fuel.LPG) "średnio" else "cena maks."} ${money(it)} zł/l" }
+    when (st.deOk) {
+        true -> lines += "Ceny na stacjach w Niemczech na żywo (Tankerkönig) – najtańsza pierwsza"
+        false -> lines += "Ceny z Niemiec niedostępne – sprawdź klucz Tankerkönig w Ustawieniach"
+        null -> if (st.fuel != FuelPrices.Fuel.LPG) lines += "Ceny na stacjach w Niemczech: dodaj darmowy klucz Tankerkönig w Ustawieniach → Planowanie tras"
+    }
+    lines += "W Polsce brak publicznych cen poszczególnych stacji – podpowiadam sieci zwykle tańsze"
+    Column(Modifier.padding(start = 30.dp)) {
+        lines.forEach { Text(it, fontSize = 11.sp, color = C.Muted) }
+    }
+}
 
 @Composable
 private fun Line(icon: ImageVector, tint: Color, text: String) {
