@@ -82,7 +82,7 @@ fun SmartPlanCard(
     val needStops = (range != null && range < r.distanceM / 1000 + 40) || r.travelS > 2 * 3600 + 20 * 60
     LaunchedEffect(r.pts, range, stopsTry) {
         stopsErr = null
-        if (!needStops) { stops = emptyList(); return@LaunchedEffect }
+        if (!needStops) { stops = SmartPlan.Stops(emptyList(), r.distanceM / 1000.0); return@LaunchedEffect }
         stops = null
         stops = try {
             SmartPlan.stops(ctx, r, range)
