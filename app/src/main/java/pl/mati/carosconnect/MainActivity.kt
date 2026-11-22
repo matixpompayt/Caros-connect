@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity(), Actions {
         matchCarByName()
         startIfCarConnected()
         refreshFromCar()
+        Updater.init(this)
         Updater.check(silent = true)
     }
 
@@ -120,6 +121,7 @@ class MainActivity : ComponentActivity(), Actions {
         refresh()
         matchCarByName()
         startIfCarConnected()
+        Updater.init(this)
         Updater.check(silent = true)
         try { FuelPrices.refresh(this, force = true); FuelWidget.updateAll(this) } catch (_: Exception) {}
         return Sync.run(this, ask = true)

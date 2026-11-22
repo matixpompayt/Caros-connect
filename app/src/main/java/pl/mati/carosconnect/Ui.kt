@@ -929,6 +929,24 @@ fun UpdateItem() {
     (st as? Updater.State.Downloading)?.let {
         LinearProgressIndicator(progress = { it.progress }, modifier = Modifier.fillMaxWidth(), color = C.Accent)
     }
+    // kanał beta 2.0
+    val beta by Updater.beta.collectAsState()
+    LaunchedEffect(Unit) { Updater.init(ctx) }
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card)
+            .clickable { Updater.setBeta(ctx, !beta) }.padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Wersja testowa 2.0 (beta)", fontSize = 16.sp, color = C.Text)
+            Text(
+                if (BuildConfig.BETA) "Masz wersję testową ${BuildConfig.VERSION_NAME}. Wyłączenie = aktualizacje stabilne; powrót do 1.x wymaga odinstalowania aplikacji"
+                else "Nowe funkcje 2.0 wcześniej (mogą mieć błędy). Po włączeniu „Aktualizacja” pobierze wersję beta",
+                fontSize = 13.sp, color = C.Muted,
+            )
+        }
+        androidx.compose.material3.Switch(checked = beta, onCheckedChange = { Updater.setBeta(ctx, it) })
+    }
 }
 
 /** Tytuł i punkty jednego wydania. */

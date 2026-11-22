@@ -31,22 +31,67 @@ object Updater {
     val state = MutableStateFlow<State>(State.Idle)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /** Kanał aktualizacji: wersje testowe (beta 2.0). W wersji beta domyślnie włączony. */
+    val beta = MutableStateFlow(BuildConfig.BETA)
+    private var inited = false
+
+    fun init(ctx: Context) {
+        if (inited) return
+        inited = true
+        beta.value = ctx.getSharedPreferences("updater", Context.MODE_PRIVATE).getBoolean("beta", BuildConfig.BETA)
+    }
+
+    fun setBeta(ctx: Context, v: Boolean) {
+        beta.value = v
+        ctx.getSharedPreferences("updater", Context.MODE_PRIVATE).edit().putBoolean("beta", v).apply()
+        state.value = State.Idle
+        check(silent = false)
+    }
+
+    /** Najnowsze wydanie testowe (prerelease z „beta” w tagu): (tag, json wydania). */
+    private fun newestBeta(): JSONObject? {
+        val c = URL("https://api.github.com/repos/${BuildConfig.UPDATE_REPO}/releases?per_page=30").openConnection() as HttpURLConnection
+        c.connectTimeout = 10_000
+        c.readTimeout = 15_000
+        c.setRequestProperty("Accept", "application/vnd.github+json")
+        c.setRequestProperty("User-Agent", "CarOS-Connect")
+        try {
+            if (c.responseCode !in 200..299) throw IOException("HTTP ${c.responseCode}")
+            val arr = org.json.JSONArray(c.inputStream.bufferedReader().use { it.readText() })
+            var best: JSONObject? = null
+            var bestCode = -1
+            for (i in 0 until arr.length()) {
+                val r = arr.getJSONObject(i)
+                if (!r.optBoolean("prerelease") || r.optBoolean("draft")) continue
+                val tag = r.optString("tag_name")
+                if (!tag.contains("beta")) continue
+                val code = Regex("""(\d+)$""").find(tag)?.value?.toIntOrNull() ?: continue
+                if (code > bestCode) { bestCode = code; best = r }
+            }
+            return best
+        } finally {
+            c.disconnect()
+        }
+    }
+
     fun check(silent: Boolean) {
         val s = state.value
         if (s is State.Checking || s is State.Downloading) return
         scope.launch {
             if (!silent) state.value = State.Checking
             try {
-                val c = URL("https://api.github.com/repos/${BuildConfig.UPDATE_REPO}/releases/latest").openConnection() as HttpURLConnection
-                c.connectTimeout = 10_000
-                c.readTimeout = 15_000
-                c.setRequestProperty("Accept", "application/vnd.github+json")
-                c.setRequestProperty("User-Agent", "CarOS-Connect")
-                val json = try {
-                    if (c.responseCode !in 200..299) throw IOException("HTTP ${c.responseCode}")
-                    JSONObject(c.inputStream.bufferedReader().use { it.readText() })
-                } finally {
-                    c.disconnect()
+                val json = if (beta.value) (newestBeta() ?: run { state.value = State.UpToDate; return@launch }) else {
+                    val c = URL("https://api.github.com/repos/${BuildConfig.UPDATE_REPO}/releases/latest").openConnection() as HttpURLConnection
+                    c.connectTimeout = 10_000
+                    c.readTimeout = 15_000
+                    c.setRequestProperty("Accept", "application/vnd.github+json")
+                    c.setRequestProperty("User-Agent", "CarOS-Connect")
+                    try {
+                        if (c.responseCode !in 200..299) throw IOException("HTTP ${c.responseCode}")
+                        JSONObject(c.inputStream.bufferedReader().use { it.readText() })
+                    } finally {
+                        c.disconnect()
+                    }
                 }
                 val tag = json.optString("tag_name")
                 val code = Regex("""(\d+)$""").find(tag)?.value?.toIntOrNull() ?: 0

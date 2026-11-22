@@ -2,6 +2,10 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Wersja testowa 2.0
+- Ustawienia → Aktualizacja: przełącznik „Wersja testowa 2.0 (beta)” – po włączeniu aktualizacja pobierze wersję beta 2.0 (nowe funkcje wcześniej, mogą mieć błędy)
+
 ## 1.74 · 2026-11-22
 Paliwo: litry w baku i pojemność baku
 - Auto → Paliwo: nowe kafelki „W baku” (ile litrów zostało i ile % baku), „Pojemność baku” i „Do pełna” (ile litrów i za ile zł po ostatniej cenie)

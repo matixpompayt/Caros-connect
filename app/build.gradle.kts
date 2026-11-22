@@ -7,6 +7,9 @@ plugins {
 val buildNumber = (System.getenv("BUILD_NUMBER") ?: "1").toInt()
 val connectVersion = (project.findProperty("connectVersion") as String?) ?: "1"
 val connectBase = ((project.findProperty("connectBase") as String?) ?: "0").toInt()
+// Wersja testowa 2.0 (gałąź beta, BETA=1 w GitHub Actions): versionCode zawsze wyższy niż stabilnej
+val beta = System.getenv("BETA") == "1"
+val betaBase = (project.findProperty("betaBase") as String?)?.toIntOrNull() ?: 0
 
 android {
     namespace = "pl.mati.carosconnect"
@@ -16,11 +19,12 @@ android {
         applicationId = "pl.mati.carosconnect"
         minSdk = 26
         targetSdk = 34
-        versionCode = buildNumber
-        versionName = "$connectVersion.${buildNumber - connectBase}"
+        versionCode = if (beta) 100_000 + buildNumber else buildNumber
+        versionName = if (beta) "2.0-beta.${buildNumber - betaBase}" else "$connectVersion.${buildNumber - connectBase}"
         // tylko ARM (radio i telefony) – mniejszy plik aktualizacji
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
         buildConfigField("String", "UPDATE_REPO", "\"matixpompayt/Caros-connect\"")
+        buildConfigField("boolean", "BETA", beta.toString())
     }
 
     signingConfigs {
