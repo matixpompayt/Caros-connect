@@ -83,12 +83,12 @@ fun SmartPlanCard(
     var stopsTry by remember(r.pts) { mutableStateOf(0) }
     val via = points.dropLast(1).map { LatLng(it.lat, it.lon) }
     val needStops = (range != null && range < r.distanceM / 1000 + reserve) || r.travelS > 2 * 3600 + 20 * 60
-    LaunchedEffect(r.pts, range, reserve, fuelSel, tk, stopsTry) {
+    LaunchedEffect(r.pts, range, reserve, fuelSel, tk, fullKm, stopsTry) {
         stopsErr = null
         if (!needStops) { stops = SmartPlan.Stops(emptyList(), r.distanceM / 1000.0); return@LaunchedEffect }
         stops = null
         stops = try {
-            SmartPlan.stops(ctx, r, range, reserve, fuelSel, tk)
+            SmartPlan.stops(ctx, r, range, reserve, fuelSel, tk, fullKm)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -207,22 +207,24 @@ fun SmartPlanCard(
                 ) { Text("Ponów", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.Accent) }
             }
             st.groups.isEmpty() -> Line(Icons.Rounded.LocalGasStation, C.Muted, "Brak postojów do zaplanowania")
-            else -> StopsPicker(r, st, points, range, fullKm, reserve, onPoints)
+            else -> StopsPicker(r, st, points, range, reserve, onPoints)
         }
     }
 }
 
 private fun samePlace(a: CarData.Place, b: CarData.Place) = abs(a.lat - b.lat) < 1e-5 && abs(a.lon - b.lon) < 1e-5
 
-/** Lista postojów do zaznaczenia (stacja / przerwa, do 3 propozycji każda) + zasięg + „Zapisz w trasie”. */
+/** Lista postojów do zaznaczenia (tankowania i przerwy, kilka propozycji każda) + zasięg + „Zapisz w trasie”. */
 @Composable
 private fun StopsPicker(
     r: RoutePreview.Result, st: SmartPlan.Stops, points: List<CarData.Place>,
-    range: Double?, fullKm: Double?, reserve: Int, onPoints: (List<CarData.Place>) -> Unit,
+    range: Double?, reserve: Int, onPoints: (List<CarData.Place>) -> Unit,
 ) {
     val ctx = LocalContext.current
     val via = points.dropLast(1)
-    // wybór: grupa → numer propozycji (−1 = nie chcę). Na start: to, co już jest w trasie; inaczej stacja zaznaczona, przerwy nie.
+    val fullKm = st.fullKm
+    val fuelGroups = st.groups.count { it.kind == "fuel" }
+    // wybór: grupa → numer propozycji (−1 = nie chcę). Na start: to, co już jest w trasie; inaczej tankowania zaznaczone, przerwy nie.
     val inRoute = st.groups.map { g -> g.options.indexOfFirst { o -> via.any { samePlace(it, o.place) } } }
     val sel = remember(st, inRoute) {
         mutableStateListOf<Int>().apply {
@@ -230,14 +232,27 @@ private fun StopsPicker(
         }
     }
     val chosen = st.groups.mapIndexedNotNull { i, g -> g.options.getOrNull(sel[i]) }
-    val fuelAt = st.groups.withIndex().firstOrNull { it.value.kind == "fuel" }?.let { (i, g) -> g.options.getOrNull(sel[i])?.atKm }
-    // zasięg w danym km trasy (po zatankowaniu do pełna – od stacji)
+    // wybrane tankowania (km), po kolei
+    val refuels = st.groups.withIndex().filter { it.value.kind == "fuel" }.mapNotNull { (i, g) -> g.options.getOrNull(sel[i])?.atKm }.sorted()
+    // zasięg w danym km trasy: od ostatniego tankowania przed tym miejscem (do pełna), a przed pierwszym – obecny
     fun rangeAt(km: Double): Double? {
         if (range == null) return null
-        return if (fuelAt != null && km > fuelAt && fullKm != null) fullKm - (km - fuelAt) else range - km
+        val last = refuels.lastOrNull { it < km - 0.01 } ?: return range - km
+        return (fullKm ?: return null) - (km - last)
+    }
+    // zasięg tuż przed tankowaniem na stacji w km [km]
+    fun arriveWith(km: Double): Double? {
+        if (range == null) return null
+        val last = refuels.lastOrNull { it < km - 0.5 } ?: return range - km
+        return (fullKm ?: return null) - (km - last)
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (fuelGroups > 1) Line(
+            Icons.Rounded.LocalGasStation, C.Orange,
+            "Trasa ${totalKmOf(st).roundToInt()} km – trzeba tankować $fuelGroups razy" +
+                (fullKm?.let { " (pełny bak ok. ${it.roundToInt()} km${if (st.fullGuess) " – szacunek" else ""})" } ?: ""),
+        )
         st.groups.forEachIndexed { gi, g ->
             val on = sel[gi] >= 0
             Column(
@@ -254,19 +269,14 @@ private fun StopsPicker(
                     Icon(if (on) Icons.Rounded.CheckBox else Icons.Rounded.CheckBoxOutlineBlank, null, tint = if (on) C.Accent else C.Muted, modifier = Modifier.size(22.dp))
                     Icon(if (g.kind == "fuel") Icons.Rounded.LocalGasStation else Icons.Rounded.Coffee, null, tint = if (g.kind == "fuel") C.Orange else C.Accent, modifier = Modifier.size(20.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(if (g.kind == "fuel") "Tankowanie · ${st.fuel.label}" else "Przerwa po ok. ${g.hours} h jazdy", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+                        val title = if (g.kind == "fuel") (if (fuelGroups > 1) "Tankowanie ${g.n}" else "Tankowanie") + " · ${st.fuel.label}" else "Przerwa po ok. ${g.hours} h jazdy"
+                        Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
                         val sub = if (g.kind == "fuel") {
-                            if (range != null) {
-                                val short = totalKmOf(st) + reserve - range
-                                if (totalKmOf(st) > range) "Zasięg ${range.roundToInt()} km – bez tankowania zabraknie ok. ${(totalKmOf(st) - range).roundToInt()} km"
-                                else "Zasięg ${range.roundToInt()} km – na miejscu zostałoby tylko ${(range - totalKmOf(st)).roundToInt()} km (minimum $reserve km, brakuje ${short.roundToInt()} km)"
-                            }
-                            else "Brak danych o zasięgu z auta"
+                            "Ok. ${g.atKm.roundToInt()} km od startu – tu zasięg spadnie do $reserve km" + (if (g.n == 1 && range != null) " (teraz ${range.roundToInt()} km)" else "")
                         } else "Ok. ${g.atKm.roundToInt()} km od startu – 15 min odpoczynku"
                         Text(sub, fontSize = 12.sp, color = C.Muted)
                     }
                 }
-                if (g.kind == "fuel") FuelPriceNote(st)
                 if (g.options.isEmpty()) {
                     Text(
                         if (g.kind == "fuel") "Nie ma stacji z tym paliwem blisko trasy w tym miejscu" else "Nie ma MOP-u ani stacji blisko trasy w tym miejscu",
@@ -289,12 +299,17 @@ private fun StopsPicker(
                                 parts += "${o.atKm.roundToInt()} km"
                                 parts += "ok. ${RoutePreview.hhmm(o.atTime)}"
                                 parts += if (o.offM < 150) "przy trasie" else "${(o.offM / 50).roundToInt() * 50} m od trasy"
+                                o.iso?.takeIf { it != "PL" }?.let { parts += Countries.name(it) }
                                 if (g.kind == "break" && !o.rest) parts += "stacja"
-                                val left = if (g.kind == "fuel") range?.minus(o.atKm) else rangeAt(o.atKm)
                                 Text(parts.joinToString(" · "), fontSize = 11.sp, color = C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                if (g.kind == "fuel") PriceLine(o, oi == 0 && o.price != null && o.open && g.options.count { it.price != null } > 1)
+                                if (g.kind == "fuel") PriceLine(o, oi == 0 && o.pln != null && o.open && g.options.count { it.pln != null } > 1)
+                                val left = if (g.kind == "fuel") arriveWith(o.atKm) else rangeAt(o.atKm)
                                 if (left != null) Text(
-                                    if (left >= 0) "W baku zostanie ok. ${left.roundToInt()} km" else "Zabraknie ok. ${(-left).roundToInt()} km przed tym miejscem",
+                                    when {
+                                        left < 0 -> "Zabraknie ok. ${(-left).roundToInt()} km przed tym miejscem"
+                                        g.kind == "fuel" -> "Dojedziesz z ok. ${left.roundToInt()} km w baku"
+                                        else -> "W baku zostanie ok. ${left.roundToInt()} km"
+                                    },
                                     fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
                                     color = when { left < 0 -> Color(0xFFFF6B6B); left < reserve -> C.Orange; else -> C.Green },
                                 )
@@ -304,13 +319,16 @@ private fun StopsPicker(
                 }
             }
         }
+        if (fuelGroups > 0) FuelPriceNote(st)
 
         // zasięg na miejscu
         if (range != null) {
             val total = totalKmOf(st)
+            val atEnd = rangeAt(total)
             val (txt, col) = when {
-                fuelAt != null && fullKm != null -> "Po zatankowaniu do pełna na miejscu zostanie ok. ${(fullKm - (total - fuelAt)).roundToInt()} km zasięgu" to C.Green
-                fuelAt != null -> "Na miejscu: zależy, ile zatankujesz (brak pojemności baku / spalania z auta)" to C.Muted
+                refuels.isNotEmpty() && atEnd != null -> "Po zatankowaniu do pełna na miejscu zostanie ok. ${atEnd.roundToInt()} km zasięgu" +
+                    (if (atEnd < reserve) " – poniżej minimum $reserve km" else "") to (if (atEnd < 0) Color(0xFFFF6B6B) else if (atEnd < reserve) C.Orange else C.Green)
+                refuels.isNotEmpty() -> "Na miejscu: zależy, ile zatankujesz" to C.Muted
                 range - total >= 0 -> "Bez tankowania na miejscu zostanie ok. ${(range - total).roundToInt()} km zasięgu" +
                     (if (range - total < reserve) " – poniżej minimum $reserve km" else "") to (if (range - total < reserve) C.Orange else C.Green)
                 else -> "Bez tankowania zabraknie ok. ${(total - range).roundToInt()} km – zaznacz stację" to Color(0xFFFF6B6B)
@@ -325,8 +343,8 @@ private fun StopsPicker(
             SmartButton(Icons.Rounded.AutoAwesome, if (chosen.isEmpty()) "Usuń postoje z trasy" else "Zapisz postoje w trasie (${chosen.size})", false) {
                 val all = st.groups.flatMap { it.options }
                 var list = via.filter { p -> all.none { samePlace(it.place, p) } }
-                if (list.size + chosen.size > 3) {
-                    Toast.makeText(ctx, "Najwyżej 3 punkty po drodze – usuń któryś punkt albo odznacz postój", Toast.LENGTH_LONG).show()
+                if (list.size + chosen.size > MAX_VIA) {
+                    Toast.makeText(ctx, "Najwyżej $MAX_VIA punktów po drodze – odznacz któryś postój", Toast.LENGTH_LONG).show()
                     return@SmartButton
                 }
                 for (o in chosen.sortedBy { it.atKm }) {
@@ -342,23 +360,30 @@ private fun StopsPicker(
     }
 }
 
+/** Najwięcej punktów po drodze (CAR OS przyjmuje tyle przystanków). */
+private const val MAX_VIA = 8
+
 private fun totalKmOf(st: SmartPlan.Stops) = st.totalKm
 
 private fun money(v: Double, digits: Int = 2) = String.format(java.util.Locale("pl"), "%.${digits}f", v)
 
-/** Cena wybranego paliwa na stacji (Niemcy – z Tankerkönig) albo podpowiedź o tańszej sieci. */
+/** Cena paliwa: na stacji (oficjalne dane), cena maksymalna w Polsce albo średnia w kraju; podpowiedź o tańszej sieci. */
 @Composable
 private fun PriceLine(o: SmartPlan.Opt, cheapest: Boolean) {
+    val unit = if (o.cur == "EUR") "€/l" else "zł/l"
+    val pr = o.price?.let { money(it, if (o.cur == "EUR") 3 else 2) + " " + unit }
+    val pln = if (o.cur != "PLN") o.pln?.let { " ≈ ${money(it)} zł" } ?: "" else ""
     val txt = when {
-        o.price != null && o.cur == "EUR" -> "${money(o.price, 3)} €/l" + (o.pln?.let { " ≈ ${money(it)} zł" } ?: "") + (if (!o.open) " · teraz zamknięta" else "")
-        o.price != null -> "${money(o.price)} zł/l"
+        pr != null && o.src == "station" -> pr + pln + (if (!o.open) " · teraz zamknięta" else "")
+        pr != null && o.src == "max" -> "do $pr (cena maks. w Polsce)" + (if (o.cheap) " · zwykle tańsza sieć" else "")
+        pr != null && o.src == "avg" -> "ok. $pr$pln – średnio: ${Countries.name(o.iso)}" + (if (o.cheap) " · zwykle tańsza sieć" else "")
         o.cheap -> "zwykle tańsza sieć"
         else -> null
     } ?: return
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
-            txt, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-            color = when { o.price != null && !o.open -> C.Muted; o.price != null -> C.Accent; else -> C.Text2 },
+            txt, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f, fill = false),
+            color = when { o.src == "station" && !o.open -> C.Muted; o.src == "station" -> C.Accent; else -> C.Text2 },
         )
         if (cheapest) Text(
             "najtańsza", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF06210F),
@@ -367,18 +392,16 @@ private fun PriceLine(o: SmartPlan.Opt, cheapest: Boolean) {
     }
 }
 
-/** Cena w Polsce dziś i skąd są ceny na stacjach. */
+/** Skąd są ceny. */
 @Composable
 private fun FuelPriceNote(st: SmartPlan.Stops) {
     val lines = ArrayList<String>()
-    st.plMax?.let { lines += "Polska dziś: ${if (st.fuel == FuelPrices.Fuel.LPG) "średnio" else "cena maks."} ${money(it)} zł/l" }
-    when (st.deOk) {
-        true -> lines += "Ceny na stacjach w Niemczech na żywo (Tankerkönig) – najtańsza pierwsza"
-        false -> lines += "Ceny z Niemiec niedostępne – sprawdź klucz Tankerkönig w Ustawieniach"
-        null -> if (st.fuel != FuelPrices.Fuel.LPG) lines += "Ceny na stacjach w Niemczech: dodaj darmowy klucz Tankerkönig w Ustawieniach → Planowanie tras"
-    }
-    lines += "W Polsce brak publicznych cen poszczególnych stacji – podpowiadam sieci zwykle tańsze"
-    Column(Modifier.padding(start = 30.dp)) {
+    lines += "Ceny na stacjach na żywo: Niemcy, Francja, Austria, Włochy, Hiszpania. Polska – cena maksymalna; inne kraje UE – średnia z biuletynu Komisji Europejskiej" +
+        (EuFuel.date.value?.let { " ($it)" } ?: "") + ". Najtańsze (w złotych) pierwsze"
+    if (st.deKeyMissing) lines += "Niemcy: dodaj darmowy klucz Tankerkönig w Ustawieniach → Planowanie tras, żeby mieć ceny z każdej stacji"
+    if (st.deOk == false) lines += "Ceny z Niemiec niedostępne – sprawdź klucz Tankerkönig w Ustawieniach"
+    if (st.fullGuess && st.groups.count { it.kind == "fuel" } > 1) lines += "Brak pojemności baku / spalania z auta – pełny bak przyjęty jako ok. ${st.fullKm?.roundToInt() ?: 650} km"
+    Column(Modifier.padding(start = 4.dp, top = 2.dp)) {
         lines.forEach { Text(it, fontSize = 11.sp, color = C.Muted) }
     }
 }

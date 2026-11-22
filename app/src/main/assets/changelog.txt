@@ -2,6 +2,16 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Ceny paliw w całej Europie i kilka tankowań na trasie
+- Długa trasa (np. 1000 km): tyle tankowań, ile trzeba – każde zanim zasięg spadnie poniżej minimum, po nim liczy pełny bak (pojemność baku / spalanie z auta, a gdy brak – ok. 650 km)
+- Przy każdej stacji: z jakim zasięgiem do niej dojedziesz, a na dole – ile zostanie na miejscu po wszystkich tankowaniach
+- Ceny na stacjach na żywo z oficjalnych źródeł: Niemcy (Tankerkönig), Francja, Austria, Włochy, Hiszpania
+- Polska: cena maksymalna; pozostałe kraje UE: średnia cena w kraju z biuletynu Komisji Europejskiej (co tydzień)
+- Wszystko przeliczone na złote po kursie NBP – najtańsza stacja pierwsza, także gdy trasa przechodzi przez kilka krajów (np. zatankuj przed granicą)
+- Przy stacji za granicą widać kraj
+- Do 8 punktów po drodze (było 3)
+
 ## 1.71 · 2026-11-22
 Ceny paliwa przy postojach i najtańsza stacja
 - Ustawienia → Planowanie tras → „Paliwo w aucie” (ON / Pb95 / Pb98 / LPG): przy tankowaniu tylko stacje z tym paliwem

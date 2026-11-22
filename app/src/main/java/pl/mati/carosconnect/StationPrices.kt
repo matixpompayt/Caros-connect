@@ -20,7 +20,175 @@ import java.util.Locale
  * z [FuelPrices]; przy stacjach pokazujemy wtedy podpowiedź „zwykle tańsza sieć”.
  */
 object StationPrices {
-    class Tk(val name: String, val brand: String, val lat: Double, val lon: Double, val price: Double, val open: Boolean)
+    /** Stacja z ceną wybranego paliwa ([cur] – waluta, zwykle EUR). */
+    class Tk(val name: String, val brand: String, val lat: Double, val lon: Double, val price: Double, val open: Boolean, val cur: String = "EUR")
+
+    /** Kraje z cenami na poszczególnych stacjach (oficjalne dane). */
+    val stationCountries = setOf("DE", "FR", "AT", "IT", "ES")
+
+    /**
+     * Stacje z cenami w danym kraju wokół punktów. null – źródło nie odpowiedziało.
+     * DE – Tankerkönig (klucz), FR – prix-carburants.gouv.fr, AT – E-Control, IT – MIMIT Osservaprezzi, ES – Ministerio (geoportal).
+     */
+    suspend fun stations(iso: String, fuel: FuelPrices.Fuel, centers: List<Pair<Double, Double>>, tk: String): List<Tk>? = when (iso) {
+        "DE" -> if (tk.isBlank()) emptyList() else germany(tk, fuel, centers)
+        "FR" -> parallel(centers) { (lat, lon) -> france(fuel, lat, lon) }
+        "AT" -> parallel(centers) { (lat, lon) -> austria(fuel, lat, lon) }
+        "IT" -> parallel(centers) { (lat, lon) -> italy(fuel, lat, lon) }
+        "ES" -> spain(fuel, centers)
+        else -> emptyList()
+    }
+
+    private suspend fun parallel(centers: List<Pair<Double, Double>>, one: (Pair<Double, Double>) -> List<Tk>): List<Tk>? {
+        if (centers.isEmpty()) return emptyList()
+        val res = coroutineScope { centers.map { c -> async(Dispatchers.IO) { try { one(c) } catch (_: Exception) { null } } }.awaitAll() }
+        if (res.all { it == null }) return null
+        return res.filterNotNull().flatten().distinctBy { "%.4f,%.4f".format(Locale.US, it.lat, it.lon) }
+    }
+
+    private fun cap(s: String) = s.lowercase(Locale.ROOT).split(' ').joinToString(" ") { w -> w.replaceFirstChar { it.titlecase(Locale.ROOT) } }
+
+    /** Francja – oficjalny przepływ „Prix des carburants” (co 10 min), stacje w promieniu 15 km. */
+    private fun france(fuel: FuelPrices.Fuel, lat: Double, lon: Double): List<Tk> {
+        val where = String.format(Locale.US, "within_distance(geom, geom'POINT(%.5f %.5f)', 15km)", lon, lat)
+        val url = "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/prix-des-carburants-en-france-flux-instantane-v2/records?limit=100&where=" +
+            java.net.URLEncoder.encode(where, "UTF-8")
+        val a = JSONObject(http(url)).optJSONArray("results") ?: return emptyList()
+        val out = ArrayList<Tk>()
+        for (i in 0 until a.length()) {
+            val o = a.getJSONObject(i)
+            val g = o.optJSONObject("geom") ?: continue
+            val price = when (fuel) {
+                FuelPrices.Fuel.ON -> o.optDouble("gazole_prix")
+                FuelPrices.Fuel.PB95 -> listOf(o.optDouble("sp95_prix"), o.optDouble("e10_prix")).filter { !it.isNaN() && it > 0 }.minOrNull() ?: Double.NaN
+                FuelPrices.Fuel.PB98 -> o.optDouble("sp98_prix")
+                FuelPrices.Fuel.LPG -> o.optDouble("gplc_prix")
+            }
+            if (price.isNaN() || price <= 0.3) continue
+            val city = cap(o.optString("ville").trim())
+            out += Tk("Station $city".trim(), "", g.optDouble("lat"), g.optDouble("lon"), if (price > 20) price / 1000 else price, true)
+        }
+        return out
+    }
+
+    /** Austria – E-Control Spritpreisrechner (najtańsze stacje w okolicy punktu). */
+    private fun austria(fuel: FuelPrices.Fuel, lat: Double, lon: Double): List<Tk> {
+        val type = when (fuel) { FuelPrices.Fuel.ON -> "DIE"; FuelPrices.Fuel.LPG -> return emptyList(); else -> "SUP" }
+        val url = String.format(Locale.US, "https://api.e-control.at/sprit/1.0/search/gas-stations/by-address?latitude=%.5f&longitude=%.5f&fuelType=%s&includeClosed=false", lat, lon, type)
+        val a = org.json.JSONArray(http(url))
+        val out = ArrayList<Tk>()
+        for (i in 0 until a.length()) {
+            val o = a.getJSONObject(i)
+            val loc = o.optJSONObject("location") ?: continue
+            val pr = o.optJSONArray("prices") ?: continue
+            var price = Double.NaN
+            for (k in 0 until pr.length()) pr.getJSONObject(k).let { if (it.optString("fuelType") == type) price = it.optDouble("amount") }
+            if (price.isNaN() || price <= 0.3) continue
+            val name = o.optString("name").trim().ifEmpty { "Tankstelle" }
+            out += Tk("$name ${loc.optString("city").trim()}".trim(), name, loc.optDouble("latitude"), loc.optDouble("longitude"), price, o.optBoolean("open", true))
+        }
+        return out
+    }
+
+    /** Włochy – MIMIT Osservaprezzi carburanti (wyszukiwanie w obszarze ok. 20 × 20 km). */
+    private fun italy(fuel: FuelPrices.Fuel, lat: Double, lon: Double): List<Tk> {
+        val type = when (fuel) { FuelPrices.Fuel.ON -> "2-x"; FuelPrices.Fuel.LPG -> "4-x"; else -> "1-x" }
+        val d = 0.1
+        val pts = org.json.JSONArray()
+        listOf(lat - d to lon - d, lat - d to lon + d, lat + d to lon + d, lat + d to lon - d).forEach { (a, b) -> pts.put(JSONObject().put("lat", a).put("lng", b)) }
+        val body = JSONObject().put("points", pts).put("fuelType", type).put("priceOrder", "asc").toString()
+        val res = JSONObject(http("https://carburanti.mise.gov.it/ospzApi/search/zone", body)).optJSONArray("results") ?: return emptyList()
+        val out = ArrayList<Tk>()
+        for (i in 0 until res.length()) {
+            val o = res.getJSONObject(i)
+            val loc = o.optJSONObject("location") ?: continue
+            val fuels = o.optJSONArray("fuels") ?: continue
+            var best = Double.NaN
+            for (k in 0 until fuels.length()) {
+                val f = fuels.getJSONObject(k)
+                val n = f.optString("name").lowercase(Locale.ROOT)
+                val ok = when (fuel) {
+                    FuelPrices.Fuel.ON -> n.contains("gasolio") || n.contains("diesel")
+                    FuelPrices.Fuel.LPG -> n.contains("gpl")
+                    FuelPrices.Fuel.PB98 -> n.contains("benzina") && (n.contains("98") || n.contains("100") || n.contains("plus"))
+                    FuelPrices.Fuel.PB95 -> n.contains("benzina") && !n.contains("98") && !n.contains("100")
+                }
+                val p = f.optDouble("price")
+                if (ok && !p.isNaN() && p > 0.3 && (best.isNaN() || p < best)) best = p
+            }
+            if (best.isNaN()) continue
+            val brand = o.optString("brand").trim()
+            out += Tk(listOf(brand, o.optString("name").trim()).filter { it.isNotEmpty() }.distinct().firstOrNull() ?: "Distributore", brand, loc.optDouble("lat"), loc.optDouble("lng"), best, true)
+        }
+        return out
+    }
+
+    private var esCache: List<Array<Any>>? = null
+    private var esAt = 0L
+
+    /** Hiszpania – Ministerio (cała lista stacji, ok. 12 tys., zapamiętana na 1 h; czytana strumieniowo). */
+    private suspend fun spain(fuel: FuelPrices.Fuel, centers: List<Pair<Double, Double>>): List<Tk>? = withContext(Dispatchers.IO) {
+        val col = when (fuel) {
+            FuelPrices.Fuel.ON -> "Precio Gasoleo A"
+            FuelPrices.Fuel.PB95 -> "Precio Gasolina 95 E5"
+            FuelPrices.Fuel.PB98 -> "Precio Gasolina 98 E5"
+            FuelPrices.Fuel.LPG -> "Precio Gases licuados del petróleo"
+        }
+        val cols = listOf("Precio Gasoleo A", "Precio Gasolina 95 E5", "Precio Gasolina 98 E5", "Precio Gases licuados del petróleo")
+        val ci = cols.indexOf(col)
+        val all = esCache?.takeIf { System.currentTimeMillis() - esAt < 3600_000L } ?: try {
+            val c = URL("https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/EstacionesTerrestres/").openConnection() as HttpURLConnection
+            c.connectTimeout = 10_000; c.readTimeout = 30_000
+            c.setRequestProperty("Accept", "application/json")
+            c.setRequestProperty("User-Agent", "CAROSConnect/1.0 (Android; pl.mati.carosconnect)")
+            val list = ArrayList<Array<Any>>()
+            try {
+                if (c.responseCode !in 200..299) throw java.io.IOException("HTTP ${c.responseCode}")
+                android.util.JsonReader(c.inputStream.bufferedReader()).use { r ->
+                    r.beginObject()
+                    while (r.hasNext()) {
+                        if (r.nextName() != "ListaEESSPrecio") { r.skipValue(); continue }
+                        r.beginArray()
+                        while (r.hasNext()) {
+                            r.beginObject()
+                            var name = ""; var lat = Double.NaN; var lon = Double.NaN
+                            val pr = DoubleArray(cols.size) { Double.NaN }
+                            while (r.hasNext()) {
+                                val k = r.nextName()
+                                if (r.peek() != android.util.JsonToken.STRING) { r.skipValue(); continue }
+                                val v = r.nextString()
+                                fun dbl() = v.replace(',', '.').toDoubleOrNull() ?: Double.NaN
+                                when {
+                                    k == "Rótulo" -> name = v.trim()
+                                    k == "Latitud" -> lat = dbl()
+                                    k.startsWith("Longitud") -> lon = dbl()
+                                    else -> cols.indexOf(k).let { if (it >= 0) pr[it] = dbl() }
+                                }
+                            }
+                            r.endObject()
+                            if (!lat.isNaN() && !lon.isNaN()) list += arrayOf(name, lat, lon, pr)
+                        }
+                        r.endArray()
+                    }
+                    r.endObject()
+                }
+            } finally { c.disconnect() }
+            esCache = list; esAt = System.currentTimeMillis()
+            list
+        } catch (_: Exception) {
+            return@withContext null
+        }
+        val out = ArrayList<Tk>()
+        for (a in all) {
+            val lat = a[1] as Double; val lon = a[2] as Double
+            if (centers.none { (cl, co) -> kotlin.math.abs(cl - lat) < 0.2 && kotlin.math.abs(co - lon) < 0.3 }) continue
+            val p = (a[3] as DoubleArray)[ci]
+            if (p.isNaN() || p <= 0.3) continue
+            out += Tk(cap(a[0] as String).ifEmpty { "Gasolinera" }, a[0] as String, lat, lon, p, true)
+        }
+        out
+    }
+
 
     val tkKey = MutableStateFlow("")
     private var inited = false
@@ -144,12 +312,18 @@ object StationPrices {
         return cheapBrands.any { n.contains(it) }
     }
 
-    private fun http(url: String): String {
+    private fun http(url: String, postJson: String? = null): String {
         val c = URL(url).openConnection() as HttpURLConnection
         c.connectTimeout = 8000
         c.readTimeout = 12000
         c.setRequestProperty("User-Agent", "CAROSConnect/1.0 (Android; pl.mati.carosconnect)")
         c.setRequestProperty("Accept", "application/json")
+        if (postJson != null) {
+            c.requestMethod = "POST"
+            c.doOutput = true
+            c.setRequestProperty("Content-Type", "application/json")
+            c.outputStream.use { it.write(postJson.toByteArray()) }
+        }
         try {
             if (c.responseCode !in 200..299) throw java.io.IOException("HTTP ${c.responseCode}")
             return c.inputStream.bufferedReader().use { it.readText() }
