@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.73 · 2026-11-22
 Nowe widżety w wyglądzie motywu i Liquid Glass
 - 5 nowych widżetów: Zasięg (pierścień zasięgu, spalanie, koszt km), Stan auta (przebieg, akumulator, serwis, pogoda przy aucie), Jazda (km dziś / tydzień / miesiąc i ostatnia trasa), Praca (najbliższa zmiana i godzina wyjazdu), Skróty (do auta, zapisz tu, trasy, auto)
 - Auto i Ceny paliw w nowym wyglądzie; większy / mniejszy widżet pokazuje więcej / mniej
