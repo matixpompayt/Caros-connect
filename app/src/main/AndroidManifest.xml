@@ -89,6 +89,66 @@
         </receiver>
 
         <receiver
+            android:name=".RangeWidget"
+            android:exported="true"
+            android:label="Zasięg">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_range_info" />
+        </receiver>
+
+        <receiver
+            android:name=".StatusWidget"
+            android:exported="true"
+            android:label="Stan auta">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_status_info" />
+        </receiver>
+
+        <receiver
+            android:name=".DriveWidget"
+            android:exported="true"
+            android:label="Jazda">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_drive_info" />
+        </receiver>
+
+        <receiver
+            android:name=".WorkWidget"
+            android:exported="true"
+            android:label="Praca">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_work_info" />
+        </receiver>
+
+        <receiver
+            android:name=".ShortcutsWidget"
+            android:exported="true"
+            android:label="Skróty">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_shortcuts_info" />
+        </receiver>
+
+        <receiver
             android:name=".MeterReceiver"
             android:exported="false" />
 

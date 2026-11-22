@@ -6,4 +6,9 @@
     <string name="send_to_car">Wyślij do auta</string>
     <string name="camsam_access_name">CAR OS Connect – okienko CamSam</string>
     <string name="camsam_access_desc">Odczytuje wyłącznie pływające okienko CamSam / Yanosika (ikonę ostrzeżenia, pasek odległości i nazwę ulicy) i wysyła je do radia CAR OS. Nie czyta innych aplikacji.</string>
+    <string name="widget_range_desc">Zasięg na paliwie, spalanie i koszt kilometra</string>
+    <string name="widget_status_desc">Przebieg, akumulator, najbliższy serwis i pogoda przy aucie</string>
+    <string name="widget_drive_desc">Kilometry dziś, w tygodniu i w miesiącu oraz ostatnia trasa</string>
+    <string name="widget_work_desc">Najbliższa zmiana w pracy i godzina wyjazdu</string>
+    <string name="widget_shortcuts_desc">Skróty: prowadź do auta, zapisz miejsce, trasy, auto</string>
 </resources>

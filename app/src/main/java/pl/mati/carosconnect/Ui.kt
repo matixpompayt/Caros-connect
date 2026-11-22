@@ -249,6 +249,12 @@ fun ParkApp(perms: Perms, actions: Actions) {
         else -> C.DARK
     }
     if (C.pal != target) C.pal = target
+    // widżety w tym samym wyglądzie co aplikacja (motyw, Glass, akcent)
+    val wctx = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(themeMode, gSpec, light) {
+        kotlinx.coroutines.delay(800)
+        Widgets.updateAll(wctx)
+    }
     val view = androidx.compose.ui.platform.LocalView.current
     androidx.compose.runtime.SideEffect {
         (view.context as? android.app.Activity)?.window?.let { w ->

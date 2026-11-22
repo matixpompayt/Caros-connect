@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -1198,9 +1199,9 @@ fun MeterCard() {
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Chip("+15 min", Modifier.weight(1f)) { Meter.extend(ctx, 15); CarWidget.updateAll(ctx) }
-                Chip("+30 min", Modifier.weight(1f)) { Meter.extend(ctx, 30); CarWidget.updateAll(ctx) }
-                Chip("Zakończ", Modifier.weight(1f)) { Meter.stop(ctx); CarWidget.updateAll(ctx) }
+                Chip("+15 min", Modifier.weight(1f)) { Meter.extend(ctx, 15); Widgets.updateAll(ctx) }
+                Chip("+30 min", Modifier.weight(1f)) { Meter.extend(ctx, 30); Widgets.updateAll(ctx) }
+                Chip("Zakończ", Modifier.weight(1f)) { Meter.stop(ctx); Widgets.updateAll(ctx) }
             }
         } else {
             Text("Ustaw opłacony czas – przypomnę ${Meter.WARN_MIN} min przed końcem.", fontSize = 14.sp, color = C.Muted)
@@ -1208,7 +1209,7 @@ fun MeterCard() {
                 listOf(15 to "15 min", 30 to "30 min", 60 to "1 h", 120 to "2 h", 180 to "3 h").forEach { (m, l) ->
                     Chip(l, Modifier.weight(1f)) {
                         Meter.start(ctx, m)
-                        CarWidget.updateAll(ctx)
+                        Widgets.updateAll(ctx)
                         Toast.makeText(ctx, "Parkometr: $l", Toast.LENGTH_SHORT).show()
                     }
                 }
@@ -1375,6 +1376,9 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
         val real by CarMapStyle.realBuildings.collectAsState()
         ToggleRow("Realistyczne budynki", "Domy, bloki, hale i wieżowce z oknami i dachami (wieczorem świecą okna)", real) { CarMapStyle.setRealBuildings(it) }
     }
+
+    Label("Widżety", Modifier.padding(top = 6.dp))
+    WidgetsSection()
 
     RadioReportCard()
     Label("Kopia ustawień CAR OS", Modifier.padding(top = 6.dp))
@@ -1986,3 +1990,98 @@ private fun LiveSection() {
     }
 }
 
+
+
+/** Widżety na ekran główny: wygląd (jak motyw / przezroczyste szkło), podgląd i „Dodaj”. */
+@Composable
+private fun WidgetsSection() {
+    val ctx = LocalContext.current
+    val style by WidgetTheme.style.collectAsState()
+    val alpha by WidgetTheme.clearAlpha.collectAsState()
+    val themeMode by Store.theme.collectAsState()
+    val gSpec by GlassTheme.spec.collectAsState()
+    LaunchedEffect(Unit) { WidgetTheme.init(ctx) }
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card).padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text("Wygląd widżetów", fontSize = 16.sp, color = C.Text)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("theme" to (if (themeMode == "glass") "Liquid Glass (motyw)" else "Jak motyw"), "clear" to "Przezroczyste szkło").forEach { (k, label) ->
+                val on = style == k
+                Box(
+                    Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(12.dp))
+                        .background(if (on) C.Accent else C.Raised).clickable { WidgetTheme.setStyle(ctx, k) },
+                    contentAlignment = Alignment.Center,
+                ) { Text(label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = if (on) C.Bg else C.Text, maxLines = 1) }
+            }
+        }
+        if (style == "clear") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Krycie", fontSize = 14.sp, color = C.Text2, modifier = Modifier.width(64.dp))
+                androidx.compose.material3.Slider(
+                    value = alpha, onValueChange = { WidgetTheme.clearAlpha.value = it }, valueRange = 0.1f..0.85f,
+                    onValueChangeFinished = { WidgetTheme.setClearAlpha(ctx, WidgetTheme.clearAlpha.value) },
+                    modifier = Modifier.weight(1f),
+                    colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = C.Accent, activeTrackColor = C.Accent),
+                )
+                Text("${(alpha * 100).toInt()}%", fontSize = 13.sp, color = C.Muted, modifier = Modifier.width(44.dp))
+            }
+        }
+        // podgląd: widżet „Zasięg” na przykładowej tapecie
+        val preview = remember(style, alpha, themeMode, gSpec, C.isLight) {
+            try {
+                val lk = WidgetTheme.look(ctx)
+                Triple(WidgetTheme.background(ctx, lk, 300, 110).asImageBitmap(), lk, WidgetTheme.ring(ctx, lk, 0.62f, lk.green, 70).asImageBitmap())
+            } catch (_: Exception) { null }
+        }
+        if (preview != null) {
+            val (bg, lk, ring) = preview
+            Box(
+                Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(14.dp))
+                    .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF1E3A8A), Color(0xFF7C3AED), Color(0xFFDB2777), Color(0xFFF59E0B)))),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(Modifier.size(width = 300.dp, height = 110.dp)) {
+                    androidx.compose.foundation.Image(bg, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.FillBounds)
+                    Row(Modifier.fillMaxSize().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(contentAlignment = Alignment.Center) {
+                            androidx.compose.foundation.Image(ring, null, Modifier.size(70.dp))
+                            Text("412", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(lk.text))
+                        }
+                        Column(Modifier.padding(start = 14.dp)) {
+                            Text("ZASIĘG", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(lk.accent), letterSpacing = 1.sp)
+                            Text("412 km", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(lk.text))
+                            Text("6,1 l/100 · 0,42 zł/km", fontSize = 12.sp, color = Color(lk.muted))
+                        }
+                    }
+                }
+            }
+        }
+        Text(
+            if (themeMode == "glass") "Widżety biorą tło, jasność i akcent z motywu Glass – jak szklane karty w aplikacji. „Przezroczyste szkło” pokazuje tapetę telefonu."
+            else "Widżety mają kolory wybranego motywu (jasny / ciemny / jak telefon). „Przezroczyste szkło” pokazuje tapetę telefonu.",
+            fontSize = 13.sp, color = C.Muted,
+        )
+    }
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card).padding(horizontal = 14.dp, vertical = 6.dp),
+    ) {
+        Widgets.all.forEachIndexed { i, (cls, name, desc) ->
+            val n = remember(cls) { Widgets.count(ctx, cls) }
+            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(name + (if (n > 0) "  ·  na ekranie: $n" else ""), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+                    Text(desc, fontSize = 12.sp, color = C.Muted)
+                }
+                Box(
+                    Modifier.padding(start = 8.dp).clip(RoundedCornerShape(10.dp)).background(C.Accent.copy(alpha = 0.18f))
+                        .clickable {
+                            if (!Widgets.pin(ctx, cls)) Toast.makeText(ctx, "Przytrzymaj puste miejsce na ekranie głównym → Widżety → CAR OS Connect", Toast.LENGTH_LONG).show()
+                        }.padding(horizontal = 12.dp, vertical = 8.dp),
+                ) { Text("Dodaj", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.Accent) }
+            }
+            if (i < Widgets.all.lastIndex) Box(Modifier.fillMaxWidth().height(1.dp).background(C.Border.copy(alpha = 0.5f)))
+        }
+    }
+}

@@ -75,7 +75,7 @@ class MainActivity : ComponentActivity(), Actions {
         StationPrices.init(this)
         GlassTheme.init(this)
         SyncWorker.schedule(this)
-        if (savedInstanceState == null) { handleShare(intent); openTabFrom(intent); walkFrom(intent) }
+        if (savedInstanceState == null) { handleShare(intent); openTabFrom(intent); walkFrom(intent); widgetActionFrom(intent) }
         setContent {
             androidx.compose.foundation.layout.Box {
                 ParkApp(perms.value, this@MainActivity)
@@ -139,6 +139,30 @@ class MainActivity : ComponentActivity(), Actions {
         handleShare(intent)
         openTabFrom(intent)
         walkFrom(intent)
+        widgetActionFrom(intent)
+    }
+
+    /** Widżet „Skróty” → „Zapisz tu”: zapis miejsca parkowania w bieżącej pozycji. */
+    private fun widgetActionFrom(i: Intent?) {
+        val a = i?.getStringExtra("widget_action") ?: return
+        i.removeExtra("widget_action")
+        if (a != "save_here") return
+        val ok = androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!ok) {
+            android.widget.Toast.makeText(this, "Zezwól na lokalizację i naciśnij „Zapisz tutaj”", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        android.widget.Toast.makeText(this, "Ustalam pozycję…", android.widget.Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val l = withContext(Dispatchers.IO) { Locator.freshFix(this@MainActivity, 15) }
+            if (l == null) {
+                android.widget.Toast.makeText(this@MainActivity, "Brak sygnału GPS – spróbuj na zewnątrz", android.widget.Toast.LENGTH_LONG).show()
+            } else {
+                Store.saveSpot(this@MainActivity, Store.Spot(l.latitude, l.longitude, System.currentTimeMillis(), l.accuracy, manual = true))
+                android.widget.Toast.makeText(this@MainActivity, "Zapisano miejsce parkowania", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     /** Powiadomienie „Zaparkowano” / widżet: od razu nawigacja piesza do auta. */

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/x_root" android:layout_width="match_parent" android:layout_height="match_parent">
+<ImageView android:id="@+id/wbg" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" android:src="@drawable/w_shape" android:importantForAccessibility="no" />
+<LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="8dp">
+<LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="horizontal">
+<FrameLayout android:id="@+id/x_walk" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:layout_marginEnd="6dp">
+<ImageView android:id="@+id/x_walk_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" android:src="@drawable/w_cell" android:importantForAccessibility="no" />
+<LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:orientation="vertical">
+<ImageView android:id="@+id/x_walk_i" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/wi_walk" android:importantForAccessibility="no"/>
+<TextView android:id="@+id/x_walk_t" android:layout_width="wrap_content" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:includeFontPadding="false" android:text="Do auta" android:textColor="#EEF1F4" android:textSize="11sp" android:textStyle="bold" android:layout_marginTop="4dp"/>
+</LinearLayout>
+</FrameLayout>
+<FrameLayout android:id="@+id/x_save" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:layout_marginEnd="6dp">
+<ImageView android:id="@+id/x_save_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" android:src="@drawable/w_cell" android:importantForAccessibility="no" />
+<LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:orientation="vertical">
+<ImageView android:id="@+id/x_save_i" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/wi_pin" android:importantForAccessibility="no"/>
+<TextView android:id="@+id/x_save_t" android:layout_width="wrap_content" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:includeFontPadding="false" android:text="Zapisz tu" android:textColor="#EEF1F4" android:textSize="11sp" android:textStyle="bold" android:layout_marginTop="4dp"/>
+</LinearLayout>
+</FrameLayout>
+<FrameLayout android:id="@+id/x_route" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:layout_marginEnd="6dp">
+<ImageView android:id="@+id/x_route_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" android:src="@drawable/w_cell" android:importantForAccessibility="no" />
+<LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:orientation="vertical">
+<ImageView android:id="@+id/x_route_i" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/wi_map" android:importantForAccessibility="no"/>
+<TextView android:id="@+id/x_route_t" android:layout_width="wrap_content" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:includeFontPadding="false" android:text="Trasy" android:textColor="#EEF1F4" android:textSize="11sp" android:textStyle="bold" android:layout_marginTop="4dp"/>
+</LinearLayout>
+</FrameLayout>
+<FrameLayout android:id="@+id/x_car" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" >
+<ImageView android:id="@+id/x_car_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" android:src="@drawable/w_cell" android:importantForAccessibility="no" />
+<LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:orientation="vertical">
+<ImageView android:id="@+id/x_car_i" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/wi_car" android:importantForAccessibility="no"/>
+<TextView android:id="@+id/x_car_t" android:layout_width="wrap_content" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:includeFontPadding="false" android:text="Auto" android:textColor="#EEF1F4" android:textSize="11sp" android:textStyle="bold" android:layout_marginTop="4dp"/>
+</LinearLayout>
+</FrameLayout>
+</LinearLayout>
+</LinearLayout>
+</FrameLayout>

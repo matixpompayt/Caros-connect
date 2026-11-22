@@ -216,7 +216,7 @@ object Store {
         spot.value = s
         history.value = (listOf(s) + history.value.filterNot { it.time == s.time }).take(20)
         persist()
-        CarWidget.updateAll(ctx.applicationContext)
+        Widgets.updateAll(ctx.applicationContext)
     }
 
     // ---------- dziennik parkowania (diagnostyka) ----------
@@ -251,7 +251,7 @@ object Store {
         history.value = (listOf(s) + history.value.filterNot { it.time == s.time }).take(20)
         persist()
         val app = ctx.applicationContext
-        CarWidget.updateAll(app)
+        Widgets.updateAll(app)
         if (!s.manual) Notifs.parked(app, s)
         scope.launch {
             val addr = Locator.address(app, s.lat, s.lon) ?: return@launch
@@ -260,7 +260,7 @@ object Store {
             if (cur != null && cur.time == s.time) spot.value = updated
             history.value = history.value.map { if (it.time == s.time) updated else it }
             persist()
-            CarWidget.updateAll(app)
+            Widgets.updateAll(app)
             if (cur != null && cur.time == s.time && !s.manual) Notifs.parked(app, updated)
         }
     }

@@ -79,7 +79,7 @@ object Sync {
             }
         }
         try { updateWeather() } catch (_: Exception) {}
-        CarWidget.updateAll(ctx)
+        Widgets.updateAll(ctx)
         msg
     }
 

@@ -2,6 +2,15 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Nowe widżety w wyglądzie motywu i Liquid Glass
+- 5 nowych widżetów: Zasięg (pierścień zasięgu, spalanie, koszt km), Stan auta (przebieg, akumulator, serwis, pogoda przy aucie), Jazda (km dziś / tydzień / miesiąc i ostatnia trasa), Praca (najbliższa zmiana i godzina wyjazdu), Skróty (do auta, zapisz tu, trasy, auto)
+- Auto i Ceny paliw w nowym wyglądzie; większy / mniejszy widżet pokazuje więcej / mniej
+- Kolory z wybranego motywu (jasny / ciemny / jak telefon); w motywie Glass – „płynne szkło”: rozmyte tło motywu, mleczna warstwa, połysk i jasna krawędź, akcent z motywu
+- Opcja „Przezroczyste szkło” – szkło na tapecie telefonu, z regulacją krycia
+- Ustawienia → Widżety: podgląd wyglądu i „Dodaj” każdego widżetu na ekran główny
+- Widżety zmieniają wygląd od razu po zmianie motywu
+
 ## 1.72 · 2026-11-22
 Ceny paliw w całej Europie i kilka tankowań na trasie
 - Długa trasa (np. 1000 km): tyle tankowań, ile trzeba – każde zanim zasięg spadnie poniżej minimum, po nim liczy pełny bak (pojemność baku / spalanie z auta, a gdy brak – ok. 650 km)
