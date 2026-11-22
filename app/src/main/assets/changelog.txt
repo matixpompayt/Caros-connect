@@ -2,6 +2,15 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Postoje na trasie: szybciej i do wyboru
+- Szukanie stacji i miejsc na przerwę dużo szybsze: jedno zapytanie dla wszystkich postojów, wysyłane do kilku serwerów naraz (wygrywa najszybszy)
+- Wynik zapamiętany dla trasy – po dodaniu postoju nie szuka od nowa
+- Zaznaczasz, co chcesz: tankowanie i każdą przerwę osobno, a dla każdej do 3 propozycji (km od startu, godzina, odległość od trasy)
+- Przy każdej propozycji: ile km zasięgu zostanie w baku w tym miejscu
+- Na dole: ile zasięgu zostanie na miejscu (bez tankowania albo po zatankowaniu do pełna)
+- „Zapisz postoje w trasie” dodaje zaznaczone we właściwej kolejności (odznaczone usuwa); potem „Nawiguj w aucie” wysyła je do auta
+
 ## 1.67 · 2026-11-21
 Okna budynków naprawdę w stałej skali
 - Poprzednia poprawka nie działała – mapa pomijała ustawioną skalę obrazka. Teraz obrazek ściany jest rysowany osobno dla każdego przybliżenia w dokładnie potrzebnej wielkości, więc okna nie rosną po oddaleniu

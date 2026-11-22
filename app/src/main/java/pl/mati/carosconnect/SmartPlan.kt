@@ -65,58 +65,75 @@ object SmartPlan {
 
     // ---------- tankowanie i przerwy ----------
 
-    data class Stop(val kind: String, val place: CarData.Place, val atKm: Double, val atTime: Long, val note: String)
+    /** Jedno miejsce do wyboru: [atKm] – km od startu, [offM] – ile od trasy, [rest] – MOP / parking. */
+    data class Opt(val place: CarData.Place, val atKm: Double, val atTime: Long, val offM: Double, val rest: Boolean)
+
+    /** Grupa: „fuel” (tankowanie) albo „break” (przerwa po [hours] h) – do 3 propozycji, najlepsza pierwsza. */
+    data class Group(val kind: String, val hours: Int, val atKm: Double, val options: List<Opt>)
+
+    data class Stops(val groups: List<Group>, val totalKm: Double)
+
+    private var cacheKey = ""
+    private var cacheTotal = 0.0
+    private var cacheVal: Stops? = null
 
     /**
      * Postoje: stacja, gdy zasięg nie wystarcza (z zapasem 40 km), i przerwa co ok. 2 h jazdy.
-     * Miejsca przy samej trasie z OpenStreetMap (a gdy nie odpowiada – z TomTom).
+     * Jedno zapytanie dla wszystkich postojów, kilka serwerów naraz; wynik zapamiętany dla tej trasy
+     * (dodanie postoju z listy nie szuka od nowa).
      * Rzuca [java.io.IOException], gdy nie udało się nic sprawdzić (brak internetu / serwery zajęte).
      */
-    suspend fun stops(ctx: Context, r: RoutePreview.Result, rangeKm: Double?): List<Stop> = withContext(Dispatchers.IO) {
-        val out = ArrayList<Stop>()
+    suspend fun stops(ctx: Context, r: RoutePreview.Result, rangeKm: Double?): Stops = withContext(Dispatchers.IO) {
         val n = r.pts.size
-        if (n < 2) return@withContext out
+        if (n < 2) return@withContext Stops(emptyList(), 0.0)
         val lats = DoubleArray(n) { r.pts[it].latitude }
         val lons = DoubleArray(n) { r.pts[it].longitude }
         val cum = DoubleArray(n)
         for (k in 1 until n) cum[k] = cum[k - 1] + RoutePreview.dist(r.pts[k - 1], r.pts[k])
         val total = cum.last()
-        val speed = total / r.travelS.coerceAtLeast(60.0) // m/s
-        val key = RoutePreview.tomtomKey(ctx)
-        var ok = 0
-        var err: Exception? = null
-        fun look(target: Double, back: Double, fwd: Double, kind: String): AlongRoute.Hit? = try {
-            AlongRoute.find(lats, lons, cum, target, back, fwd, kind, key).also { ok++ }
-        } catch (e: Exception) {
-            err = e
-            null
+        val key = String.format(
+            java.util.Locale.US, "%.3f,%.3f|%.3f,%.3f|%d",
+            lats[0], lons[0], lats[n - 1], lons[n - 1], ((rangeKm ?: -1.0) / 20).roundToInt(),
+        )
+        // ta sama trasa (np. tylko doszedł postój z listy) – bez ponownego szukania
+        synchronized(this@SmartPlan) {
+            if (key == cacheKey && abs(total - cacheTotal) < maxOf(3000.0, cacheTotal * 0.03)) cacheVal?.let { return@withContext it }
         }
+        val speed = total / r.travelS.coerceAtLeast(60.0) // m/s
+        val wins = ArrayList<AlongRoute.Window>()
+        val meta = ArrayList<Pair<String, Int>>()
         // tankowanie: najlepiej przed końcem zasięgu (zapas 40 km)
         if (rangeKm != null && rangeKm < total / 1000 + 40) {
             val target = ((rangeKm - 40) * 1000).coerceIn(5_000.0, total)
-            look(target, 60_000.0, 10_000.0, "fuel")?.let { h ->
-                out += Stop("fuel", CarData.Place(h.name, "Stacja paliw", h.lat, h.lon), h.atM / 1000, r.depart + (h.atM / speed * 1000).toLong(),
-                    "Zasięg ok. ${rangeKm.roundToInt()} km – zatankuj tutaj")
-            }
+            wins += AlongRoute.Window(target, 70_000.0, 10_000.0, "fuel"); meta += "fuel" to 0
         }
         // przerwy co ok. 2 h (najwyżej 3)
         var t = 2 * 3600.0
-        var i = 0
-        while (t < r.travelS - 20 * 60 && i < 3) {
-            val target = t * speed
-            if (out.none { abs(it.atKm * 1000 - target) < 25_000 }) {
-                look(target, 30_000.0, 20_000.0, "rest")?.let { h ->
-                    if (out.none { abs(it.atKm - h.atM / 1000) < 15 }) {
-                        out += Stop("break", CarData.Place(h.name, if (h.rest) "Miejsce na przerwę" else "Stacja paliw", h.lat, h.lon), h.atM / 1000,
-                            r.depart + (h.atM / speed * 1000).toLong(), "Po ok. ${(t / 3600).roundToInt()} h jazdy – przerwa 15 min")
-                    }
-                }
-            }
+        while (t < r.travelS - 20 * 60 && meta.count { it.first == "break" } < 3) {
+            wins += AlongRoute.Window(t * speed, 30_000.0, 20_000.0, "rest"); meta += "break" to (t / 3600).roundToInt()
             t += 2 * 3600.0
-            i++
         }
-        if (ok == 0 && err != null) throw java.io.IOException(err?.message ?: "brak odpowiedzi")
-        out.sortedBy { it.atKm }
+        if (wins.isEmpty()) return@withContext Stops(emptyList(), total / 1000)
+        val hits = AlongRoute.findAll(lats, lons, cum, wins, 3, RoutePreview.tomtomKey(ctx))
+        val groups = wins.indices.map { i ->
+            val (kind, h) = meta[i]
+            Group(kind, h, wins[i].targetM / 1000, hits[i].map { x ->
+                Opt(
+                    CarData.Place(x.name, if (x.rest) "Miejsce na przerwę" else "Stacja paliw", x.lat, x.lon),
+                    x.atM / 1000, r.depart + (x.atM / speed * 1000).toLong(), x.offM, x.rest,
+                )
+            })
+        }
+        val res = Stops(groups, total / 1000)
+        synchronized(this@SmartPlan) { cacheKey = key; cacheTotal = total; cacheVal = res }
+        res
+    }
+
+    /** Pełny bak w km (pojemność / średnie spalanie), gdy wiadomo. */
+    fun fullRangeKm(f: CarData.Fuel?): Double? {
+        val avg = f?.avg ?: return null
+        if (f.tank <= 0 || avg < 2) return null
+        return f.tank / avg * 100
     }
 
     /** Gdzie wstawić postój na [atKm] km między punkty po drodze, żeby kolejność zgadzała się z trasą. */
