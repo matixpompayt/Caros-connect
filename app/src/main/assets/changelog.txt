@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.72 · 2026-11-22
 Ceny paliw w całej Europie i kilka tankowań na trasie
 - Długa trasa (np. 1000 km): tyle tankowań, ile trzeba – każde zanim zasięg spadnie poniżej minimum, po nim liczy pełny bak (pojemność baku / spalanie z auta, a gdy brak – ok. 650 km)
 - Przy każdej stacji: z jakim zasięgiem do niej dojedziesz, a na dole – ile zostanie na miejscu po wszystkich tankowaniach
