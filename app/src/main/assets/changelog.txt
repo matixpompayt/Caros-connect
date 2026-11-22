@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.71 · 2026-11-22
 Ceny paliwa przy postojach i najtańsza stacja
 - Ustawienia → Planowanie tras → „Paliwo w aucie” (ON / Pb95 / Pb98 / LPG): przy tankowaniu tylko stacje z tym paliwem
 - Ceny na stacjach w Niemczech na żywo (Tankerkönig, oficjalne dane MTS-K) – z przeliczeniem na złote po kursie NBP; najtańsza stacja pierwsza i oznaczona „najtańsza”. Potrzebny darmowy klucz (Ustawienia → Ceny na stacjach w Niemczech)
