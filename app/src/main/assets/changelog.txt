@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 1.69 · 2026-11-22
 Postoje na trasie: szybciej i do wyboru
 - Szukanie stacji i miejsc na przerwę dużo szybsze: jedno zapytanie dla wszystkich postojów, wysyłane do kilku serwerów naraz (wygrywa najszybszy)
 - Wynik zapamiętany dla trasy – po dodaniu postoju nie szuka od nowa
