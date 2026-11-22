@@ -72,6 +72,7 @@ fun SmartPlanCard(
     val status by CarData.status.collectAsState()
     val range = status?.fuel?.range
     val fullKm = SmartPlan.fullRangeKm(status?.fuel)
+    val reserve by Store.minRange.collectAsState()
     var ordering by remember { mutableStateOf(false) }
     var slots by remember(r.pts) { mutableStateOf<List<SmartPlan.Slot>?>(null) }
     var slotsBusy by remember(r.pts) { mutableStateOf(false) }
@@ -79,13 +80,13 @@ fun SmartPlanCard(
     var stopsErr by remember(r.pts) { mutableStateOf<String?>(null) }
     var stopsTry by remember(r.pts) { mutableStateOf(0) }
     val via = points.dropLast(1).map { LatLng(it.lat, it.lon) }
-    val needStops = (range != null && range < r.distanceM / 1000 + 40) || r.travelS > 2 * 3600 + 20 * 60
-    LaunchedEffect(r.pts, range, stopsTry) {
+    val needStops = (range != null && range < r.distanceM / 1000 + reserve) || r.travelS > 2 * 3600 + 20 * 60
+    LaunchedEffect(r.pts, range, reserve, stopsTry) {
         stopsErr = null
         if (!needStops) { stops = SmartPlan.Stops(emptyList(), r.distanceM / 1000.0); return@LaunchedEffect }
         stops = null
         stops = try {
-            SmartPlan.stops(ctx, r, range)
+            SmartPlan.stops(ctx, r, range, reserve)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -189,7 +190,7 @@ fun SmartPlanCard(
         when {
             !needStops -> Line(
                 Icons.Rounded.LocalGasStation, C.Muted,
-                if (range != null) "Zasięg ${range.roundToInt()} km – na miejscu zostanie ok. ${(range - totalKm).roundToInt()} km. Postoje niepotrzebne"
+                if (range != null) "Zasięg ${range.roundToInt()} km – na miejscu zostanie ok. ${(range - totalKm).roundToInt()} km (minimum $reserve km). Postoje niepotrzebne"
                 else "Krótka trasa – bez postojów",
             )
             st == null -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -204,7 +205,7 @@ fun SmartPlanCard(
                 ) { Text("Ponów", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.Accent) }
             }
             st.groups.isEmpty() -> Line(Icons.Rounded.LocalGasStation, C.Muted, "Brak postojów do zaplanowania")
-            else -> StopsPicker(r, st, points, range, fullKm, onPoints)
+            else -> StopsPicker(r, st, points, range, fullKm, reserve, onPoints)
         }
     }
 }
@@ -215,7 +216,7 @@ private fun samePlace(a: CarData.Place, b: CarData.Place) = abs(a.lat - b.lat) <
 @Composable
 private fun StopsPicker(
     r: RoutePreview.Result, st: SmartPlan.Stops, points: List<CarData.Place>,
-    range: Double?, fullKm: Double?, onPoints: (List<CarData.Place>) -> Unit,
+    range: Double?, fullKm: Double?, reserve: Int, onPoints: (List<CarData.Place>) -> Unit,
 ) {
     val ctx = LocalContext.current
     val via = points.dropLast(1)
@@ -253,7 +254,11 @@ private fun StopsPicker(
                     Column(Modifier.weight(1f)) {
                         Text(if (g.kind == "fuel") "Tankowanie" else "Przerwa po ok. ${g.hours} h jazdy", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
                         val sub = if (g.kind == "fuel") {
-                            if (range != null) "Zasięg ${range.roundToInt()} km – bez tankowania zabraknie ok. ${(totalKmOf(st) - range).coerceAtLeast(0.0).roundToInt()} km"
+                            if (range != null) {
+                                val short = totalKmOf(st) + reserve - range
+                                if (totalKmOf(st) > range) "Zasięg ${range.roundToInt()} km – bez tankowania zabraknie ok. ${(totalKmOf(st) - range).roundToInt()} km"
+                                else "Zasięg ${range.roundToInt()} km – na miejscu zostałoby tylko ${(range - totalKmOf(st)).roundToInt()} km (minimum $reserve km, brakuje ${short.roundToInt()} km)"
+                            }
                             else "Brak danych o zasięgu z auta"
                         } else "Ok. ${g.atKm.roundToInt()} km od startu – 15 min odpoczynku"
                         Text(sub, fontSize = 12.sp, color = C.Muted)
@@ -287,7 +292,7 @@ private fun StopsPicker(
                                 if (left != null) Text(
                                     if (left >= 0) "W baku zostanie ok. ${left.roundToInt()} km" else "Zabraknie ok. ${(-left).roundToInt()} km przed tym miejscem",
                                     fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                                    color = when { left < 0 -> Color(0xFFFF6B6B); left < 40 -> C.Orange; else -> C.Green },
+                                    color = when { left < 0 -> Color(0xFFFF6B6B); left < reserve -> C.Orange; else -> C.Green },
                                 )
                             }
                         }
@@ -302,7 +307,8 @@ private fun StopsPicker(
             val (txt, col) = when {
                 fuelAt != null && fullKm != null -> "Po zatankowaniu do pełna na miejscu zostanie ok. ${(fullKm - (total - fuelAt)).roundToInt()} km zasięgu" to C.Green
                 fuelAt != null -> "Na miejscu: zależy, ile zatankujesz (brak pojemności baku / spalania z auta)" to C.Muted
-                range - total >= 0 -> "Bez tankowania na miejscu zostanie ok. ${(range - total).roundToInt()} km zasięgu" to (if (range - total < 40) C.Orange else C.Green)
+                range - total >= 0 -> "Bez tankowania na miejscu zostanie ok. ${(range - total).roundToInt()} km zasięgu" +
+                    (if (range - total < reserve) " – poniżej minimum $reserve km" else "") to (if (range - total < reserve) C.Orange else C.Green)
                 else -> "Bez tankowania zabraknie ok. ${(total - range).roundToInt()} km – zaznacz stację" to Color(0xFFFF6B6B)
             }
             Line(Icons.Rounded.LocalGasStation, col, txt)

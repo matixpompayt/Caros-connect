@@ -1279,6 +1279,25 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
     CamSamSection()
     TrafficKeySection()
 
+    Label("Planowanie tras", Modifier.padding(top = 6.dp))
+    run {
+        val minR by Store.minRange.collectAsState()
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card).padding(horizontal = 16.dp, vertical = 10.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Minimalny zasięg paliwa", fontSize = 16.sp, color = C.Text, modifier = Modifier.weight(1f))
+                Chip("−", Modifier.size(width = 48.dp, height = 42.dp)) { Store.setMinRange(minR - 10) }
+                Text("$minR km", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = C.Text, modifier = Modifier.padding(horizontal = 12.dp))
+                Chip("+", Modifier.size(width = 48.dp, height = 42.dp)) { Store.setMinRange(minR + 10) }
+            }
+            Text(
+                "Tyle km zasięgu ma zostać w baku. Przy planowaniu trasy stacja jest proponowana zanim zasięg spadnie poniżej tej wartości",
+                fontSize = 13.sp, color = C.Muted, modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+    }
+
     Label("Powiadomienia", Modifier.padding(top = 6.dp))
     ToggleRow("Przypomnienia serwisowe", "Olej, przegląd, ubezpieczenie – z danych CAR OS", nService) { CarData.setNotifService(it) }
     val nLive by CarData.notifLive.collectAsState()

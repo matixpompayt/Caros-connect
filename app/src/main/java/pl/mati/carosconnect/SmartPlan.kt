@@ -78,12 +78,12 @@ object SmartPlan {
     private var cacheVal: Stops? = null
 
     /**
-     * Postoje: stacja, gdy zasięg nie wystarcza (z zapasem 40 km), i przerwa co ok. 2 h jazdy.
+     * Postoje: stacja, gdy zasięg nie wystarcza (z zapasem z ustawień, domyślnie 100 km), i przerwa co ok. 2 h jazdy.
      * Jedno zapytanie dla wszystkich postojów, kilka serwerów naraz; wynik zapamiętany dla tej trasy
      * (dodanie postoju z listy nie szuka od nowa).
      * Rzuca [java.io.IOException], gdy nie udało się nic sprawdzić (brak internetu / serwery zajęte).
      */
-    suspend fun stops(ctx: Context, r: RoutePreview.Result, rangeKm: Double?): Stops = withContext(Dispatchers.IO) {
+    suspend fun stops(ctx: Context, r: RoutePreview.Result, rangeKm: Double?, reserveKm: Int = Store.minRange.value): Stops = withContext(Dispatchers.IO) {
         val n = r.pts.size
         if (n < 2) return@withContext Stops(emptyList(), 0.0)
         val lats = DoubleArray(n) { r.pts[it].latitude }
@@ -92,8 +92,8 @@ object SmartPlan {
         for (k in 1 until n) cum[k] = cum[k - 1] + RoutePreview.dist(r.pts[k - 1], r.pts[k])
         val total = cum.last()
         val key = String.format(
-            java.util.Locale.US, "%.3f,%.3f|%.3f,%.3f|%d",
-            lats[0], lons[0], lats[n - 1], lons[n - 1], ((rangeKm ?: -1.0) / 20).roundToInt(),
+            java.util.Locale.US, "%.3f,%.3f|%.3f,%.3f|%d|%d",
+            lats[0], lons[0], lats[n - 1], lons[n - 1], ((rangeKm ?: -1.0) / 20).roundToInt(), reserveKm,
         )
         // ta sama trasa (np. tylko doszedł postój z listy) – bez ponownego szukania
         synchronized(this@SmartPlan) {
@@ -102,9 +102,9 @@ object SmartPlan {
         val speed = total / r.travelS.coerceAtLeast(60.0) // m/s
         val wins = ArrayList<AlongRoute.Window>()
         val meta = ArrayList<Pair<String, Int>>()
-        // tankowanie: najlepiej przed końcem zasięgu (zapas 40 km)
-        if (rangeKm != null && rangeKm < total / 1000 + 40) {
-            val target = ((rangeKm - 40) * 1000).coerceIn(5_000.0, total)
+        // tankowanie: zanim zasięg spadnie poniżej minimum z ustawień (domyślnie 100 km)
+        if (rangeKm != null && rangeKm < total / 1000 + reserveKm) {
+            val target = ((rangeKm - reserveKm) * 1000).coerceIn(5_000.0, total)
             wins += AlongRoute.Window(target, 70_000.0, 10_000.0, "fuel"); meta += "fuel" to 0
         }
         // przerwy co ok. 2 h (najwyżej 3)

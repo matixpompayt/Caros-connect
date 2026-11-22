@@ -2,6 +2,11 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Minimalny zasięg paliwa
+- Nowe ustawienie „Minimalny zasięg paliwa” (Ustawienia → Planowanie tras), domyślnie 100 km, zmiana co 10 km (20–300 km)
+- Przy planowaniu trasy stacja jest proponowana, zanim zasięg spadnie poniżej tej wartości; zasięg poniżej minimum zaznaczony na pomarańczowo
+
 ## 1.69 · 2026-11-22
 Postoje na trasie: szybciej i do wyboru
 - Szukanie stacji i miejsc na przerwę dużo szybsze: jedno zapytanie dla wszystkich postojów, wysyłane do kilku serwerów naraz (wygrywa najszybszy)

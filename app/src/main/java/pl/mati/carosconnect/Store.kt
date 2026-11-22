@@ -73,6 +73,8 @@ object Store {
     }
     /** Wygląd: "auto" (jak telefon), "light", "dark". */
     val theme = MutableStateFlow("auto")
+    /** Minimalny zasięg paliwa (km) – zapas przy planowaniu tankowania na trasie. */
+    val minRange = MutableStateFlow(100)
     /** Notatka i zdjęcie do bieżącego miejsca parkowania. */
     val spotNote = MutableStateFlow("")
     val spotPhoto = MutableStateFlow<String?>(null)
@@ -90,6 +92,7 @@ object Store {
         EventLog.importOld(parkLog.value)
         carName.value = p.getString("car_name", null)
         theme.value = p.getString("theme", "auto") ?: "auto"
+        minRange.value = p.getInt("min_range", 100)
         spotNote.value = p.getString("spot_note", "") ?: ""
         spotPhoto.value = p.getString("spot_photo", null)
         skippedPairing.value = p.getBoolean("skip_pair", false)
@@ -131,6 +134,12 @@ object Store {
             )
         }
         ed.apply()
+    }
+
+    fun setMinRange(v: Int) {
+        val x = v.coerceIn(20, 300)
+        minRange.value = x
+        sp?.edit()?.putInt("min_range", x)?.apply()
     }
 
     fun setTheme(v: String) {
