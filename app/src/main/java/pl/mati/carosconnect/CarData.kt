@@ -83,7 +83,12 @@ object CarData {
     }
 
     /** [fromCan] – litry w baku z czujnika auta (dekoder CAN radia), nie szacunek z tankowań. */
-    data class Fuel(val tank: Int, val fills: List<Fill>, val avg: Double?, val range: Double?, val costKm: Double?, val estimated: Boolean, val left: Double? = null, val fromCan: Boolean = false)
+    data class Fuel(
+        val tank: Int, val fills: List<Fill>, val avg: Double?, val range: Double?, val costKm: Double?, val estimated: Boolean,
+        val left: Double? = null, val fromCan: Boolean = false,
+        /** Korekta zasięgu z licznikiem (mnożnik, 1 = bez), zasięg przed korektą, zasięg podany przez samo auto. */
+        val rk: Double = 1.0, val rangeRaw: Double? = null, val rangeFromCar: Boolean = false,
+    )
 
     val live = MutableStateFlow<Live?>(null)
 
@@ -244,6 +249,14 @@ object CarData {
         fuel.put("fills", n)
     }
 
+    /** Korekta zasięgu zmieniona w telefonie (zaraz potwierdzi ją CAR OS): zasięg = przed korektą × [k]. */
+    fun setRangeKLocal(k: Double) = editLocal { o ->
+        val fuel = o.optJSONObject("fuel") ?: return@editLocal
+        val raw = if (fuel.has("rraw") && !fuel.isNull("rraw")) fuel.optDouble("rraw") else null
+        fuel.put("rk", k)
+        if (raw != null && !fuel.optBoolean("rcar")) fuel.put("range", raw * k)
+    }
+
     /** Pojemność baku zmieniona w telefonie (zaraz potwierdzi ją CAR OS). */
     fun setTankLocal(l: Int) = editLocal { o ->
         val fuel = o.optJSONObject("fuel") ?: JSONObject().also { o.put("fuel", it) }
@@ -253,7 +266,8 @@ object CarData {
     /** Ile litrów zostało w baku: zasięg × spalanie (jak liczy CAR OS). */
     fun litersLeft(f: Fuel): Double? {
         f.left?.let { return it.coerceIn(0.0, f.tank.toDouble().coerceAtLeast(1.0)) }
-        val r = f.range ?: return null
+        // litry z zasięgu przed korektą (korekta dopasowuje tylko kilometry do licznika)
+        val r = f.rangeRaw ?: f.range?.let { it / f.rk } ?: return null
         val use = f.avg?.takeIf { it in 2.0..30.0 } ?: 7.5
         return (r * use / 100).coerceIn(0.0, f.tank.toDouble().coerceAtLeast(1.0))
     }
@@ -353,6 +367,9 @@ object CarData {
                     // litry w baku z radia (nowszy CAR OS); po zmianie w telefonie – liczymy sami
                     if (!f.has("left") || f.isNull("left") || o.optBoolean("pending")) null else f.optDouble("left"),
                     f.optString("src") == "can",
+                    f.optDouble("rk", 1.0).takeIf { it in 0.5..1.5 } ?: 1.0,
+                    if (!f.has("rraw") || f.isNull("rraw") || o.optBoolean("pending")) null else f.optDouble("rraw"),
+                    f.optBoolean("rcar"),
                 )
             },
             home = addrFrom(o.optJSONObject("home")),
@@ -386,7 +403,7 @@ object CarData {
         val now = odo?.takeIf { it >= lfOdo } ?: fills.maxOf { it.optInt("o") }
         val added = fills.filter { it.optInt("o") > lfOdo }.sumOf { it.optDouble("l", 0.0) }
         val left = (tank + added - (now - lfOdo) * use / 100).coerceIn(0.0, tank)
-        return left / use * 100
+        return left / use * 100 * (f.optDouble("rk", 1.0).takeIf { it in 0.5..1.5 } ?: 1.0)
     }
 
     // ---------- trasy ----------

@@ -388,13 +388,21 @@ private fun FuelSection(s: CarData.Status) {
         Text("Zaktualizuj CAR OS w radiu, żeby zapisywać tankowania z telefonu", fontSize = 13.sp, color = C.Muted)
         return
     }
+    var rangeEdit by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         StatBox("Spalanie", f.avg?.let { String.format(PL, "%.1f l/100", it) } ?: "—", Modifier.weight(1f))
-        StatBox(if (f.estimated) "Zasięg (szac.)" else "Zasięg", f.range?.let { "${it.roundToInt()} km" } ?: "—", Modifier.weight(1f))
+        // dotknij – korekta zasięgu z licznikiem auta
+        val rkPct = ((f.rk - 1) * 100).roundToInt()
+        StatBox(
+            if (f.estimated) "Zasięg (szac.)" else "Zasięg", f.range?.let { "${it.roundToInt()} km" } ?: "—", Modifier.weight(1f),
+            sub = if (f.rangeFromCar) "z auta" else if (rkPct != 0) "korekta ${if (rkPct > 0) "+" else ""}$rkPct %" else "kalibruj",
+            subColor = C.Accent, onClick = { rangeEdit = true },
+        )
         StatBox("Koszt km", f.costKm?.let { String.format(PL, "%.0f gr", it * 100) } ?: "—", Modifier.weight(1f))
     }
     // ile paliwa zostało (z zasięgu i spalania – tak jak liczy CAR OS) i pojemność baku (do zmiany)
     var tankEdit by remember { mutableStateOf(false) }
+    if (rangeEdit) RangeDialog(f) { rangeEdit = false }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         val left = CarData.litersLeft(f)
         val pct = left?.let { if (f.tank > 0) (it / f.tank * 100).roundToInt().coerceIn(0, 100) else null }
@@ -445,6 +453,23 @@ private fun FuelSection(s: CarData.Status) {
         }
     }
     if (adding) FuelDialog(s.odo) { adding = false }
+}
+
+/** Korekta zasięgu – panel: zasięg z licznika auta albo −/+ 1 %, zapis w CAR OS (radio liczy tak samo). */
+@Composable
+private fun RangeDialog(f: CarData.Fuel, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    RangeSheet(f, onDismiss) { km, k ->
+        if (!CarData.carSupports(pl.mati.caros.core.Proto.Cmd.FUEL_RK)) {
+            Toast.makeText(ctx, "CAR OS w aucie nie zna jeszcze korekty zasięgu – zaktualizuj CAR OS (albo ustaw w radiu: Tankowania → Zasięg)", Toast.LENGTH_LONG).show()
+            return@RangeSheet
+        }
+        CarData.setRangeKLocal(k)
+        val o = JSONObject().put("type", "fuel_rk")
+        if (km != null) o.put("km", km) else o.put("k", k)
+        scope.launch { sendSvc(ctx, o) }
+    }
 }
 
 /** Pojemność baku – zapis w telefonie i w CAR OS (zasięg liczy się od pełnego baku). */
@@ -1085,6 +1110,7 @@ private suspend fun sendSvc(ctx: android.content.Context, o: JSONObject) {
         "fuel_add" -> "Tankowanie"
         "fuel_del" -> "Usunięcie tankowania"
         "fuel_tank" -> "Pojemność baku: ${o.optInt("l")} l"
+        "fuel_rk" -> if (o.has("km")) "Korekta zasięgu: licznik ${o.optInt("km")} km" else "Korekta zasięgu: " + ((o.optDouble("k", 1.0) - 1) * 100).roundToInt().let { if (it == 0) "bez" else (if (it > 0) "+" else "") + "$it %" }
         else -> o.optString("type")
     }
     val item = try { Outbox.sendAsync(ctx, o, label) } catch (_: Exception) { null }

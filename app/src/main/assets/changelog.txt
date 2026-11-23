@@ -2,6 +2,12 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Korekta zasięgu – kalibracja z licznikiem auta
+- Auto → Paliwo → dotknij „Zasięg”: wpisz zasięg z licznika auta albo ustaw −/+ 1 %; widać zasięg przed i po korekcie
+- Korekta zapisuje się w CAR OS, więc radio, przypomnienie o tankowaniu, plan trasy i telefon pokazują to samo (wymaga CAR OS 2.0-beta.9)
+- Pod zasięgiem widać aktualną korektę (np. „korekta −8 %”); „Bez korekty” wraca do wartości CAR OS
+
 ## 2.0-beta.26 · 2026-11-23
 Auto w drodze na dużej mapie (wygląd „mapa w tle”)
 - Gdy auto jedzie, mapa na Start pokazuje je tam, gdzie jest teraz (zamiast zaparkowanego z pinezką „P”), kamera jedzie za nim – przesuń palcem, żeby się rozejrzeć, przycisk auta wraca do śledzenia

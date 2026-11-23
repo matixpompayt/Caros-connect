@@ -306,4 +306,8 @@ class ScreensTest {
     }
 
     @Test fun odoSheet() = sheet { OdoDialog(214_380) {} }
+
+    @Test fun rangeSheet() = sheet {
+        RangeSheet(CarData.status.value!!.fuel!!.copy(rk = 0.92, rangeRaw = 838.0, range = 771.0), {}) { _, _ -> }
+    }
 }

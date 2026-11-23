@@ -21,6 +21,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Calculate
 import androidx.compose.material.icons.rounded.LocalGasStation
 import androidx.compose.material.icons.rounded.WarningAmber
@@ -290,4 +293,78 @@ internal fun Warn(text: String) {
         Icon(Icons.Rounded.WarningAmber, null, tint = C.Orange, modifier = Modifier.size(18.dp))
         Text(text, fontSize = 13.sp, color = C.Text)
     }
+}
+
+/**
+ * Korekta zasięgu – panel: wpisz zasięg z licznika auta (CAR OS policzy mnożnik względem swojego
+ * zasięgu bez korekty) albo dopasuj −/+ 1 %. [onSave]: (zasięg z licznika albo null, nowy mnożnik).
+ */
+@Composable
+fun RangeSheet(f: CarData.Fuel, onDismiss: () -> Unit, onSave: (Int?, Double) -> Unit) {
+    val raw = f.rangeRaw ?: f.range?.let { it / f.rk }
+    var km by remember { mutableStateOf("") }
+    var k by remember { mutableStateOf(f.rk) }
+    val typed = km.toIntOrNull()?.takeIf { it in 1..3000 }
+    // wpisany zasięg z licznika ma pierwszeństwo przed −/+
+    val kNew = if (typed != null && raw != null && raw > 5) (typed / raw).coerceIn(0.5, 1.5) else k
+    val pct = ((kNew - 1) * 100).roundToInt()
+    val pctText = if (pct == 0) "bez korekty" else (if (pct > 0) "+" else "−") + "${kotlin.math.abs(pct)} %"
+    CarSheet(
+        "Korekta zasięgu", onDismiss, "Dopasuj zasięg CAR OS do licznika auta", Icons.Rounded.Calculate,
+        bottom = if (!f.rangeFromCar) {
+            { ctl ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    SheetButton(
+                        "Zapisz korektę", Icons.Rounded.Calculate, enabled = raw != null,
+                        sub = raw?.let { "z korektą ${(it * kNew).roundToInt()} km · $pctText" },
+                    ) { onSave(typed, kNew); ctl.close() }
+                    if (f.rk != 1.0) SheetTextButton("Bez korekty", Icons.Rounded.Close, C.Text2, Modifier.padding(top = 4.dp)) { onSave(null, 1.0); ctl.close() }
+                }
+            }
+        } else null,
+    ) {
+        if (f.rangeFromCar) {
+            Text("Zasięg podaje samo auto (czujnik CAN) – to ta sama wartość co na liczniku, korekta nie jest potrzebna.", fontSize = 15.sp, color = C.Text2)
+            return@CarSheet
+        }
+        // teraz: z korektą i bez
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).surface(RoundedCornerShape(20.dp), C.Card, border = C.Border).padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("CAR OS po korekcie", fontSize = 13.sp, color = C.Muted)
+                Text(raw?.let { "${(it * kNew).roundToInt()} km" } ?: "—", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = if (pct == 0) C.Text else C.Accent)
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text("bez korekty", fontSize = 13.sp, color = C.Muted)
+                Text(raw?.let { "${it.roundToInt()} km" } ?: "—", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = C.Text2)
+            }
+        }
+        if (raw == null) Warn("Zasięg będzie znany po tankowaniu do pełna albo z czujnika paliwa w aucie")
+        // z licznika
+        CalcField("Zasięg na liczniku auta", km, "km", false, decimal = false) { km = it.filter(Char::isDigit).take(4) }
+        // albo ręcznie
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+            RkStep(Icons.Rounded.Remove, "Mniej") { km = ""; k = ((kNew * 100).roundToInt() - 1).coerceAtLeast(50) / 100.0 }
+            Column(Modifier.padding(horizontal = 22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(if (pct == 0) "0 %" else (if (pct > 0) "+" else "−") + "${kotlin.math.abs(pct)} %", fontSize = 34.sp, fontWeight = FontWeight.Bold, color = if (pct == 0) C.Text else C.Accent)
+                Text("korekta", fontSize = 12.sp, color = C.Muted)
+            }
+            RkStep(Icons.Rounded.Add, "Więcej") { km = ""; k = ((kNew * 100).roundToInt() + 1).coerceAtMost(150) / 100.0 }
+        }
+        Text(
+            "Licznik liczy zasięg z ostatniego spalania, CAR OS – ze średniej z tankowań. Korekta wyrównuje różnicę; " +
+                "najlepiej kalibrować po tankowaniu do pełna, a potem w razie czego poprawić. Działa też w radiu i w planie trasy.",
+            fontSize = 12.sp, color = C.Muted, modifier = Modifier.padding(start = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun RkStep(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, onClick: () -> Unit) {
+    Box(
+        Modifier.size(56.dp).clip(CircleShape).surface(CircleShape, C.Raised, border = C.Border).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Icon(icon, desc, tint = C.Text, modifier = Modifier.size(28.dp)) }
 }
