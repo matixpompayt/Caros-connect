@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 2.0-beta.26 · 2026-11-23
 Auto w drodze na dużej mapie (wygląd „mapa w tle”)
 - Gdy auto jedzie, mapa na Start pokazuje je tam, gdzie jest teraz (zamiast zaparkowanego z pinezką „P”), kamera jedzie za nim – przesuń palcem, żeby się rozejrzeć, przycisk auta wraca do śledzenia
 - Jesteś w aucie – na mapie samo auto (bez ludzika); auto jedzie bez Ciebie – auto i Ty
