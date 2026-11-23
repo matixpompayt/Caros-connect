@@ -829,7 +829,7 @@ fun RoutePlanMap(
         fun ls(p: List<LatLng>) = LineString.fromLngLats(p.map { Point.fromLngLat(it.longitude, it.latitude) })
         val none = FeatureCollection.fromFeatures(emptyList())
         val r = route
-        st.getSourceAs<GeoJsonSource>("caros-pl-rt")?.setGeoJson(if (r != null && r.pts.size >= 2) Feature.fromGeometry(ls(r.pts)) else none)
+        st.getSourceAs<GeoJsonSource>("caros-pl-rt")?.setGeoJson(if (r != null && r.pts.size >= 2) FeatureCollection.fromFeatures(listOf(Feature.fromGeometry(ls(r.pts)))) else none)
         st.getSourceAs<GeoJsonSource>("caros-pl-alts")?.setGeoJson(
             if (r == null) none
             else FeatureCollection.fromFeatures(r.alts.filterIndexed { k, a -> k != r.altIndex && a.pts.size >= 2 }.map { Feature.fromGeometry(ls(it.pts)) }),
@@ -853,7 +853,7 @@ fun RoutePlanMap(
             FeatureCollection.fromFeatures(stops.mapIndexed { i, v -> Feature.fromGeometry(point(v.latitude, v.longitude)).also { it.addStringProperty("t", ('A' + i).toString()) } }),
         )
         st.getSourceAs<GeoJsonSource>("caros-pl-dest")?.setGeoJson(Feature.fromGeometry(point(dest.latitude, dest.longitude)))
-        st.getSourceAs<GeoJsonSource>("caros-pl-start")?.setGeoJson(start?.let { Feature.fromGeometry(point(it.latitude, it.longitude)) } ?: none)
+        st.getSourceAs<GeoJsonSource>("caros-pl-start")?.setGeoJson(start?.let { FeatureCollection.fromFeatures(listOf(Feature.fromGeometry(point(it.latitude, it.longitude)))) } ?: none)
     }
 
     LaunchedEffect(is3d, h.ready) {
