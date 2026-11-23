@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 2.0-beta.15 · 2026-11-23
 Nowy wygląd kolejnych ekranów – jak Start
 - Prowadź do auta: karta skrętu na górze, na dole panel do przeciągania z czasem i odległością, autem, notatką i zdjęciem miejsca oraz listą skrętów; „Zakończ” w dużej kapsule
 - Adres domu i pracy: mapa na cały ekran z pinezką – przesuwasz mapę, adres czyta się sam; wyszukiwarka na górze, „Tu jestem”, „Przy aucie”, „Zapisz” na dole
