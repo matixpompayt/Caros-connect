@@ -59,6 +59,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Route
+import androidx.compose.material.icons.rounded.RadioButtonUnchecked
+import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.Check
@@ -1114,47 +1119,78 @@ fun LiveShareCard() {
     if (pick) LiveSharePicker { pick = false }
 }
 
-/** Okno wyboru: jazda na żywo do celu / 1 h / 4 h – potem od razu „Udostępnij” z linkiem. */
+/** Panel: jazda na żywo do celu / 1 h / 4 h – potem od razu „Udostępnij” z linkiem. */
 @Composable
 fun LiveSharePicker(onDismiss: () -> Unit) {
     val ctx = LocalContext.current
-    // okno znika po wyborze – praca (klucz, wysyłka, „Udostępnij”) nie może zginąć razem z nim
+    // panel znika po wyborze – praca (klucz, wysyłka, „Udostępnij”) nie może zginąć razem z nim
     val scope = remember { kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main) }
-    var pick by remember { mutableStateOf(true) }
-    LaunchedEffect(pick) { if (!pick) onDismiss() }
-    if (pick) AlertDialog(
-        onDismissRequest = { pick = false },
-        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
-        title = { Text("Udostępnij jazdę na żywo", color = C.Text) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "Wyślesz link (SMS, WhatsApp…). Kto go otworzy, zobaczy w przeglądarce auto na mapie, trasę i godzinę przyjazdu – bez aplikacji. " +
-                        "Link jest zaszyfrowany i kończy się sam.",
-                    color = C.Muted, fontSize = 14.sp,
-                )
-                listOf(0 to "Do celu (gdy w aucie jest trasa; bez trasy – 2 h)", 60 to "Na 1 godzinę", 240 to "Na 4 godziny").forEach { (min, label) ->
-                    Text(
-                        label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text,
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.Raised).clickable {
-                            pick = false
-                            scope.launch {
-                                val r = withContext(kotlinx.coroutines.Dispatchers.IO) { try { TripShare.start(ctx, min) } catch (_: Exception) { null } }
-                                if (r == null) {
-                                    android.widget.Toast.makeText(ctx, "Nie udało się – połącz z CAR OS", android.widget.Toast.LENGTH_LONG).show()
-                                } else {
-                                    if (r.second.state == Outbox.State.QUEUED) android.widget.Toast.makeText(ctx, "Brak internetu – auto zacznie udostępniać, gdy wróci", android.widget.Toast.LENGTH_LONG).show()
-                                    try { ctx.startActivity(TripShare.chooser(r.first)) } catch (_: Exception) {}
-                                }
-                            }
-                        }.padding(horizontal = 14.dp, vertical = 12.dp),
-                    )
+    var min by remember { mutableStateOf(0) }
+    val now = remember { System.currentTimeMillis() }
+    val hhmm = { ms: Long -> java.text.SimpleDateFormat("HH:mm", java.util.Locale("pl")).format(java.util.Date(ms)) }
+    val options = listOf(
+        Triple(0, Icons.Rounded.Flag, "Do celu" to "Kończy się samo po dojechaniu · bez trasy w aucie – 2 h"),
+        Triple(60, Icons.Rounded.Timer, "Na 1 godzinę" to "do ${hhmm(now + 3600_000L)}"),
+        Triple(240, Icons.Rounded.Schedule, "Na 4 godziny" to "do ${hhmm(now + 4 * 3600_000L)}"),
+    )
+    CarSheet(
+        "Udostępnij jazdę na żywo", onDismiss, "Bliscy widzą auto, trasę i przyjazd w przeglądarce – bez aplikacji", Icons.Rounded.Share,
+        bottom = { ctl ->
+            SheetButton("Udostępnij link", Icons.Rounded.Share, sub = options.first { it.first == min }.third.first + " · SMS, WhatsApp…") {
+                val m = min
+                ctl.close()
+                scope.launch {
+                    val r = withContext(kotlinx.coroutines.Dispatchers.IO) { try { TripShare.start(ctx, m) } catch (_: Exception) { null } }
+                    if (r == null) {
+                        android.widget.Toast.makeText(ctx, "Nie udało się – połącz z CAR OS", android.widget.Toast.LENGTH_LONG).show()
+                    } else {
+                        if (r.second.state == Outbox.State.QUEUED) android.widget.Toast.makeText(ctx, "Brak internetu – auto zacznie udostępniać, gdy wróci", android.widget.Toast.LENGTH_LONG).show()
+                        try { ctx.startActivity(TripShare.chooser(r.first)) } catch (_: Exception) {}
+                    }
                 }
             }
         },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = { pick = false }) { Text("Anuluj") } },
-    )
+    ) {
+        Text("Jak długo", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+        options.forEach { (m, icon, t) ->
+            val on = m == min
+            val shape = RoundedCornerShape(20.dp)
+            Row(
+                Modifier.fillMaxWidth().clip(shape)
+                    .then(if (on) Modifier.background(C.Accent.copy(alpha = 0.14f)).border(1.5.dp, C.Accent, shape) else Modifier.surface(shape, C.Card, border = C.Border))
+                    .clickable { min = m }.padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Box(Modifier.size(44.dp).clip(CircleShape).background(if (on) C.Accent else C.Raised), contentAlignment = Alignment.Center) {
+                    Icon(icon, null, tint = if (on) C.Bg else C.Accent, modifier = Modifier.size(22.dp))
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(t.first, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+                    Text(t.second, fontSize = 13.sp, color = C.Muted)
+                }
+                Icon(if (on) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked, null, tint = if (on) C.Accent else C.Muted, modifier = Modifier.size(24.dp))
+            }
+        }
+        // co zobaczy osoba z linkiem
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).surface(RoundedCornerShape(20.dp), C.Card, border = C.Border).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("Co zobaczy osoba z linkiem", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+            listOf(
+                Icons.Rounded.DirectionsCar to "Auto na mapie na żywo i godzinę przyjazdu",
+                Icons.Rounded.Route to "Trasę z nawigacji – znika, gdy zakończysz trasę",
+                Icons.Rounded.Navigation to "„Jedź za autem” i „Prowadź do celu” – nawigacja w przeglądarce, głosem",
+                Icons.Rounded.Lock to "Link zaszyfrowany – klucz jest tylko w linku, wygasa sam",
+            ).forEach { (ic, txt) ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Icon(ic, null, tint = C.Accent, modifier = Modifier.size(20.dp))
+                    Text(txt, fontSize = 14.sp, color = C.Text2)
+                }
+            }
+        }
+    }
 }
 
 /**

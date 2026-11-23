@@ -2,6 +2,12 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Udostępnij jazdę na żywo – nowy panel
+- Panel od dołu w stylu Start: „Do celu”, „Na 1 godzinę”, „Na 4 godziny” jako duże karty (z godziną końca), wybrana podświetlona
+- Opis, co zobaczy osoba z linkiem (auto na żywo, trasa, „Jedź za autem” i „Prowadź do celu”, szyfrowanie) i duży przycisk „Udostępnij link”
+- Strona z linku: po zakończeniu trasy w aucie linia trasy i cel znikają (z nowym CAR OS od razu, ze starszym przy następnej pozycji auta)
+
 ## 2.0-beta.21 · 2026-11-23
 Nowe tankowanie z kalkulatorem
 - Panel od dołu w stylu Start zamiast okienka

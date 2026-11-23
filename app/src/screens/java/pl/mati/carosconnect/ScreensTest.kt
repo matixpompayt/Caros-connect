@@ -298,4 +298,6 @@ class ScreensTest {
         )
         sheet { FuelSheet(214_380, {}, previewCost = "200") {} }
     }
+
+    @Test fun shareSheet() = sheet { LiveSharePicker {} }
 }
