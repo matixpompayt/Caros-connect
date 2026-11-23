@@ -433,7 +433,7 @@ fun WalkMap(
         val l = me ?: return@LaunchedEffect
         val cam = CameraPosition.Builder().target(LatLng(l.latitude, l.longitude)).zoom(navZoom).tilt(60.0)
             .bearing((heading ?: h.map?.cameraPosition?.bearing?.toFloat() ?: 0f).toDouble())
-            .padding(0.0, (if (bottomInset > 0.dp) 220.0 else 260.0) * h.density, 0.0, bottomInset.value * h.density)
+            .padding(0.0, (if (bottomInset > 0.dp) 220.0 else 260.0) * h.density, 0.0, (bottomInset.value * h.density).toDouble())
             .build()
         h.map?.easeCamera(CameraUpdateFactory.newCameraPosition(cam), 700)
     }

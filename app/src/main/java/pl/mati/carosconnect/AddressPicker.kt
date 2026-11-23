@@ -209,6 +209,7 @@ internal fun AddressPickerScreen(
 
     BoxWithConstraints(Modifier.fillMaxSize().background(C.Bg)) {
         val peek = minOf(330.dp, maxHeight * 0.45f)
+        val sheetH = maxHeight * 0.85f
         BottomSheetScaffold(
             scaffoldState = scaffold,
             sheetPeekHeight = peek,
@@ -223,7 +224,7 @@ internal fun AddressPickerScreen(
             containerColor = C.Bg,
             sheetContent = {
                 Column(
-                    Modifier.fillMaxWidth().height(maxHeight * 0.85f).verticalScroll(rememberScrollState())
+                    Modifier.fillMaxWidth().height(sheetH).verticalScroll(rememberScrollState())
                         .padding(horizontal = 18.dp).padding(bottom = 110.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
