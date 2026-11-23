@@ -300,4 +300,10 @@ class ScreensTest {
     }
 
     @Test fun shareSheet() = sheet { LiveSharePicker {} }
+
+    @Test fun serviceSheet() = sheet {
+        ServiceEditDialog(CarData.SvcItem("cabin", "Filtr kabinowy", 15_000, 12, 200_000, now - 200 * 86_400_000L)) {}
+    }
+
+    @Test fun odoSheet() = sheet { OdoDialog(214_380) {} }
 }

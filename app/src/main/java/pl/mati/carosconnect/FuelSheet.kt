@@ -206,7 +206,7 @@ fun FuelSheet(
 
 /** Duże pole liczby z jednostką; obliczone – w kolorze CAR OS ze znaczkiem. */
 @Composable
-private fun CalcField(label: String, value: String, unit: String, computed: Boolean, decimal: Boolean = true, onChange: (String) -> Unit) {
+internal fun CalcField(label: String, value: String, unit: String, computed: Boolean, decimal: Boolean = true, onChange: (String) -> Unit) {
     val focus = remember { FocusRequester() }
     val src = remember { MutableInteractionSource() }
     val focused by src.collectIsFocusedAsState()
@@ -254,7 +254,7 @@ private fun CalcField(label: String, value: String, unit: String, computed: Bool
 }
 
 @Composable
-private fun QuickRow(content: @Composable () -> Unit) {
+internal fun QuickRow(content: @Composable () -> Unit) {
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { content() }
 }
 
@@ -282,7 +282,7 @@ private fun Segment(title: String, sub: String, on: Boolean, modifier: Modifier,
 }
 
 @Composable
-private fun Warn(text: String) {
+internal fun Warn(text: String) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.Orange.copy(alpha = 0.12f)).padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),

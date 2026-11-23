@@ -28,6 +28,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.NewReleases
@@ -1113,62 +1115,147 @@ private fun NumField(label: String, value: String, onChange: (String) -> Unit, h
     )
 }
 
+/**
+ * Edycja pozycji serwisu – panel od dołu: na górze stan (ile zostało, pasek), niżej ostatnia wymiana
+ * (przebieg i data z szybkimi wyborami), co ile km / miesięcy, „Wykonano dziś”, na dole „Zapisz”.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ServiceEditDialog(item: CarData.SvcItem, onDismiss: () -> Unit) {
+internal fun ServiceEditDialog(item: CarData.SvcItem, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
+    val status by CarData.status.collectAsState()
+    val odo = status?.odo
     var lastKm by remember { mutableStateOf(if (item.lastKm >= 0) item.lastKm.toString() else "") }
     var lastDate by remember { mutableLongStateOf(item.lastDate) }
     var iKm by remember { mutableStateOf(if (item.intervalKm > 0) item.intervalKm.toString() else "") }
     var iMo by remember { mutableStateOf(if (item.intervalMonths > 0) item.intervalMonths.toString() else "") }
     var pickDate by remember { mutableStateOf(false) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
-        title = { Text(item.name, color = C.Text) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    NumField("Ostatnio (km)", lastKm, { lastKm = it }, "np. 230000", Modifier.weight(1f))
-                    Column(
-                        Modifier.weight(1f).height(64.dp).padding(top = 8.dp).clip(RoundedCornerShape(12.dp))
-                            .border(1.dp, C.Border, RoundedCornerShape(12.dp)).clickable { pickDate = true }
-                            .padding(horizontal = 12.dp),
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        Text("Ostatnio dnia", fontSize = 12.sp, color = C.Muted)
-                        Text(if (lastDate > 0) DATE.format(Date(lastDate)) else "wybierz", fontSize = 16.sp, color = C.Text)
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    NumField("Co ile km", iKm, { iKm = it.take(6) }, "0 = brak", Modifier.weight(1f))
-                    NumField("Co ile mies.", iMo, { iMo = it.take(3) }, "0 = brak", Modifier.weight(1f))
-                }
-                SecondaryButton("Wykonano dziś", Icons.Rounded.Build, Modifier.fillMaxWidth()) {
-                    CarData.markDoneLocal(item.id)
-                    scope.launch { sendSvc(ctx, JSONObject().put("type", "svc_done").put("id", item.id)) }
-                    onDismiss()
-                }
-                Text("„Wykonano dziś” zapisze dzisiejszą datę i aktualny przebieg z radia.", fontSize = 12.sp, color = C.Muted)
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val n = item.copy(
-                    lastKm = lastKm.toIntOrNull() ?: -1,
-                    lastDate = lastDate,
-                    intervalKm = iKm.toIntOrNull() ?: 0,
-                    intervalMonths = iMo.toIntOrNull() ?: 0,
-                )
+    // stan na żywo z wpisanych wartości
+    val now = System.currentTimeMillis()
+    val lk = lastKm.toIntOrNull()
+    val ik = iKm.toIntOrNull() ?: 0
+    val im = iMo.toIntOrNull() ?: 0
+    val kmLeft = if (lk != null && ik > 0 && odo != null) lk + ik - odo else null
+    val due = if (lastDate > 0 && im > 0) java.util.Calendar.getInstance().apply { timeInMillis = lastDate; add(java.util.Calendar.MONTH, im) }.timeInMillis else null
+    val daysLeft = due?.let { ((it - now) / 86_400_000L).toInt() }
+    val fKm = if (lk != null && ik > 0 && odo != null) (odo - lk).toFloat() / ik else null
+    val fT = if (due != null) (now - lastDate).toFloat() / (due - lastDate).coerceAtLeast(1) else null
+    val frac = listOfNotNull(fKm, fT).maxOrNull()?.coerceIn(0f, 1f)
+    val overdue = (kmLeft != null && kmLeft < 0) || (daysLeft != null && daysLeft < 0)
+    val soon = !overdue && ((kmLeft != null && kmLeft < 1000) || (daysLeft != null && daysLeft < 30))
+    val tint = if (overdue) Color(0xFFFF5A5F) else if (soon) C.Orange else C.Green
+    val parts = buildList {
+        kmLeft?.let { add(if (it < 0) "${thousands(-it)} km po terminie" else "za ${thousands(it)} km") }
+        daysLeft?.let { d ->
+            add(
+                when {
+                    d < 0 -> "${-d} dni po terminie"
+                    d < 60 -> "za $d dni"
+                    else -> "za ${(d / 30.44).roundToInt()} mies."
+                },
+            )
+        }
+    }
+    val statusText = when {
+        parts.isNotEmpty() -> parts.joinToString(" lub ")
+        ik == 0 && im == 0 -> "Bez przypomnienia – ustaw co ile km albo miesięcy"
+        else -> "Uzupełnij, kiedy było ostatnio"
+    }
+
+    CarSheet(
+        item.name, onDismiss, statusText, Icons.Rounded.Build,
+        bottom = { ctl ->
+            SheetButton("Zapisz", Icons.Rounded.Check, sub = if (parts.isNotEmpty()) "następnie " + parts.joinToString(" lub ") else null) {
+                val n = item.copy(lastKm = lk ?: -1, lastDate = lastDate, intervalKm = ik, intervalMonths = im)
                 CarData.editItemLocal(n)
                 scope.launch { sendSvc(ctx, JSONObject().put("type", "svc_item").put("item", n.toJson())) }
-                onDismiss()
-            }) { Text("Zapisz") }
+                ctl.close()
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Anuluj") } },
-    )
+    ) { ctl ->
+        // stan: ile zostało, pasek zużycia
+        if (frac != null || parts.isNotEmpty()) Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(tint.copy(alpha = 0.10f))
+                .border(1.dp, tint.copy(alpha = 0.4f), RoundedCornerShape(20.dp)).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                when {
+                    overdue -> "Po terminie"
+                    kmLeft != null && (daysLeft == null || kmLeft / 50 <= daysLeft) -> "Zostało ${thousands(kmLeft)} km"
+                    daysLeft != null -> if (daysLeft < 60) "Zostało $daysLeft dni" else "Zostało ${(daysLeft / 30.44).roundToInt()} mies."
+                    else -> "—"
+                },
+                fontSize = 22.sp, fontWeight = FontWeight.Bold, color = tint,
+            )
+            frac?.let {
+                Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(C.Raised)) {
+                    Box(Modifier.fillMaxWidth(it.coerceAtLeast(0.02f)).height(8.dp).clip(RoundedCornerShape(4.dp)).background(tint))
+                }
+            }
+            Text(
+                listOfNotNull(
+                    if (lk != null && ik > 0) "następnie przy ${thousands(lk + ik)} km" else null,
+                    due?.let { "do ${DATE.format(Date(it))}" },
+                ).joinToString(" · ").ifBlank { "Uzupełnij dane poniżej" },
+                fontSize = 13.sp, color = C.Text2,
+            )
+        }
+
+        Text("Ostatnio wykonano", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text, modifier = Modifier.padding(top = 2.dp))
+        CalcField("Przy przebiegu", lastKm, "km", false, decimal = false) { lastKm = it.filter(Char::isDigit).take(7) }
+        QuickRow {
+            if (odo != null) SheetChip("Teraz · ${thousands(odo)} km", lk == odo) { lastKm = odo.toString() }
+            if (odo != null) listOf(5_000, 10_000, 15_000).forEach { d -> if (odo - d > 0) SheetChip("${d / 1000} tys. km temu") { lastKm = (odo - d).toString() } }
+            if (lastKm.isNotEmpty()) SheetChip("Nie wiem") { lastKm = "" }
+        }
+        // data – dotknij, żeby wybrać w kalendarzu
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).surface(RoundedCornerShape(20.dp), C.Card, border = C.Border)
+                .clickable { pickDate = true }.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Dnia", fontSize = 13.sp, color = C.Muted)
+                Text(if (lastDate > 0) DATE.format(Date(lastDate)) else "wybierz", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = if (lastDate > 0) C.Text else C.Muted)
+            }
+            Icon(Icons.Rounded.Event, "Kalendarz", tint = C.Accent, modifier = Modifier.size(26.dp))
+        }
+        QuickRow {
+            SheetChip("Dziś", lastDate > 0 && DATE.format(Date(lastDate)) == DATE.format(Date(now))) { lastDate = now }
+            listOf(1, 3, 6, 12).forEach { m ->
+                SheetChip(if (m == 12) "Rok temu" else "$m mies. temu") {
+                    lastDate = java.util.Calendar.getInstance().apply { add(java.util.Calendar.MONTH, -m) }.timeInMillis
+                }
+            }
+            if (lastDate > 0) SheetChip("Nie wiem") { lastDate = 0L }
+        }
+
+        Text("Co ile", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text, modifier = Modifier.padding(top = 2.dp))
+        CalcField("Co ile kilometrów", iKm, "km", false, decimal = false) { iKm = it.filter(Char::isDigit).take(6) }
+        QuickRow {
+            listOf(10_000, 15_000, 20_000, 30_000, 60_000, 90_000).forEach { k -> SheetChip("${k / 1000} tys.", ik == k) { iKm = k.toString() } }
+            SheetChip("Bez limitu", ik == 0) { iKm = "" }
+        }
+        CalcField("Co ile miesięcy", iMo, "mies.", false, decimal = false) { iMo = it.filter(Char::isDigit).take(3) }
+        QuickRow {
+            listOf(6, 12, 24, 36, 48).forEach { m -> SheetChip(if (m % 12 == 0) "${m / 12} ${if (m == 12) "rok" else if (m <= 48) "lata" else "lat"}" else "$m mies.", im == m) { iMo = m.toString() } }
+            SheetChip("Bez limitu", im == 0) { iMo = "" }
+        }
+
+        // wykonano teraz: dzisiejsza data + przebieg z radia
+        SecondaryButton("Wykonano dziś", Icons.Rounded.Build, Modifier.fillMaxWidth().padding(top = 4.dp)) {
+            CarData.markDoneLocal(item.id)
+            scope.launch { sendSvc(ctx, JSONObject().put("type", "svc_done").put("id", item.id)) }
+            ctl.close()
+        }
+        Text(
+            "„Wykonano dziś” od razu zapisze dzisiejszą datę i przebieg z radia" + (odo?.let { " (${thousands(it)} km)" } ?: "") + ".",
+            fontSize = 12.sp, color = C.Muted, modifier = Modifier.padding(start = 4.dp),
+        )
+    }
 
     if (pickDate) {
         val st = rememberDatePickerState(initialSelectedDateMillis = if (lastDate > 0) lastDate else System.currentTimeMillis())
@@ -1187,33 +1274,32 @@ private fun ServiceEditDialog(item: CarData.SvcItem, onDismiss: () -> Unit) {
     }
 }
 
+/** Przebieg auta – panel: duża liczba, szybkie wybory, zapis do radia. */
 @Composable
-private fun OdoDialog(current: Int?, onDismiss: () -> Unit) {
+internal fun OdoDialog(current: Int?, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var v by remember { mutableStateOf(current?.toString() ?: "") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
-        title = { Text("Przebieg auta", color = C.Text) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                NumField("Aktualny przebieg (km)", v, { v = it }, "np. 231500", Modifier.fillMaxWidth())
-                Text("Radio dalej liczy kilometry samo z GPS.", fontSize = 12.sp, color = C.Muted)
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val km = v.toIntOrNull()
+    val km = v.toIntOrNull()
+    CarSheet(
+        "Przebieg auta", onDismiss, "Radio dalej liczy kilometry samo z GPS", Icons.Rounded.Speed,
+        bottom = { ctl ->
+            SheetButton(
+                "Zapisz", Icons.Rounded.Check, enabled = km != null && km > 0,
+                sub = if (km != null && current != null && km != current) (if (km > current) "+" else "−") + "${thousands(kotlin.math.abs(km - current))} km względem radia" else null,
+            ) {
                 if (km != null && km > 0) {
                     CarData.setOdoLocal(km)
                     scope.launch { sendSvc(ctx, JSONObject().put("type", "svc_odo").put("km", km)) }
                 }
-                onDismiss()
-            }) { Text("Zapisz") }
+                ctl.close()
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Anuluj") } },
-    )
+    ) {
+        CalcField("Aktualny przebieg z licznika", v, "km", false, decimal = false) { v = it.filter(Char::isDigit).take(7) }
+        if (current != null) Text("W radiu teraz: ${thousands(current)} km", fontSize = 13.sp, color = C.Muted, modifier = Modifier.padding(start = 4.dp))
+        if (km != null && current != null && km < current - 50) Warn("Mniej niż w radiu – sprawdź, czy dobrze przepisane z licznika")
+    }
 }
 
 // ======================= CamSam → CAR OS =======================

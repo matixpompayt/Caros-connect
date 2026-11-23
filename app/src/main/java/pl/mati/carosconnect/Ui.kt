@@ -272,11 +272,15 @@ fun ParkApp(perms: Perms, actions: Actions) {
     val view = androidx.compose.ui.platform.LocalView.current
     androidx.compose.runtime.SideEffect {
         (view.context as? android.app.Activity)?.window?.let { w ->
-            // Glass: tło także pod paskiem stanu i nawigacji
-            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(w, !glass)
-            val bars = if (glass) android.graphics.Color.TRANSPARENT else target.bg.toArgb()
-            w.statusBarColor = bars
-            w.navigationBarColor = bars
+            // zawsze od krawędzi do krawędzi: mapa i tło także pod paskiem stanu i nawigacji
+            // (wcześniej poza Glass pasek stanu był czarny nad mapą)
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(w, false)
+            w.statusBarColor = android.graphics.Color.TRANSPARENT
+            w.navigationBarColor = android.graphics.Color.TRANSPARENT
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                w.isStatusBarContrastEnforced = false
+                w.isNavigationBarContrastEnforced = false
+            }
             androidx.core.view.WindowCompat.getInsetsController(w, view).apply {
                 isAppearanceLightStatusBars = light
                 isAppearanceLightNavigationBars = light
@@ -514,6 +518,12 @@ private fun MapShell(perms: Perms, actions: Actions, tab: Int, onTab: (Int) -> U
                         Text("Mapa pokaże auto po pierwszym parkowaniu", fontSize = 14.sp, color = C.Muted)
                     }
                 }
+                // pod paskiem stanu delikatne przyciemnienie – ikony czytelne na jasnej mapie
+                Box(
+                    Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                        .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Black.copy(alpha = if (C.isLight) 0.18f else 0.45f), Color.Transparent)))
+                        .statusBarsPadding().height(18.dp),
+                )
                 MapSearchPill(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp).fillMaxWidth())
             }
         }
