@@ -2,6 +2,11 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Realistyczne auta i chowany panel
+- Nowe, realistyczne modele 3D auta (ekran główny, mapa): zaokrąglona karoseria, szyby z odbiciem nieba, słupki, lusterka, reflektory i lampy, atrapa, tablice, felgi z ramionami, nadkola, odblask lakieru – te same co w CAR OS
+- Ekran „Mapa w tle”: panel można zsunąć na sam dół – zostaje pasek z nazwą auta i zasięgiem, cała mapa widoczna; dotknij albo pociągnij w górę, żeby wysunąć
+
 ## 2.0-beta.4 · 2026-11-23
 Nowy wygląd 2.0
 - Dwa ekrany główne do wyboru (Ustawienia → Wygląd → Ekran główny): „Auto na pierwszym planie” – Twoje auto 3D z CAR OS (obróć palcem), zasięg i szybkie akcje; „Mapa w tle” – mapa z autem na całym ekranie, reszta w panelu wysuwanym od dołu

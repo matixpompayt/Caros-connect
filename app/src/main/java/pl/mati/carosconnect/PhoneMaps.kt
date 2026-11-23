@@ -1,5 +1,6 @@
 package pl.mati.carosconnect
 
+import pl.mati.caros.core.Model3D
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context

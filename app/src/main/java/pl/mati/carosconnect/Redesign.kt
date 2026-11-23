@@ -1,5 +1,6 @@
 package pl.mati.carosconnect
 
+import pl.mati.caros.core.Model3D
 import android.location.Location
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -18,6 +19,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -41,6 +43,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.DirectionsWalk
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Navigation
 import androidx.compose.material.icons.rounded.Search
@@ -420,6 +423,33 @@ fun MapSearchPill(modifier: Modifier = Modifier) {
         Text(if (pairing != null) "Dokąd jedziemy?" else "Połącz z CAR OS, żeby wysyłać trasy", fontSize = 16.sp, color = C.Muted, maxLines = 1)
     }
     if (route) RouteSheet { route = false }
+}
+
+/** Schowany panel (ekran „Mapa w tle”): pasek z autem – dotknij albo pociągnij w górę, żeby wysunąć. */
+@Composable
+fun MiniSheetBar(onOpen: () -> Unit) {
+    val pairing by Store.pairing.collectAsState()
+    val st by CarData.status.collectAsState()
+    val range = st?.fuel?.range?.roundToInt()
+    val src = remember { MutableInteractionSource() }
+    var drag by remember { mutableStateOf(0f) }
+    Row(
+        Modifier.padding(start = 16.dp, end = 16.dp, bottom = 2.dp).fillMaxWidth().height(52.dp).pressScale(src, 0.97f)
+            .clip(RoundedCornerShape(26.dp)).surface(RoundedCornerShape(26.dp), C.Card, border = C.Border)
+            .pointerInput(Unit) {
+                detectVerticalDragGestures(onDragStart = { drag = 0f }, onDragEnd = { if (drag < -24f) onOpen() }) { change, dy ->
+                    change.consume()
+                    drag += dy
+                }
+            }
+            .clickable(interactionSource = src, indication = null, onClick = onOpen).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(Icons.Rounded.KeyboardArrowUp, "Wysuń", tint = C.Accent, modifier = Modifier.size(26.dp))
+        Text(pairing?.car ?: "Moje auto", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        if (range != null) Text("$range km", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Accent)
+    }
 }
 
 // ---------- ustawienia ----------

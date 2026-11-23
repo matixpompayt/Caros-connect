@@ -142,4 +142,35 @@ class ScreensTest {
             }
         }
     }}
+
+    @Test fun modelsGallery() {
+        pal(false)
+        val types = listOf("hatchback", "sedan", "kombi", "suv", "minivan", "van", "pickup", "coupe")
+        val paints = listOf(0xFF1F4E8C, 0xFFB71C1C, 0xFFE8EAED, 0xFF2E2F33, 0xFF1F4E8C, 0xFF8A9199, 0xFF2E5E3E, 0xFFF2A900).map { it.toInt() }
+        paparazzi.snapshot { CompositionLocalProvider(LocalInspectionMode provides true) {
+            Column(Modifier.fillMaxSize().background(C.Bg).padding(8.dp)) {
+                types.chunked(2).forEachIndexed { r, row ->
+                    androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().weight(1f)) {
+                        row.forEachIndexed { c, t ->
+                            val b = pl.mati.caros.core.Model3D.carIcon(t, paints[r * 2 + c], 212.0, 20.0, 420)
+                            androidx.compose.foundation.Image(androidx.compose.ui.graphics.asImageBitmap(b), t, Modifier.weight(1f).fillMaxSize())
+                        }
+                    }
+                }
+            }
+        }}
+    }
+
+    @Test fun mapHidden() {
+        pal(false)
+        paparazzi.snapshot { CompositionLocalProvider(LocalInspectionMode provides true) {
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(C.Accent.copy(alpha = 0.25f), C.Raised, C.Bg)))) {
+                MapSearchPill(Modifier.align(Alignment.TopCenter).padding(horizontal = 16.dp, vertical = 40.dp).fillMaxWidth())
+                Column(Modifier.align(Alignment.BottomCenter)) {
+                    MiniSheetBar {}
+                    FloatingTabBar(TAB_ITEMS, 0) {}
+                }
+            }
+        }}
+    }
 }

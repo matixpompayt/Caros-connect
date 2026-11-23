@@ -461,10 +461,14 @@ private fun MapShell(perms: Perms, actions: Actions, tab: Int, onTab: (Int) -> U
     val visible = rememberVisible()
     val me = rememberPhoneLocation(perms.loc && visible)
     val scaffold = androidx.compose.material3.rememberBottomSheetScaffoldState(
+        // trzy pozycje: rozwinięty, do połowy, schowany (zostaje pasek z nazwą auta – pociągnij w górę)
         bottomSheetState = androidx.compose.material3.rememberStandardBottomSheetState(
-            initialValue = androidx.compose.material3.SheetValue.PartiallyExpanded, skipHiddenState = true,
+            initialValue = androidx.compose.material3.SheetValue.PartiallyExpanded, skipHiddenState = false,
         ),
     )
+    val sheet = scaffold.bottomSheetState
+    val hidden = sheet.targetValue == androidx.compose.material3.SheetValue.Hidden
+    val scope = rememberCoroutineScope()
     // inna zakładka – panel w górę; Start – z powrotem do połowy (widać mapę)
     LaunchedEffect(tab) {
         try { if (tab == 0) scaffold.bottomSheetState.partialExpand() else scaffold.bottomSheetState.expand() } catch (_: Exception) {}
@@ -494,7 +498,7 @@ private fun MapShell(perms: Perms, actions: Actions, tab: Int, onTab: (Int) -> U
         ) {
             Box(Modifier.fillMaxSize()) {
                 val s = spot
-                if (s != null) ParkMap(s, me, Modifier.fillMaxSize(), bottomInset = peek - 24.dp)
+                if (s != null) ParkMap(s, me, Modifier.fillMaxSize(), bottomInset = if (hidden) 150.dp else peek - 24.dp)
                 else Box(
                     Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(C.Accent.copy(alpha = 0.16f), C.Bg))),
                     contentAlignment = Alignment.TopCenter,
@@ -507,7 +511,14 @@ private fun MapShell(perms: Perms, actions: Actions, tab: Int, onTab: (Int) -> U
                 MapSearchPill(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp).fillMaxWidth())
             }
         }
-        Box(Modifier.align(Alignment.BottomCenter)) { BottomBar(tab, onTab) }
+        Column(Modifier.align(Alignment.BottomCenter)) {
+            androidx.compose.animation.AnimatedVisibility(
+                hidden,
+                enter = androidx.compose.animation.slideInVertically { it } + fadeIn(),
+                exit = androidx.compose.animation.slideOutVertically { it } + fadeOut(),
+            ) { MiniSheetBar { scope.launch { try { sheet.partialExpand() } catch (_: Exception) {} } } }
+            BottomBar(tab, onTab)
+        }
     }
 }
 
