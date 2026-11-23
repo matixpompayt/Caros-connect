@@ -2,6 +2,9 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+- Prowadź do auta i adres domu/pracy: panel naprawdę wyjeżdża spod ekranu razem z tłem (poprzednio przesuwała się mapa, a u góry zostawał pusty pas)
+
 ## 2.0-beta.19 · 2026-11-23
 Płynniejsze wejście w „Prowadź do auta” (i w adres domu/pracy)
 - Panel wyjeżdża spod ekranu w całości (wcześniej pusty panel stał, a tylko jego treść podjeżdżała), przy zamykaniu zjeżdża w dół

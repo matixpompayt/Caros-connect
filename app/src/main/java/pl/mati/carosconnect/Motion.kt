@@ -141,18 +141,6 @@ fun seg(p: Float, from: Float, to: Float): Float = ((p - from) / (to - from)).co
 val SHOWN: androidx.compose.runtime.State<Float> = androidx.compose.runtime.mutableFloatStateOf(1f)
 
 /**
- * Wjazd panelu z dołu: cały BottomSheetScaffold przesuwa się o [dist] (panel startuje pod ekranem),
- * a treść pod panelem (mapa, karta, przyciski) dostaje [sheetBody] – ruch odwrotny, więc stoi w miejscu.
- */
-fun Modifier.sheetSlide(p: androidx.compose.runtime.State<Float>, from: Float, to: Float, dist: Dp): Modifier = graphicsLayer {
-    translationY = (1f - seg(p.value, from, to)) * dist.toPx()
-}
-
-fun Modifier.sheetBody(p: androidx.compose.runtime.State<Float>, from: Float, to: Float, dist: Dp): Modifier = graphicsLayer {
-    translationY = -(1f - seg(p.value, from, to)) * dist.toPx()
-}
-
-/**
  * Element ekranu pojawia się w swojej części postępu [p]: przesunięcie o [dy] (ujemne – z góry),
  * skala od [scale], przenikanie. Czyta postęp tylko przy rysowaniu – bez przeliczania ekranu.
  */

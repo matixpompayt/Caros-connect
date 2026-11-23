@@ -2,6 +2,7 @@ package pl.mati.carosconnect
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -222,19 +223,26 @@ internal fun AddressPickerScreen(
         val peek = minOf(330.dp, maxHeight * 0.45f)
         val sheetH = maxHeight * 0.85f
         BottomSheetScaffold(
-            modifier = Modifier.sheetSlide(p, 0.12f, 0.8f, peek + 40.dp),
             scaffoldState = scaffold,
             sheetPeekHeight = peek,
             sheetShape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
-            sheetContainerColor = if (C.isGlass) C.Dialog else C.Bg,
+            // tło i uchwyt rysujemy sami w treści – razem z nią wyjeżdżają spod ekranu przy wejściu
+            sheetContainerColor = androidx.compose.ui.graphics.Color.Transparent,
             sheetContentColor = C.Text,
-            sheetShadowElevation = 18.dp,
+            sheetShadowElevation = 0.dp,
             sheetTonalElevation = 0.dp,
-            sheetDragHandle = {
-                Box(Modifier.padding(top = 10.dp, bottom = 8.dp).size(42.dp, 5.dp).clip(RoundedCornerShape(3.dp)).background(C.Muted.copy(alpha = 0.45f)))
-            },
+            sheetDragHandle = null,
             containerColor = C.Bg,
             sheetContent = {
+                Column(
+                    Modifier.fillMaxWidth().reveal(p, 0.12f, 0.8f, dy = peek + 40.dp, fade = false)
+                        .background(if (C.isGlass) C.Dialog else C.Bg, RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
+                        .border(1.dp, C.Border, RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)),
+                ) {
+                Box(
+                    Modifier.align(Alignment.CenterHorizontally).padding(top = 10.dp, bottom = 8.dp).size(42.dp, 5.dp)
+                        .clip(RoundedCornerShape(3.dp)).background(C.Muted.copy(alpha = 0.45f)),
+                )
                 Column(
                     Modifier.fillMaxWidth().height(sheetH).verticalScroll(rememberScrollState())
                         .padding(horizontal = 18.dp).padding(bottom = 110.dp),
@@ -299,9 +307,10 @@ internal fun AddressPickerScreen(
                         Text("Przesuń mapę palcem tak, żeby pinezka stała na budynku – numery domów widać na mapie.", fontSize = 13.sp, color = C.Muted)
                     }
                 }
+                }
             },
         ) {
-            Box(Modifier.fillMaxSize().sheetBody(p, 0.12f, 0.8f, peek + 40.dp)) {
+            Box(Modifier.fillMaxSize()) {
                 PickPointMap(
                     start, Modifier.fillMaxSize(), moveTo, padTop = headerH, padBottom = peek,
                     saved = saved, me = me,
