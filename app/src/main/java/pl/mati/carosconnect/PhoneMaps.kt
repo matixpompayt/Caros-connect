@@ -686,3 +686,300 @@ private fun HouseNumbers(h: MapHolder) {
     val real by CarMapStyle.realBuildings.collectAsState()
     BuildingRoofsOverlay(if (h.ready) h.map else null, if (h.ready) h.style else null, real)
 }
+
+// ---------- planowanie trasy („Wyślij do auta” na pełnym ekranie) ----------
+
+/**
+ * Mapa planowania trasy – ten sam wygląd co mapa na Start: budynki 3D, auto 3D na starcie,
+ * pinezka celu, trasa z korkami, inne warianty na szaro. Jedna mapa na cały ekran, trasa
+ * podmieniana w miejscu (bez migania przy zmianie wariantu / punktów).
+ */
+@Composable
+fun RoutePlanMap(
+    start: LatLng?, dest: LatLng, stops: List<LatLng>, route: RoutePreview.Result?, modifier: Modifier,
+    /** Kafelki korków TomTom na wszystkich drogach (null – bez). */
+    flowUrl: String? = null,
+    /** Pokaż tylko ten fragment (np. korek); null – cała trasa. */
+    focus: List<LatLng>? = null,
+    padTop: androidx.compose.ui.unit.Dp = 0.dp, padBottom: androidx.compose.ui.unit.Dp = 0.dp,
+    is3d: Boolean = true,
+    /** Zmiana wartości = „pokaż całą trasę” jeszcze raz. */
+    fitKey: Int = 0,
+    /** Przytrzymanie palca na mapie (dodawanie punktu). */
+    onLongPress: ((LatLng) -> Unit)? = null,
+) {
+    if (androidx.compose.ui.platform.LocalInspectionMode.current) {
+        RoutePlanSketch(start, dest, stops, route, modifier, padTop, padBottom)
+        return
+    }
+    val ctx = LocalContext.current
+    val lp = remember { arrayOfNulls<(LatLng) -> Unit>(1) }
+    lp[0] = onLongPress
+    val h = remember {
+        MapHolder(ctx) { m, st ->
+            val below = CarMapStyle.firstSymbolId(st)
+            CarMapStyle.add3dBuildings(st, below)
+            fun add(l: org.maplibre.android.style.layers.Layer) { if (below != null) st.addLayerBelow(l, below) else st.addLayer(l) }
+            fun line(id: String, src: String, color: String, w: Float, op: Float = 1f) = LineLayer(id, src).withProperties(
+                PropertyFactory.lineColor(android.graphics.Color.parseColor(color)),
+                PropertyFactory.lineWidth(w),
+                PropertyFactory.lineOpacity(op),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            )
+            st.addSource(GeoJsonSource("caros-pl-alts"))
+            add(line("caros-pl-alts-casing", "caros-pl-alts", "#05070A", 9f, 0.55f))
+            add(line("caros-pl-alts-line", "caros-pl-alts", "#8A93A3", 5f, 0.8f))
+            st.addSource(GeoJsonSource("caros-pl-rt"))
+            add(line("caros-pl-rt-casing", "caros-pl-rt", "#05070A", 11f))
+            add(line("caros-pl-rt-line", "caros-pl-rt", "#2FD3F0", 7f))
+            st.addSource(GeoJsonSource("caros-pl-jams"))
+            add(
+                LineLayer("caros-pl-jams-line", "caros-pl-jams").withProperties(
+                    PropertyFactory.lineColor(Expression.toColor(Expression.get("c"))),
+                    PropertyFactory.lineWidth(7f),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                ),
+            )
+            // punkty po drodze: pomarańczowe kropki z literą jak na liście (A, B, C)
+            st.addSource(GeoJsonSource("caros-pl-stops"))
+            st.addLayer(
+                CircleLayer("caros-pl-stops-dot", "caros-pl-stops").withProperties(
+                    PropertyFactory.circleRadius(11f),
+                    PropertyFactory.circleColor(android.graphics.Color.parseColor("#FFB347")),
+                    PropertyFactory.circleStrokeColor(android.graphics.Color.parseColor("#0A0C0F")),
+                    PropertyFactory.circleStrokeWidth(3f),
+                    PropertyFactory.circlePitchAlignment(Property.CIRCLE_PITCH_ALIGNMENT_VIEWPORT),
+                ),
+            )
+            st.addLayer(
+                SymbolLayer("caros-pl-stops-txt", "caros-pl-stops").withProperties(
+                    PropertyFactory.textField(Expression.get("t")),
+                    PropertyFactory.textSize(12f),
+                    PropertyFactory.textColor(android.graphics.Color.parseColor("#1A1205")),
+                    PropertyFactory.textFont(arrayOf("Noto Sans Bold")),
+                    PropertyFactory.textAllowOverlap(true),
+                    PropertyFactory.textIgnorePlacement(true),
+                    PropertyFactory.textPitchAlignment(Property.TEXT_PITCH_ALIGNMENT_VIEWPORT),
+                ),
+            )
+            // cel – czerwona pinezka
+            st.addImage("caros-pl-dest-pin", destPin(ctx))
+            st.addSource(GeoJsonSource("caros-pl-dest"))
+            st.addLayer(
+                SymbolLayer("caros-pl-dest-layer", "caros-pl-dest").withProperties(
+                    PropertyFactory.iconImage("caros-pl-dest-pin"),
+                    PropertyFactory.iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(true),
+                    PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
+                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
+                ),
+            )
+            // start – auto 3D z CAR OS (bez modelu: zielona kropka)
+            st.addSource(GeoJsonSource("caros-pl-start"))
+            st.addLayer(
+                CircleLayer("caros-pl-start-dot", "caros-pl-start").withProperties(
+                    PropertyFactory.circleRadius(8f),
+                    PropertyFactory.circleColor(android.graphics.Color.parseColor("#7CF06B")),
+                    PropertyFactory.circleStrokeColor(android.graphics.Color.parseColor("#0A0C0F")),
+                    PropertyFactory.circleStrokeWidth(3f),
+                    PropertyFactory.visibility(if (CarData.carBody.value != null) Property.NONE else Property.VISIBLE),
+                ),
+            )
+            CarData.carBody.value?.let { st.addImage("caros-car-3d", carModel(ctx, it, CarData.carPaint.value)) }
+            st.addLayer(
+                SymbolLayer("caros-pl-car", "caros-pl-start").withProperties(
+                    PropertyFactory.iconImage("caros-car-3d"),
+                    PropertyFactory.iconAnchor(Property.ICON_ANCHOR_CENTER),
+                    PropertyFactory.iconSize(0.8f),
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(true),
+                    PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
+                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
+                    PropertyFactory.visibility(if (CarData.carBody.value != null) Property.VISIBLE else Property.NONE),
+                ),
+            )
+            m.addOnMapLongClickListener { ll ->
+                val cb = lp[0] ?: return@addOnMapLongClickListener false
+                cb(ll)
+                true
+            }
+        }
+    }
+    rememberMapLifecycle(h)
+
+    // model auta jak w radiu
+    val carBody by CarData.carBody.collectAsState()
+    val carPaint by CarData.carPaint.collectAsState()
+    LaunchedEffect(carBody, carPaint, h.ready) {
+        if (!h.ready) return@LaunchedEffect
+        val st = h.style ?: return@LaunchedEffect
+        val b = carBody
+        if (b != null) st.addImage("caros-car-3d", carModel(ctx, b, carPaint))
+        st.getLayer("caros-pl-car")?.setProperties(PropertyFactory.visibility(if (b != null) Property.VISIBLE else Property.NONE))
+        st.getLayer("caros-pl-start-dot")?.setProperties(PropertyFactory.visibility(if (b != null) Property.NONE else Property.VISIBLE))
+    }
+
+    // trasa, warianty, korki, punkty
+    LaunchedEffect(h.ready, route, start, dest, stops) {
+        if (!h.ready) return@LaunchedEffect
+        val st = h.style ?: return@LaunchedEffect
+        fun ls(p: List<LatLng>) = LineString.fromLngLats(p.map { Point.fromLngLat(it.longitude, it.latitude) })
+        val none = FeatureCollection.fromFeatures(emptyList())
+        val r = route
+        st.getSourceAs<GeoJsonSource>("caros-pl-rt")?.setGeoJson(if (r != null && r.pts.size >= 2) Feature.fromGeometry(ls(r.pts)) else none)
+        st.getSourceAs<GeoJsonSource>("caros-pl-alts")?.setGeoJson(
+            if (r == null) none
+            else FeatureCollection.fromFeatures(r.alts.filterIndexed { k, a -> k != r.altIndex && a.pts.size >= 2 }.map { Feature.fromGeometry(ls(it.pts)) }),
+        )
+        st.getSourceAs<GeoJsonSource>("caros-pl-jams")?.setGeoJson(
+            FeatureCollection.fromFeatures(r?.jams.orEmpty().filter { it.pts.size >= 2 }.map { j ->
+                Feature.fromGeometry(ls(j.pts)).also {
+                    it.addStringProperty(
+                        "c",
+                        when {
+                            j.kind == "ROAD_CLOSURE" || j.magnitude == 4 -> "#7A0E0E"
+                            j.magnitude == 3 -> "#D9302B"
+                            j.magnitude == 2 -> "#F26B1D"
+                            else -> "#F5A623"
+                        },
+                    )
+                }
+            }),
+        )
+        st.getSourceAs<GeoJsonSource>("caros-pl-stops")?.setGeoJson(
+            FeatureCollection.fromFeatures(stops.mapIndexed { i, v -> Feature.fromGeometry(point(v.latitude, v.longitude)).also { it.addStringProperty("t", ('A' + i).toString()) } }),
+        )
+        st.getSourceAs<GeoJsonSource>("caros-pl-dest")?.setGeoJson(Feature.fromGeometry(point(dest.latitude, dest.longitude)))
+        st.getSourceAs<GeoJsonSource>("caros-pl-start")?.setGeoJson(start?.let { Feature.fromGeometry(point(it.latitude, it.longitude)) } ?: none)
+    }
+
+    LaunchedEffect(is3d, h.ready) {
+        if (!h.ready) return@LaunchedEffect
+        h.style?.let { CarMapStyle.set3d(it, is3d) }
+    }
+
+    // kamera: cała trasa (albo wybrany korek) między paskiem na górze a panelem na dole
+    var placed by remember { mutableStateOf(false) }
+    LaunchedEffect(h.ready, route?.pts, focus, padTop, padBottom, is3d, fitKey, start, dest) {
+        if (!h.ready) return@LaunchedEffect
+        val area = focus?.takeIf { it.size >= 2 } ?: route?.pts?.takeIf { it.size >= 2 } ?: (listOfNotNull(start, dest) + stops)
+        if (area.isEmpty()) return@LaunchedEffect
+        val d = h.density
+        val tilt = if (is3d) 45.0 else 0.0
+        h.view.post {
+            try {
+                val m = h.map ?: return@post
+                val upd = if (area.size == 1) {
+                    CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(area[0]).zoom(15.0).tilt(tilt).bearing(0.0).build())
+                } else {
+                    val b = LatLngBounds.Builder()
+                    area.forEach { b.include(it) }
+                    val side = (40 * d).toInt()
+                    CameraUpdateFactory.newLatLngBounds(b.build(), 0.0, tilt, side, ((padTop.value + 24) * d).toInt(), side, ((padBottom.value + 24) * d).toInt())
+                }
+                if (placed) m.animateCamera(upd, 800) else m.moveCamera(upd)
+                placed = true
+            } catch (_: Exception) {}
+        }
+    }
+
+    // korki na wszystkich drogach (TomTom) – pod trasą
+    LaunchedEffect(flowUrl, h.ready) {
+        if (!h.ready) return@LaunchedEffect
+        val st = h.style ?: return@LaunchedEffect
+        try {
+            st.getLayer("caros-pl-flow")?.let { st.removeLayer(it) }
+            st.getSource("caros-pl-flow-src")?.let { st.removeSource(it) }
+            if (flowUrl != null) {
+                st.addSource(org.maplibre.android.style.sources.RasterSource("caros-pl-flow-src", org.maplibre.android.style.sources.TileSet("tiles", flowUrl), 512))
+                val layer = org.maplibre.android.style.layers.RasterLayer("caros-pl-flow", "caros-pl-flow-src").withProperties(PropertyFactory.rasterOpacity(0.9f))
+                if (st.getLayer("caros-pl-alts-casing") != null) st.addLayerBelow(layer, "caros-pl-alts-casing") else st.addLayer(layer)
+            }
+        } catch (_: Exception) {}
+    }
+
+    Box(modifier) {
+        androidx.compose.runtime.key(h) { AndroidView(factory = { h.view }, modifier = Modifier.fillMaxSize()) }
+        HouseNumbers(h)
+    }
+}
+
+/** Podgląd mapy planowania na zrzutach ekranu (bez MapLibre): trasa narysowana na ciemnym tle. */
+@Composable
+private fun RoutePlanSketch(
+    start: LatLng?, dest: LatLng, stops: List<LatLng>, route: RoutePreview.Result?, modifier: Modifier,
+    padTop: androidx.compose.ui.unit.Dp, padBottom: androidx.compose.ui.unit.Dp,
+) {
+    val bg = C.Bg
+    val grid = C.Border
+    val accent = C.Accent
+    androidx.compose.foundation.Canvas(modifier.background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF3A1F4F), Color(0xFF21123A), bg)))) {
+        val all = route?.pts?.takeIf { it.size >= 2 } ?: (listOfNotNull(start, dest) + stops)
+        for (i in 0..12) {
+            val y = size.height * i / 12f
+            drawLine(grid.copy(alpha = 0.25f), androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y + size.width * 0.3f), 2f)
+        }
+        if (all.size < 2) return@Canvas
+        val minLa = all.minOf { it.latitude }; val maxLa = all.maxOf { it.latitude }
+        val minLo = all.minOf { it.longitude }; val maxLo = all.maxOf { it.longitude }
+        val top = (padTop.value + 24) * density; val bot = size.height - (padBottom.value + 24) * density
+        val side = 40 * density
+        val sx = (size.width - 2 * side) / (maxLo - minLo).coerceAtLeast(1e-6)
+        val sy = (bot - top) / (maxLa - minLa).coerceAtLeast(1e-6)
+        val s = minOf(sx, sy * 1.6)
+        val cx = size.width / 2; val cy = (top + bot) / 2
+        fun o(p: LatLng) = androidx.compose.ui.geometry.Offset(
+            (cx + (p.longitude - (minLo + maxLo) / 2) * s).toFloat(),
+            (cy - (p.latitude - (minLa + maxLa) / 2) * s / 1.6).toFloat(),
+        )
+        fun path(p: List<LatLng>) = androidx.compose.ui.graphics.Path().apply { p.forEachIndexed { i, q -> val v = o(q); if (i == 0) moveTo(v.x, v.y) else lineTo(v.x, v.y) } }
+        val st = androidx.compose.ui.graphics.drawscope.Stroke(width = 7 * density, cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round)
+        val cs = androidx.compose.ui.graphics.drawscope.Stroke(width = 11 * density, cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round)
+        route?.alts?.filterIndexed { k, _ -> k != route.altIndex }?.forEach { a -> drawPath(path(a.pts), Color(0xFF8A93A3).copy(alpha = 0.8f), style = st) }
+        route?.let { r ->
+            drawPath(path(r.pts), Color(0xFF05070A), style = cs)
+            drawPath(path(r.pts), accent, style = st)
+            r.jams.forEach { j -> drawPath(path(j.pts), Color(0xFFF26B1D), style = st) }
+        }
+        stops.forEach { drawCircle(Color(0xFFFFB347), 10 * density, o(it)) }
+        start?.let { drawCircle(Color(0xFF7CF06B), 9 * density, o(it)) }
+        drawCircle(Color(0xFFE5483F), 11 * density, o(dest))
+        drawCircle(Color.White, 4 * density, o(dest))
+    }
+}
+
+/** Czerwona pinezka celu z białą kropką i cieniem. */
+private fun destPin(ctx: Context): android.graphics.Bitmap {
+    val d = ctx.resources.displayMetrics.density
+    val w = (34 * d).toInt().coerceAtLeast(20)
+    val hh = (46 * d).toInt().coerceAtLeast(28)
+    val b = android.graphics.Bitmap.createBitmap(w, hh, android.graphics.Bitmap.Config.ARGB_8888)
+    val c = android.graphics.Canvas(b)
+    val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    val cx = w / 2f
+    val r = w / 2f - 2.5f * d
+    val cy = r + 2.5f * d
+    // cień na ziemi
+    p.color = 0x66000000
+    c.drawOval(cx - 7 * d, hh - 6 * d, cx + 7 * d, hh - 1 * d, p)
+    val head = android.graphics.Path().apply { addCircle(cx, cy, r, android.graphics.Path.Direction.CW) }
+    val tip = android.graphics.Path().apply {
+        moveTo(cx - r * 0.66f, cy + r * 0.74f)
+        lineTo(cx, hh - 3.5f * d)
+        lineTo(cx + r * 0.66f, cy + r * 0.74f)
+        close()
+    }
+    head.op(tip, android.graphics.Path.Op.UNION)
+    p.color = android.graphics.Color.parseColor("#E5483F")
+    c.drawPath(head, p)
+    p.style = android.graphics.Paint.Style.STROKE
+    p.strokeWidth = 2.5f * d
+    p.color = android.graphics.Color.WHITE
+    c.drawPath(head, p)
+    p.style = android.graphics.Paint.Style.FILL
+    c.drawCircle(cx, cy, r * 0.36f, p)
+    return b
+}

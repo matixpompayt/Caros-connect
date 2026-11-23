@@ -2,6 +2,13 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Nowe „Wyślij do auta” – wygląda jak ekran Start z mapą
+- Trasa na mapie na cały ekran: budynki 3D, Twoje auto 3D na starcie, pinezka celu, inne warianty na szaro
+- Na górze punkty trasy (przeciąganie zmienia kolejność), na dole panel z czasem, przyjazdem, korkami i pogodą – pociągnij w dół, a schowa się do paska
+- Zamiast zakładek duży przycisk „Nawiguj w aucie”; szybkie akcje: Dodaj punkt (przytrzymaj palec na mapie), Ulubione, Wyjazd o…
+- Przyciski na mapie: 3D/2D, korki na wszystkich drogach, cała trasa; dotknij korka w panelu, a mapa go pokaże
+
 ## 2.0-beta.11 · 2026-11-23
 - Auto na ekranie głównym bez białego konturu, krawędzie karoserii bardziej naturalne
 

@@ -28,6 +28,8 @@ import app.cash.paparazzi.Paparazzi
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import org.maplibre.android.geometry.LatLng
+import kotlin.math.sin
 
 /** Zrzuty nowego wyglądu (bez emulatora) – ./gradlew :app:recordPaparazziDebug -Pscreens */
 class ScreensTest {
@@ -174,4 +176,36 @@ class ScreensTest {
             }
         }}
     }
+
+    /** „Wyślij do auta” na pełnym ekranie – trasa Cychry → Berlin z wariantami, korkami i pogodą. */
+    private fun planner(light: Boolean) {
+        pal(light)
+        fun line(n: Int, bend: Double) = (0..n).map { i ->
+            val t = i / n.toDouble()
+            LatLng(52.744 + (52.520 - 52.744) * t + sin(t * Math.PI) * bend, 14.602 + (13.405 - 14.602) * t)
+        }
+        val main = line(60, 0.05)
+        val alt1 = line(60, 0.16)
+        val alt2 = line(60, -0.10)
+        val jams = listOf(
+            RoutePreview.Jam(main.subList(30, 35), 240, 2, "JAM"),
+            RoutePreview.Jam(main.subList(50, 53), 90, 1, "JAM"),
+        )
+        val r = RoutePreview.Result(
+            main, 125_000.0, 6_500.0, 6_780, 280, jams, null,
+            listOf(RoutePreview.Wx("frost", "Mróz", 0.0, 125.0, now + 3_600_000, 0, 0.0)), 1.0, now,
+            alts = listOf(
+                RoutePreview.Alt(main, 125_000.0, 6_500.0, 6_780, 280, jams, null),
+                RoutePreview.Alt(alt1, 143_000.0, 7_600.0, 7_620, 60, emptyList(), null),
+                RoutePreview.Alt(alt2, 161_000.0, 8_100.0, 8_160, 0, emptyList(), null),
+            ),
+            altIndex = 0, savedS = 240,
+        )
+        paparazzi.snapshot { CompositionLocalProvider(LocalInspectionMode provides true) {
+            RoutePlannerScreen(CarData.Place("Berlin", "Niemcy", 52.520, 13.405), false, null, emptyList(), null, {}, preview = r)
+        } }
+    }
+
+    @Test fun plannerDark() = planner(false)
+    @Test fun plannerLight() = planner(true)
 }
