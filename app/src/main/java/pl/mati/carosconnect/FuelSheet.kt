@@ -91,8 +91,6 @@ fun FuelSheet(
     var order by remember { mutableStateOf(if (lastPrice != null) listOf(FF.P) else emptyList()) }
     var km by remember { mutableStateOf(odo?.toString() ?: "") }
     var full by remember { mutableStateOf(true) }
-    val computed: FF? = if (order.size >= 2) FF.entries.first { it !in order.takeLast(2) } else null
-
     fun set(f: FF, raw: String) {
         // przecinek albo kropka, najwyżej jeden separator i 3 miejsca po nim
         var v = raw.filter { it.isDigit() || it == ',' || it == '.' }.replace('.', ',')
@@ -120,6 +118,8 @@ fun FuelSheet(
     }
 
     remember { previewCost?.let { set(FF.C, it) } }
+    // które pole jest obliczane: to, którego najdawniej nie ruszałeś (po wpisaniu dwóch)
+    val computed: FF? = if (order.size >= 2) FF.entries.first { it !in order.takeLast(2) } else null
 
     val l = num(liters)
     val p = num(price)
