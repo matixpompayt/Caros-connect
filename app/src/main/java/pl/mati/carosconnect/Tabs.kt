@@ -460,53 +460,15 @@ private fun TankDialog(cur: Int, onDismiss: () -> Unit) {
     }
 }
 
+/** Nowe tankowanie – panel z kalkulatorem (litry × cena = kwota, dowolne dwie). Zapis w telefonie i w CAR OS. */
 @Composable
 private fun FuelDialog(odo: Int?, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    var liters by remember { mutableStateOf("") }
-    var cost by remember { mutableStateOf("") }
-    var km by remember { mutableStateOf(odo?.toString() ?: "") }
-    var full by remember { mutableStateOf(true) }
-    fun num(t: String) = t.replace(',', '.').toDoubleOrNull()
-    val l = num(liters)
-    val c = num(cost)
-    val o = km.toIntOrNull()
-    val ok = l != null && l in 1.0..200.0 && c != null && c >= 0 && o != null && o > 0
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
-        title = { Text("Nowe tankowanie", color = C.Text) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                NumField("Litry", liters, { liters = it }, "np. 45,3", decimal = true)
-                NumField("Kwota (zł)", cost, { cost = it }, "np. 289,90", decimal = true)
-                NumField("Przebieg (km)", km, { km = it.filter(Char::isDigit).take(7) }, "z licznika")
-                ToggleRow("Do pełna", "Zatankowane do odbicia pistoletu", full) { full = it }
-                if (l != null && c != null && l > 0) Text(String.format(PL, "Cena: %.2f zł/l", c / l), fontSize = 14.sp, color = C.Muted)
-                CarData.status.value?.fuel?.let { fu ->
-                    val left = CarData.litersLeft(fu)
-                    Text(
-                        "Bak ${fu.tank} l" + (left?.let { String.format(PL, " · było ok. %.1f l · do pełna ok. %.0f l", it, (fu.tank - it).coerceAtLeast(0.0)) } ?: ""),
-                        fontSize = 13.sp, color = C.Muted,
-                    )
-                    if (l != null && left != null && l > fu.tank - left + 3) Text(
-                        String.format(PL, "Więcej niż mieści bak (%.0f l wolnego) – sprawdź pojemność baku", fu.tank - left),
-                        fontSize = 13.sp, color = C.Orange,
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(enabled = ok, onClick = {
-                val fill = CarData.Fill(java.util.UUID.randomUUID().toString(), System.currentTimeMillis(), o!!, l!!, c!!, full)
-                CarData.addFillLocal(fill)
-                scope.launch { sendSvc(ctx, JSONObject().put("type", "fuel_add").put("fill", fill.toJson())) }
-                onDismiss()
-            }) { Text("Zapisz") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Anuluj") } },
-    )
+    FuelSheet(odo, onDismiss) { fill ->
+        CarData.addFillLocal(fill)
+        scope.launch { sendSvc(ctx, JSONObject().put("type", "fuel_add").put("fill", fill.toJson())) }
+    }
 }
 
 @Composable

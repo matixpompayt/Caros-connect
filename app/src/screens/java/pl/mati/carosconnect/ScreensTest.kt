@@ -289,4 +289,13 @@ class ScreensTest {
             }
         } }
     }
+
+    /** Nowe tankowanie: cena z ostatniego tankowania + wpisana kwota → litry obliczone. */
+    @Test fun fuelSheet() {
+        val st = CarData.status.value!!
+        CarData.status.value = st.copy(
+            fuel = st.fuel!!.copy(fills = listOf(CarData.Fill("a", now - 9 * 86_400_000L, 213_650, 52.4, 329.6, true))),
+        )
+        sheet { FuelSheet(214_380, {}, previewCost = "200") {} }
+    }
 }

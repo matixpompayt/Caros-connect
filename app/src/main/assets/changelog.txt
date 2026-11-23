@@ -2,6 +2,14 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Nowe tankowanie z kalkulatorem
+- Panel od dołu w stylu Start zamiast okienka
+- Litry × cena za litr = kwota: wpisz dowolne dwie, trzecia liczy się sama – np. cena i ile zapłaciłeś → ile litrów, litry i kwota z paragonu → cena za litr, litry i cena → kwota. Obliczone pole ma znaczek „obliczone”, a jak je poprawisz, liczy się to, którego najdawniej nie ruszałeś
+- Cena wpisuje się sama z ostatniego tankowania; szybkie wybory: średnia cena dziś, kwoty 50–300 zł, „Do pełna ≈ X l”, 20–50 l
+- Podsumowanie: ile zatankujesz / zapłacisz, ile będzie w baku i jaki zasięg po tankowaniu; ostrzeżenie, gdy litrów więcej niż wolnego miejsca w baku albo przebieg mniejszy niż przy ostatnim tankowaniu
+- Do pełna / dolewka jako dwa duże przyciski, przebieg z licznika z informacją, ile przejechane od ostatniego tankowania
+
 ## 2.0-beta.20 · 2026-11-23
 - Prowadź do auta i adres domu/pracy: panel naprawdę wyjeżdża spod ekranu razem z tłem (poprzednio przesuwała się mapa, a u góry zostawał pusty pas)
 
