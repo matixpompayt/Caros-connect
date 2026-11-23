@@ -1,0 +1,53 @@
+name: Zrzuty ekranu
+
+# Zrzuty nowego wyglądu (Paparazzi, bez emulatora) → gałąź „screens”
+on:
+  workflow_dispatch:
+  push:
+    branches: [beta]
+    paths: ["app/src/main/java/**", "app/src/screens/**", ".github/workflows/screens.yml"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: screens
+  cancel-in-progress: true
+
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: core (z repo CAR OS)
+        run: |
+          REF=$(grep "^coreRef=" gradle.properties | cut -d= -f2)
+          mkdir caros-core-src && cd caros-core-src
+          git init -q
+          git remote add origin https://github.com/matixpompayt/Car-lanchuer
+          git sparse-checkout init --cone
+          git sparse-checkout set core
+          git fetch -q --depth 1 origin "$REF"
+          git checkout -q FETCH_HEAD
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Zrzuty
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:recordPaparazziDebug -Pscreens --no-daemon --stacktrace 2>&1 | tail -60
+          ls -la app/src/test/snapshots/images/ || true
+      - name: Na gałąź screens
+        run: |
+          mkdir -p /tmp/shots && cp app/src/test/snapshots/images/*.png /tmp/shots/ || exit 0
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git checkout --orphan screens-tmp
+          git rm -rq --cached . || true
+          rm -rf ./*.png
+          cp /tmp/shots/*.png .
+          git add *.png
+          git commit -qm "Zrzuty ${GITHUB_SHA::7}"
+          git push -qf origin HEAD:screens

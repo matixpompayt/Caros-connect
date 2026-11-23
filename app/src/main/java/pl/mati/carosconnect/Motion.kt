@@ -42,6 +42,8 @@ val LocalStagger = staticCompositionLocalOf<StaggerCounter?> { null }
 
 /** Wejście elementu: pojawienie się + lekki wjazd od dołu, kolejne elementy chwilę później. */
 fun Modifier.stagger(): Modifier = composed {
+    // podgląd / zrzuty ekranu – bez animacji wejścia
+    if (androidx.compose.ui.platform.LocalInspectionMode.current) return@composed Modifier
     val counter = LocalStagger.current
     val idx = remember { counter?.let { it.next++ } ?: 0 }
     val p = remember { Animatable(0f) }

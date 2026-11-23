@@ -115,10 +115,15 @@ fun CarHero3D(modifier: Modifier = Modifier, height: Dp = 200.dp) {
     val density = LocalDensity.current
     val sizePx = with(density) { (height * 1.35f).toPx() }.roundToInt().coerceIn(240, 1000)
     val faces = remember(body, paint) { try { Model3D.car(body, paint) } catch (_: Exception) { null } }
-    val yaw = remember { Animatable(95f) }
+    val still = androidx.compose.ui.platform.LocalInspectionMode.current
+    val yaw = remember { Animatable(if (still) 32f else 95f) }
     val scope = rememberCoroutineScope()
-    var bmp by remember { mutableStateOf<ImageBitmap?>(null) }
-    val enter = remember { Animatable(0f) }
+    var bmp by remember {
+        mutableStateOf(
+            if (still && faces != null) try { Model3D.carIcon(body, paint, 32.0, 20.0, sizePx, faces).asImageBitmap() } catch (_: Exception) { null } else null,
+        )
+    }
+    val enter = remember { Animatable(if (still) 1f else 0f) }
     LaunchedEffect(body, paint) {
         launch { enter.animateTo(1f, spring(dampingRatio = 0.72f, stiffness = 120f)) }
         yaw.animateTo(32f, spring(dampingRatio = 0.62f, stiffness = 45f))
@@ -199,7 +204,8 @@ fun RoundAction(icon: ImageVector, label: String, modifier: Modifier = Modifier,
 /** Liczba „nabijana” od poprzedniej wartości (np. zasięg po odświeżeniu). */
 @Composable
 fun CountUpText(value: Int, suffix: String, size: Int, color: Color = C.Text, weight: FontWeight = FontWeight.Bold) {
-    val a = remember { Animatable(0f) }
+    val still = androidx.compose.ui.platform.LocalInspectionMode.current
+    val a = remember { Animatable(if (still) value.toFloat() else 0f) }
     LaunchedEffect(value) { a.animateTo(value.toFloat(), tween(1100, easing = FastOutSlowInEasing)) }
     Text(thousandsSep(a.value.roundToInt()) + suffix, fontSize = size.sp, fontWeight = weight, color = color, maxLines = 1)
 }
@@ -207,7 +213,8 @@ fun CountUpText(value: Int, suffix: String, size: Int, color: Color = C.Text, we
 /** Pierścień (np. paliwo w baku) – wypełnia się przy wejściu. */
 @Composable
 fun RangeRing(fraction: Float, modifier: Modifier = Modifier, stroke: Dp = 10.dp, color: Color = C.Accent) {
-    val p = remember { Animatable(0f) }
+    val still = androidx.compose.ui.platform.LocalInspectionMode.current
+    val p = remember { Animatable(if (still) fraction.coerceIn(0f, 1f) else 0f) }
     LaunchedEffect(fraction) { p.animateTo(fraction.coerceIn(0f, 1f), tween(1200, easing = FastOutSlowInEasing)) }
     val track = C.Raised
     Canvas(modifier) {

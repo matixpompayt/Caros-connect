@@ -83,3 +83,9 @@ dependencies {
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.google.zxing:core:3.5.3")
 }
+
+// zrzuty nowego wyglądu: ./gradlew :app:recordPaparazziDebug -Pscreens (workflow „Zrzuty ekranu”)
+if (project.hasProperty("screens")) {
+    apply(plugin = "app.cash.paparazzi")
+    android.sourceSets.getByName("test").java.srcDir("src/screens/java")
+}
