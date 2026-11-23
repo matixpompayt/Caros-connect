@@ -243,21 +243,31 @@ class ScreensTest {
         WhatsNewSheet(Changelog.Entry("2.0-beta.10", "23.11.2026", "Nowe „Wyślij do auta”", listOf("Trasa na mapie na cały ekran", "Panel do przeciągania jak na Start", "Duży przycisk „Nawiguj w aucie”")), {}) {}
     }
 
-    @Test fun addressPicker() {
+    @Test fun addressPicker() = address(1f, null)
+
+    @Test fun addressPickerFrames() { for (f in listOf(0.25f, 0.45f, 0.65f, 0.85f)) address(f, "p${(f * 100).toInt()}") }
+
+    private fun address(progress: Float, name: String?) {
         pal(false)
-        paparazzi.snapshot { CompositionLocalProvider(LocalInspectionMode provides true) {
+        val pr = androidx.compose.runtime.mutableFloatStateOf(progress)
+        paparazzi.snapshot(name) { CompositionLocalProvider(LocalInspectionMode provides true) {
             AddressPickerScreen(
                 false, CarData.Addr("ul. Kostrzyńska 12, Dębno", 52.7440, 14.6020), {},
                 previewResults = listOf(
                     CarData.Place("Jana Pawła II 77", "Cychry, gmina Dębno, zachodniopomorskie", 52.7440, 14.6020),
                     CarData.Place("Jana Pawła II 77", "Dębno, zachodniopomorskie", 52.7378, 14.6990),
                 ),
-                previewAddr = "Jana Pawła II 77, Cychry",
+                previewAddr = "Jana Pawła II 77, Cychry", p = pr,
             )
         } }
     }
 
-    @Test fun walkNav() {
+    @Test fun walkNav() = walk(1f, null)
+
+    /** Klatki animacji wejścia (postęp 0..1) – podgląd, jak elementy wlatują po kolei. */
+    @Test fun walkNavFrames() { for (f in listOf(0.25f, 0.45f, 0.65f, 0.85f)) walk(f, "p${(f * 100).toInt()}") }
+
+    private fun walk(progress: Float, name: String?) {
         pal(false)
         Store.spotNote.value = "Poziom -2, miejsce 47, przy windzie"
         val pts = (0..20).map { LatLng(52.5884 - (20 - minOf(it, 10) - 10) * 0.0002 - 0.002 + minOf(it, 10) * 0.0002, 14.6456 - (20 - it).coerceAtMost(10) * 0.0003) }
@@ -269,11 +279,14 @@ class ScreensTest {
         )
         val route = WalkNav.Route(pts, cum, steps)
         val me = android.location.Location("gps").apply { latitude = pts[0].latitude; longitude = pts[0].longitude; accuracy = 6f }
-        paparazzi.snapshot { CompositionLocalProvider(LocalInspectionMode provides true) {
-            WalkNavUi(
-                spot, false, me, 20f, route, pts, emptyList(), true, {}, false, 380.0, 440.0, steps[1], 220.0,
-                routingFirst = false, noRoute = false, error = "", along = 0.0, source = "chodniki OSM", voice = true, onVoice = {},
-            )
+        val pr = androidx.compose.runtime.mutableFloatStateOf(progress)
+        paparazzi.snapshot(name) { CompositionLocalProvider(LocalInspectionMode provides true) {
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(C.Accent.copy(alpha = 0.25f), C.Raised, C.Bg)))) {
+                WalkNavUi(
+                    spot, false, me, 20f, route, pts, emptyList(), true, {}, false, 380.0, 440.0, steps[1], 220.0,
+                    routingFirst = false, noRoute = false, error = "", along = 0.0, source = "chodniki OSM", voice = true, onVoice = {}, p = pr,
+                )
+            }
         } }
     }
 }
