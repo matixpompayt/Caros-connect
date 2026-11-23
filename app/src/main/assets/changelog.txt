@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 2.0-beta.2 · 2026-11-23
 Potwierdzenia z auta, plan trasy wspólny z CAR OS, ten sam wygląd
 - Zakładka Auto: „Wysłane do auta” – przy każdej komendzie (trasa, ulubione, adres, serwis, tankowanie, klucze) widać: czeka na internet, wysłano, auto wykonało albo błąd
 - Bez internetu komenda czeka w kolejce i wychodzi sama, gdy internet wróci (także w tle)
