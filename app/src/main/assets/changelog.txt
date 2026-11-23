@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 2.0-beta.20 · 2026-11-23
 - Prowadź do auta i adres domu/pracy: panel naprawdę wyjeżdża spod ekranu razem z tłem (poprzednio przesuwała się mapa, a u góry zostawał pusty pas)
 
 ## 2.0-beta.19 · 2026-11-23
