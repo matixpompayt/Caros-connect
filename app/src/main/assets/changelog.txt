@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 2.0-beta.4 · 2026-11-23
 Nowy wygląd 2.0
 - Dwa ekrany główne do wyboru (Ustawienia → Wygląd → Ekran główny): „Auto na pierwszym planie” – Twoje auto 3D z CAR OS (obróć palcem), zasięg i szybkie akcje; „Mapa w tle” – mapa z autem na całym ekranie, reszta w panelu wysuwanym od dołu
 - Szybkie akcje: Prowadź do auta, Trasa do radia, Jazda na żywo, Udostępnij miejsce
