@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 2.0-beta.21 · 2026-11-23
 Nowe tankowanie z kalkulatorem
 - Panel od dołu w stylu Start zamiast okienka
 - Litry × cena za litr = kwota: wpisz dowolne dwie, trzecia liczy się sama – np. cena i ile zapłaciłeś → ile litrów, litry i kwota z paragonu → cena za litr, litry i cena → kwota. Obliczone pole ma znaczek „obliczone”, a jak je poprawisz, liczy się to, którego najdawniej nie ruszałeś
