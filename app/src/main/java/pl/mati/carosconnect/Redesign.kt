@@ -99,6 +99,9 @@ import kotlin.math.roundToInt
 
 private val PLN = Locale("pl")
 
+/** Ujęcie auta na ekranie głównym: ¾ z przodu. */
+private const val HERO_YAW = 212f
+
 private fun thousandsSep(v: Int): String = "%,d".format(v).replace(',', ' ')
 
 // ---------- auto 3D ----------
@@ -116,17 +119,17 @@ fun CarHero3D(modifier: Modifier = Modifier, height: Dp = 200.dp) {
     val sizePx = with(density) { (height * 1.35f).toPx() }.roundToInt().coerceIn(240, 1000)
     val faces = remember(body, paint) { try { Model3D.car(body, paint) } catch (_: Exception) { null } }
     val still = androidx.compose.ui.platform.LocalInspectionMode.current
-    val yaw = remember { Animatable(if (still) 32f else 95f) }
+    val yaw = remember { Animatable(if (still) HERO_YAW else HERO_YAW + 70f) }
     val scope = rememberCoroutineScope()
     var bmp by remember {
         mutableStateOf(
-            if (still && faces != null) try { Model3D.carIcon(body, paint, 32.0, 20.0, sizePx, faces).asImageBitmap() } catch (_: Exception) { null } else null,
+            if (still && faces != null) try { Model3D.carIcon(body, paint, HERO_YAW.toDouble(), 20.0, sizePx, faces).asImageBitmap() } catch (_: Exception) { null } else null,
         )
     }
     val enter = remember { Animatable(if (still) 1f else 0f) }
     LaunchedEffect(body, paint) {
         launch { enter.animateTo(1f, spring(dampingRatio = 0.72f, stiffness = 120f)) }
-        yaw.animateTo(32f, spring(dampingRatio = 0.62f, stiffness = 45f))
+        yaw.animateTo(HERO_YAW, spring(dampingRatio = 0.62f, stiffness = 45f))
     }
     // rysowanie poza wątkiem głównym, co 3° – płynnie przy obracaniu palcem
     LaunchedEffect(faces, sizePx) {
@@ -144,8 +147,8 @@ fun CarHero3D(modifier: Modifier = Modifier, height: Dp = 200.dp) {
     Box(
         modifier.fillMaxWidth().height(height).pointerInput(Unit) {
             detectHorizontalDragGestures(
-                onDragEnd = { scope.launch { yaw.animateTo(32f, spring(dampingRatio = 0.45f, stiffness = 35f)) } },
-                onDragCancel = { scope.launch { yaw.animateTo(32f, spring(dampingRatio = 0.45f, stiffness = 35f)) } },
+                onDragEnd = { scope.launch { yaw.animateTo(HERO_YAW, spring(dampingRatio = 0.45f, stiffness = 35f)) } },
+                onDragCancel = { scope.launch { yaw.animateTo(HERO_YAW, spring(dampingRatio = 0.45f, stiffness = 35f)) } },
             ) { change, dx ->
                 change.consume()
                 scope.launch { yaw.snapTo(yaw.value - dx * 0.45f) }
@@ -156,14 +159,16 @@ fun CarHero3D(modifier: Modifier = Modifier, height: Dp = 200.dp) {
         val acc = C.Accent
         // cień i poświata pod autem
         Canvas(Modifier.fillMaxSize()) {
-            val cy = size.height * 0.80f
+            // podłoga pod kołami (auto zajmuje górne ~2/3 obrazka)
+            val cy = size.height * 0.66f
+            val r = minOf(size.width * 0.36f, size.height * 0.75f)
             drawOval(
-                Brush.radialGradient(listOf(acc.copy(alpha = 0.28f), Color.Transparent), center = Offset(size.width / 2, cy), radius = size.width * 0.42f),
-                topLeft = Offset(size.width * 0.08f, cy - size.height * 0.16f), size = Size(size.width * 0.84f, size.height * 0.32f),
+                Brush.radialGradient(listOf(acc.copy(alpha = 0.30f), Color.Transparent), center = Offset(size.width / 2, cy), radius = r),
+                topLeft = Offset(size.width / 2 - r, cy - r * 0.28f), size = Size(r * 2, r * 0.56f),
             )
             drawOval(
-                Color.Black.copy(alpha = if (C.isLight) 0.16f else 0.45f),
-                topLeft = Offset(size.width * 0.24f, cy - size.height * 0.05f), size = Size(size.width * 0.52f, size.height * 0.10f),
+                Brush.radialGradient(listOf(Color.Black.copy(alpha = if (C.isLight) 0.22f else 0.55f), Color.Transparent), center = Offset(size.width / 2, cy), radius = r * 0.6f),
+                topLeft = Offset(size.width / 2 - r * 0.6f, cy - r * 0.1f), size = Size(r * 1.2f, r * 0.2f),
             )
         }
         val b = bmp
@@ -187,13 +192,13 @@ fun RoundAction(icon: ImageVector, label: String, modifier: Modifier = Modifier,
     val src = remember { MutableInteractionSource() }
     Column(
         modifier.pressScale(src, 0.88f).clip(RoundedCornerShape(18.dp))
-            .clickable(interactionSource = src, indication = null, onClick = onClick).padding(vertical = 4.dp),
+            .clickable(interactionSource = src, indication = null, onClick = onClick).padding(horizontal = 6.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
             Modifier.size(58.dp).clip(CircleShape).then(
                 if (primary) Modifier.background(Brush.linearGradient(listOf(C.Accent, C.Accent.copy(alpha = 0.72f))))
-                else Modifier.surface(CircleShape, C.Raised),
+                else Modifier.surface(CircleShape, C.Raised, border = C.Border),
             ),
             contentAlignment = Alignment.Center,
         ) { Icon(icon, label, tint = if (primary) C.Bg else C.Text, modifier = Modifier.size(26.dp)) }
@@ -216,7 +221,7 @@ fun RangeRing(fraction: Float, modifier: Modifier = Modifier, stroke: Dp = 10.dp
     val still = androidx.compose.ui.platform.LocalInspectionMode.current
     val p = remember { Animatable(if (still) fraction.coerceIn(0f, 1f) else 0f) }
     LaunchedEffect(fraction) { p.animateTo(fraction.coerceIn(0f, 1f), tween(1200, easing = FastOutSlowInEasing)) }
-    val track = C.Raised
+    val track = C.Muted.copy(alpha = 0.18f)
     Canvas(modifier) {
         val w = stroke.toPx()
         val inset = w / 2
