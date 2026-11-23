@@ -21,6 +21,8 @@ object TripShare {
     /** Status z auta: "share" (null = wyłączone). */
     fun onStatus(ctx: Context?, o: JSONObject?) {
         if (o == null) {
+            // auto potwierdziło koniec – zakończony link już nie wróci
+            CarData.prefs?.edit()?.remove("share_ended")?.apply()
             // wyłączone w aucie – ale nie kasuj świeżo włączonego z telefonu (status mógł być sprzed komendy)
             val cur = info.value
             if (cur != null && System.currentTimeMillis() - cur.since > 3 * 60_000L) info.value = null
@@ -28,6 +30,8 @@ object TripShare {
         }
         val i = Info(o.optString("link"), o.optLong("until"), o.optBoolean("dest"), o.optString("by", "car"), o.optLong("since"))
         if (i.link.isBlank()) return
+        // zakończone w telefonie, a auto jeszcze nie dostało komendy – nie pokazuj z powrotem
+        if (i.link == CarData.prefs?.getString("share_ended", null)) return
         val prev = info.value
         info.value = i
         // włączone w radiu – link do wysłania (raz na udostępnienie)
@@ -64,10 +68,45 @@ object TripShare {
         return link to item
     }
 
+    /**
+     * Koniec od razu, bez czekania na radio: telefon chowa udostępnianie i sam wysyła stronie z linku
+     * „koniec” (klucz jest w linku), a radiu – komendę, żeby przestało wysyłać pozycję (gdy będzie online).
+     * Blokujące (poza wątkiem głównym) – ale stan w aplikacji zmienia się natychmiast.
+     */
     fun stop(ctx: Context): Outbox.Item? {
-        if (Store.pairing.value == null) return null
-        val item = Outbox.send(ctx, JSONObject().put("type", Proto.Cmd.SHARE_END), "Jazda na żywo: koniec")
+        val cur = info.value
         info.value = null
-        return item
+        if (cur != null) {
+            CarData.prefs?.edit()?.putString("share_ended", cur.link)?.apply()
+            try { androidx.core.app.NotificationManagerCompat.from(ctx).cancel(Notifs.ID_SHARE) } catch (_: Exception) {}
+            LiveShare.keyFromLink(cur.link)?.let { k -> try { endPage(k) } catch (_: Exception) {} }
+        }
+        if (Store.pairing.value == null) return null
+        return Outbox.send(ctx, JSONObject().put("type", Proto.Cmd.SHARE_END), "Jazda na żywo: link wyłączony – auto przestanie wysyłać pozycję")
+    }
+
+    /** „Koniec udostępniania” prosto na stronę z linku (ten sam zaszyfrowany kanał, którym pisze auto). */
+    private fun endPage(k: ByteArray) {
+        val body = pl.mati.caros.core.RelayCrypto.encrypt(
+            k, JSONObject().put("type", LiveShare.END).put("t", System.currentTimeMillis()).put("why", "stopped").put("by", "phone").toString(),
+        )
+        for (attempt in 0..2) {
+            try {
+                val c = java.net.URL("https://ntfy.sh/" + LiveShare.topic(k)).openConnection() as java.net.HttpURLConnection
+                c.connectTimeout = 8_000
+                c.readTimeout = 10_000
+                c.requestMethod = "POST"
+                c.doOutput = true
+                c.setRequestProperty("User-Agent", "CarOS-Connect")
+                try {
+                    c.outputStream.use { it.write(body.toByteArray()) }
+                    if (c.responseCode in 200..299) return
+                } finally {
+                    c.disconnect()
+                }
+            } catch (_: Exception) {
+            }
+            Thread.sleep(1500)
+        }
     }
 }

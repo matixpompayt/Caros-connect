@@ -2,6 +2,10 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+- Jazda na żywo: „Zakończ” działa od razu – telefon sam wyłącza link na stronie (bez czekania na radio), karta znika natychmiast i nie wraca, zanim auto dostanie komendę; radio przestaje wysyłać pozycję, gdy będzie online
+- Mapa na Start: przyciski 3D / auto / Twoja pozycja wyżej – nie nachodzą już na panel
+
 ## 2.0-beta.24 · 2026-11-23
 Edycja serwisu w nowym stylu, bez czarnego paska u góry
 - Serwis: panel od dołu zamiast okienka – na górze stan na żywo (ile zostało km / dni, pasek, kiedy następnie), ostatnia wymiana z szybkimi wyborami („Teraz”, „10 tys. km temu”, „Dziś”, „6 mies. temu”…), co ile km / miesięcy (10–90 tys., 6 mies. – 4 lata, bez limitu), „Wykonano dziś”, duży „Zapisz”

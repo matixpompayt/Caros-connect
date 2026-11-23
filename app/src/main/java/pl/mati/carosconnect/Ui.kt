@@ -508,7 +508,7 @@ private fun MapShell(perms: Perms, actions: Actions, tab: Int, onTab: (Int) -> U
         ) {
             Box(Modifier.fillMaxSize()) {
                 val s = spot
-                if (s != null) ParkMap(s, me, Modifier.fillMaxSize(), bottomInset = if (hidden) 150.dp else peek - 24.dp)
+                if (s != null) ParkMap(s, me, Modifier.fillMaxSize(), bottomInset = if (hidden) 150.dp else peek + 4.dp)
                 else Box(
                     Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(C.Accent.copy(alpha = 0.16f), C.Bg))),
                     contentAlignment = Alignment.TopCenter,
