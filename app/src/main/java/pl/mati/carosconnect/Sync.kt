@@ -50,6 +50,14 @@ object Sync {
                 inbox.stop?.let { Store.offerCarSpot(ctx, it, final = false) }
                 inbox.carIcon?.let { (b, p) -> CarData.setCarIcon(b, p) }
                 inbox.status?.let { CarData.setStatusJson(it) }
+                inbox.nack?.let { (type, t) ->
+                    val seen = CarData.prefs?.getLong("nack_seen", 0L) ?: 0L
+                    if (t > seen) {
+                        CarData.prefs?.edit()?.putLong("nack_seen", t)?.apply()
+                        CarData.setNack(type)
+                        EventLog.add(EventLog.Cat.CAR, "CAR OS w aucie nie zna komendy „$type” – zaktualizuj CAR OS", err = true)
+                    }
+                }
                 if (CarData.status.value?.time != beforeStatus) EventLog.bump(EventLog.Metric.IN)
                 try { checkBattery(ctx) } catch (_: Exception) {}
                 try { checkLive(ctx) } catch (_: Exception) {}

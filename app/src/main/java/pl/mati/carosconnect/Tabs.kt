@@ -145,6 +145,7 @@ fun CarTab(actions: Actions) {
         PrimaryButton("Skanuj kod z CAR OS", Icons.Rounded.QrCodeScanner) { actions.scanQr() }
         return
     }
+    CarCompatBanner()
     val s = st
     if (s == null) {
         Card {
@@ -458,6 +459,11 @@ private fun TankDialog(cur: Int, onDismiss: () -> Unit) {
         },
         confirmButton = {
             TextButton(enabled = ok, onClick = {
+                if (!CarData.carSupports(pl.mati.caros.core.Proto.Cmd.FUEL_TANK)) {
+                    Toast.makeText(ctx, "CAR OS w aucie nie przyjmie jeszcze pojemności baku z telefonu – zaktualizuj CAR OS albo ustaw w radiu (Tankowania)", Toast.LENGTH_LONG).show()
+                    onDismiss()
+                    return@TextButton
+                }
                 CarData.setTankLocal(n!!)
                 scope.launch { sendSvc(ctx, JSONObject().put("type", "fuel_tank").put("l", n)) }
                 onDismiss()
@@ -741,6 +747,9 @@ suspend fun sendToCar(
     if (pairing == null) {
         Toast.makeText(ctx, "Najpierw połącz z CAR OS kodem QR", Toast.LENGTH_LONG).show()
         return false
+    }
+    if (via.size > 3 && !CarData.carSupports(pl.mati.caros.core.Proto.Feat.STOPS8)) {
+        Toast.makeText(ctx, "CAR OS w aucie przyjmie tylko 3 punkty po drodze – zaktualizuj CAR OS (wersja testowa 2.0)", Toast.LENGTH_LONG).show()
     }
     val ok = withContext(Dispatchers.IO) {
         try {

@@ -1,8 +1,9 @@
 name: Build APK
 
+# Gałąź beta: wersja testowa 2.0 (wydania „prerelease” – stabilne /releases/latest się nie zmienia)
 on:
   push:
-    branches: [main]
+    branches: [beta]
     # strona (docs/) i README nie budują nowej wersji aplikacji
     paths-ignore: ["docs/**", "**.md"]
   workflow_dispatch:
@@ -15,10 +16,24 @@ jobs:
     runs-on: ubuntu-latest
     env:
       BUILD_NUMBER: ${{ github.run_number }}
+      BETA: "1"
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # Wspólny moduł core z repo CAR OS – dokładnie ten commit, który wskazuje coreRef
+      - name: core (z repo CAR OS)
+        run: |
+          REF=$(grep "^coreRef=" gradle.properties | cut -d= -f2)
+          mkdir caros-core-src && cd caros-core-src
+          git init -q
+          git remote add origin https://github.com/matixpompayt/Car-lanchuer
+          git sparse-checkout init --cone
+          git sparse-checkout set core
+          git fetch -q --depth 1 origin "$REF"
+          git checkout -q FETCH_HEAD
+          ls core
 
       - uses: actions/setup-java@v4
         with:
@@ -30,9 +45,8 @@ jobs:
       # Lista zmian: sekcja „## next” dostaje numer tej wersji i datę (trafia do aplikacji i do opisu wydania)
       - name: Changelog
         run: |
-          MAJOR=$(grep "^connectVersion=" gradle.properties | cut -d= -f2)
-          BASE=$(grep "^connectBase=" gradle.properties | cut -d= -f2)
-          VER="$MAJOR.$((BUILD_NUMBER - BASE))"
+          BB=$(grep "^betaBase=" gradle.properties | cut -d= -f2)
+          VER="2.0-beta.$((BUILD_NUMBER - BB))"
           CL=app/src/main/assets/changelog.txt
           if grep -q "^## next$" "$CL"; then
             sed -i "s/^## next$/## $VER · $(date +%F)/" "$CL"
@@ -50,15 +64,17 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
-          if ! ./gradlew assembleRelease --no-daemon 2>&1 | tee build.log; then
+          # testy wspólnego modułu (protokół, szyfrowanie, geometria tras) – błąd = brak wydania
+          if ! ./gradlew :core:testReleaseUnitTest assembleRelease --no-daemon 2>&1 | tee build.log; then
+            grep -E "Test.*FAILED|AssertionError|expected:" build.log | head -20 | while IFS= read -r l; do echo "::error::$l"; done
             { grep -E "^e: " build.log; awk '/What went wrong/{f=1} /\* Try:/{f=0} f' build.log; grep -iE "^ERROR:|AAPT: error" build.log; } | grep -v "^\s*$" | head -45 | while IFS= read -r l; do echo "::error::$l"; done
             exit 1
           fi
           mkdir -p out
-          MAJOR=$(grep "^connectVersion=" gradle.properties | cut -d= -f2)
-          BASE=$(grep "^connectBase=" gradle.properties | cut -d= -f2)
-          VER="$MAJOR.$((BUILD_NUMBER - BASE))"
+          BB=$(grep "^betaBase=" gradle.properties | cut -d= -f2)
+          VER="2.0-beta.$((BUILD_NUMBER - BB))"
           echo "VER=$VER" >> "$GITHUB_ENV"
+          echo "CODE=$((100000 + BUILD_NUMBER))" >> "$GITHUB_ENV"
           cp app/build/outputs/apk/release/app-release.apk "out/CarOS-Connect-$VER.apk"
 
       - uses: actions/upload-artifact@v4
@@ -72,10 +88,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "v${VER}-b${BUILD_NUMBER}" out/*.apk \
+          gh release create "v${VER}-b${CODE}" out/*.apk \
             --title "CAR OS Connect ${VER}" \
             --notes-file notes.md \
-            --latest
+            --target "$GITHUB_SHA" \
+            --prerelease --latest=false
 
       # Numer wersji wpisany w liście zmian zapisujemy z powrotem w repozytorium
       - name: Save changelog
@@ -85,4 +102,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add app/src/main/assets/changelog.txt
           git commit -m "Lista zmian: wersja ${VER} [skip ci]" || exit 0
-          git push origin HEAD:main || echo "::warning::Nie udało się zapisać listy zmian (nowszy commit na main)"
+          git push origin HEAD:beta || echo "::warning::Nie udało się zapisać listy zmian (nowszy commit na beta)"

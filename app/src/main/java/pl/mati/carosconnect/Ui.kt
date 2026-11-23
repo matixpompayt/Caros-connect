@@ -947,6 +947,53 @@ fun UpdateItem() {
         }
         androidx.compose.material3.Switch(checked = beta, onCheckedChange = { Updater.setBeta(ctx, it) })
     }
+    if (Store.pairing.collectAsState().value != null) CarCompatBanner(always = true)
+}
+
+/**
+ * Zgodność z CAR OS w aucie (protokół 2): ostrzeżenie, gdy auto ma starszą / nowszą wersję
+ * albo nie zna komendy wysłanej z telefonu.
+ */
+@Composable
+fun CarCompatBanner(always: Boolean = false) {
+    val car by CarData.car.collectAsState()
+    val nack by CarData.nack.collectAsState()
+    val c = car
+    val (title, sub, warn) = when {
+        nack != null -> Triple(
+            "CAR OS w aucie nie zna funkcji „$nack”",
+            "Zaktualizuj CAR OS w radiu: Ustawienia → Aktualizacja (dla 2.0 włącz „Wersja testowa 2.0”)", true,
+        )
+        c == null -> if (always) Triple("Auto", "Brak danych z CAR OS – odśwież połączenie", false) else return
+        // stare CAR OS 1.x w zakładce Auto nie straszy – widać to w ustawieniach
+        c.older && !always -> return
+        c.older -> Triple(
+            "CAR OS w aucie: ${c.app ?: "1.x"} (protokół ${c.pv})",
+            "Telefon ma nowszą wersję ${BuildConfig.VERSION_NAME}. Część funkcji zadziała po aktualizacji CAR OS w radiu do 2.0", true,
+        )
+        c.newer -> Triple(
+            "CAR OS w aucie: ${c.app} (protokół ${c.pv})",
+            "Auto ma nowszą wersję – zaktualizuj CAR OS Connect (Ustawienia → Aktualizacja)", true,
+        )
+        else -> if (always) Triple("CAR OS w aucie: ${c.app ?: "?"}", "Protokół ${c.pv} – telefon i auto są zgodne", false) else return
+    }
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+            .background(if (warn) C.Orange.copy(alpha = 0.16f) else C.Green.copy(alpha = 0.12f))
+            .border(1.dp, if (warn) C.Orange.copy(alpha = 0.6f) else C.Green.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(if (warn) Icons.Rounded.SystemUpdate else Icons.Rounded.Check, null, tint = if (warn) C.Orange else C.Green, modifier = Modifier.size(22.dp))
+        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+            Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+            Text(sub, fontSize = 12.sp, color = C.Text2)
+        }
+        if (nack != null) Text(
+            "OK", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.Accent,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { CarData.setNack(null) }.padding(8.dp),
+        )
+    }
 }
 
 /** Tytuł i punkty jednego wydania. */

@@ -2,6 +2,15 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+CAR OS Connect 2.0 – pierwsza wersja testowa
+- Nowy protokół auto ↔ telefon (wersja 2): telefon wie, jaką wersję CAR OS ma auto i co ono potrafi
+- Ustawienia → Aktualizacja: wersja CAR OS w aucie i czy jest zgodna z telefonem
+- Gdy auto nie zna funkcji wysłanej z telefonu – komunikat „zaktualizuj CAR OS” zamiast cichego braku reakcji
+- Pojemność baku i więcej niż 3 przystanki: ostrzeżenie, gdy CAR OS w aucie jest na to za stary
+- Wspólny moduł z CAR OS: to samo szyfrowanie i szukanie stacji / przerw przy trasie w aucie i w telefonie, sprawdzane testami przy każdym buildzie
+- Powrót do wersji stabilnej 1.x wymaga odinstalowania aplikacji
+
 ## 1.75 · 2026-11-22
 Wersja testowa 2.0
 - Ustawienia → Aktualizacja: przełącznik „Wersja testowa 2.0 (beta)” – po włączeniu aktualizacja pobierze wersję beta 2.0 (nowe funkcje wcześniej, mogą mieć błędy)

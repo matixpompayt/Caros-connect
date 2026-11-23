@@ -1,6 +1,7 @@
 package pl.mati.carosconnect
 
 import android.content.Context
+import pl.mati.caros.core.AlongRoute
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll

@@ -2,6 +2,8 @@ package pl.mati.carosconnect
 
 import android.util.Base64
 import org.json.JSONObject
+import pl.mati.caros.core.Proto
+import pl.mati.caros.core.RelayCrypto
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -40,6 +42,8 @@ object Link {
         val report: Pair<String, Long>? = null,
         /** Ostatni postój w trakcie jazdy (radio, ≥ 20 s) – zapas na wypadek braku zapisu w telefonie. */
         val stop: Store.Spot? = null,
+        /** Ostatnia komenda, której CAR OS w aucie nie zna (typ, czas) – „zaktualizuj CAR OS”. */
+        val nack: Pair<String, Long>? = null,
     )
 
     private const val PREFIX = "#caros1."
@@ -59,42 +63,17 @@ object Link {
         null
     }
 
-    fun topicOf(key: ByteArray, channel: String = ""): String {
-        val md = MessageDigest.getInstance("SHA-256")
-        md.update(key)
-        if (channel.isNotEmpty()) md.update(channel.toByteArray())
-        return "caros_" + md.digest().joinToString("") { "%02x".format(it) }.take(28)
-    }
-
-    /** Format v2: "2:" + base64(iv | AES-GCM(gzip(json))). */
-    fun encrypt(key: ByteArray, plain: String): String {
-        val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
-        val c = Cipher.getInstance("AES/GCM/NoPadding")
-        c.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, iv))
-        return "2:" + Base64.encodeToString(iv + c.doFinal(gzip(plain.toByteArray())), Base64.NO_WRAP)
-    }
-
-    fun decrypt(key: ByteArray, msg: String): String? = try {
-        val v2 = msg.startsWith("2:")
-        val all = Base64.decode(if (v2) msg.substring(2) else msg.trim(), Base64.NO_WRAP)
-        val c = Cipher.getInstance("AES/GCM/NoPadding")
-        c.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, all, 0, 12))
-        val out = c.doFinal(all, 12, all.size - 12)
-        String(if (v2) gunzip(out) else out)
-    } catch (_: Exception) {
-        null
-    }
-
-    fun gzip(b: ByteArray): ByteArray {
-        val bos = ByteArrayOutputStream()
-        GZIPOutputStream(bos).use { it.write(b) }
-        return bos.toByteArray()
-    }
-
-    fun gunzip(b: ByteArray): ByteArray = GZIPInputStream(ByteArrayInputStream(b)).use { it.readBytes() }
+    // szyfrowanie wspólne z CAR OS (core/RelayCrypto)
+    fun topicOf(key: ByteArray, channel: String = ""): String = RelayCrypto.topicOf(key, channel)
+    fun encrypt(key: ByteArray, plain: String): String = RelayCrypto.encrypt(key, plain)
+    fun decrypt(key: ByteArray, msg: String): String? = RelayCrypto.decrypt(key, msg)
+    fun gzip(b: ByteArray): ByteArray = RelayCrypto.gzip(b)
+    fun gunzip(b: ByteArray): ByteArray = RelayCrypto.gunzip(b)
 
     /** Wiadomość do radia (blokujące – poza wątkiem głównym). */
     fun send(p: Pairing, o: JSONObject) {
+        // protokół 2: wersja protokołu i aplikacji – auto wie, z jakim telefonem rozmawia
+        Proto.stamp(o, BuildConfig.VERSION_NAME)
         val body = encrypt(p.key, o.toString())
         var last: Exception? = null
         for (attempt in 0..2) {
@@ -149,6 +128,7 @@ object Link {
         var statusT = 0L
         val trips = ArrayList<CarData.Trip>()
         var live: CarData.Live? = null
+        var nack: Pair<String, Long>? = null
         val parts = HashMap<String, Array<String?>>()
         val meta = HashMap<String, Pair<Long, String>>()
         val repParts = HashMap<String, Array<String?>>()
@@ -182,6 +162,10 @@ object Link {
                                 if (t >= statusT) { statusT = t; status = plain }
                             }
                             "trip" -> trips += CarData.tripFrom(m)
+                            Proto.Msg.NACK -> {
+                                val t = o.optLong("time") * 1000
+                                if (nack == null || t >= nack!!.second) nack = m.optString("of") to t
+                            }
                             "live" -> {
                                 val l = CarData.Live(m.getDouble("lat"), m.getDouble("lon"), m.optInt("spd"), m.optInt("brg"), m.getLong("t"), m.optBoolean("m", true))
                                 if (live == null || l.time >= live!!.time) live = l
@@ -232,6 +216,6 @@ object Link {
             } catch (_: Exception) {
             }
         }
-        return Inbox(park, status, trips, backup, carIcon, live, report, stop)
+        return Inbox(park, status, trips, backup, carIcon, live, report, stop, nack)
     }
 }

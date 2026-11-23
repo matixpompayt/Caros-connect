@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
+import pl.mati.caros.core.Proto
 import java.io.File
 
 /** Dane z CAR OS w aucie (stan, trasy, kopia) + ustawienia przypomnień i parkometru. */
@@ -125,6 +126,8 @@ object CarData {
         sp = p
         dir = ctx.applicationContext.filesDir
         status.value = p.getString("status", null)?.let { parseStatus(it) }
+        p.getString("status", null)?.let { raw -> try { car.value = Proto.carFromStatus(JSONObject(raw)) } catch (_: Exception) {} }
+        nack.value = p.getString("nack", null)?.ifBlank { null }
         trips.value = try {
             val a = JSONArray(p.getString("trips", "[]"))
             (0 until a.length()).map { tripFrom(a.getJSONObject(it)) }
@@ -157,11 +160,30 @@ object CarData {
 
     // ---------- stan auta ----------
 
+    /** CAR OS w aucie: wersja protokołu, wersja, obsługiwane komendy (z ostatniego statusu). */
+    val car = MutableStateFlow<Proto.Peer?>(null)
+    /** Komenda, której CAR OS w aucie nie zna (odpowiedź „nack”) – do komunikatu „zaktualizuj CAR OS”. */
+    val nack = MutableStateFlow<String?>(null)
+
+    /** Czy CAR OS w aucie obsługuje [cap] (gdy nie wiadomo – zakładamy, że tak). */
+    fun carSupports(cap: String): Boolean = car.value?.supports(cap) ?: true
+
+    fun setNack(type: String?) {
+        nack.value = type
+        sp?.edit()?.putString("nack", type ?: "")?.apply()
+    }
+
     fun setStatusJson(raw: String) {
         val s = parseStatus(raw) ?: return
         val cur = status.value
         if (cur != null && cur.time > s.time) return
         status.value = s
+        try {
+            val peer = Proto.carFromStatus(JSONObject(raw))
+            // auto zaktualizowane – stary „nie zna komendy” już nieaktualny
+            if (car.value?.app != peer.app) setNack(null)
+            car.value = peer
+        } catch (_: Exception) {}
         sp?.edit()?.putString("status", raw)?.apply()
         if (s.body != null) setCarIcon(s.body, s.paint)
         // trasy ze statusu (bez śladu) – uzupełniają dziennik
