@@ -647,6 +647,20 @@ internal fun WalkNavUi(
                             Text("Czekam na pozycję GPS", fontSize = 15.sp, color = C.Muted)
                         }
                     }
+                    // notatka i zdjęcie miejsca parkowania – najbardziej przydatne właśnie teraz
+                    if (!toDest && (note.isNotBlank() || photo != null)) Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).surface(RoundedCornerShape(20.dp), C.Card, border = C.Border).padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("Gdzie dokładnie", fontSize = 12.sp, color = C.Muted)
+                        if (note.isNotBlank()) Text(note, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+                        photo?.let {
+                            androidx.compose.foundation.Image(
+                                it, "Zdjęcie miejsca", contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                modifier = Modifier.fillMaxWidth().height(170.dp).clip(RoundedCornerShape(14.dp)),
+                            )
+                        }
+                    }
                     // dokąd: auto (P) albo cel
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).surface(RoundedCornerShape(20.dp), C.Card, border = C.Border).padding(14.dp),
@@ -660,20 +674,6 @@ internal fun WalkNavUi(
                         Column(Modifier.weight(1f)) {
                             Text(if (toDest) "Cel" else carName ?: "Twoje auto", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(s.address ?: s.coords, fontSize = 13.sp, color = C.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                    // notatka i zdjęcie miejsca parkowania – najbardziej przydatne właśnie teraz
-                    if (!toDest && (note.isNotBlank() || photo != null)) Column(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).surface(RoundedCornerShape(20.dp), C.Card, border = C.Border).padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text("Gdzie dokładnie", fontSize = 12.sp, color = C.Muted)
-                        if (note.isNotBlank()) Text(note, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
-                        photo?.let {
-                            androidx.compose.foundation.Image(
-                                it, "Zdjęcie miejsca", contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                                modifier = Modifier.fillMaxWidth().height(170.dp).clip(RoundedCornerShape(14.dp)),
-                            )
                         }
                     }
                     // skręty po kolei

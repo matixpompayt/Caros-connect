@@ -310,7 +310,7 @@ fun RadioPickerSheet(devices: List<Pair<String, String>>, onDismiss: () -> Unit)
     val ctx = LocalContext.current
     val curMac by Store.carMac.collectAsState()
     CarSheet(
-        "Wybierz radio w aucie", onDismiss, "Po połączeniu z nim telefon wie, że jedziesz, a po rozłączeniu zapisze, gdzie stoi auto", Icons.Rounded.Bluetooth,
+        "Wybierz radio w aucie", onDismiss, "Po nim telefon rozpozna jazdę i zapisze miejsce parkowania", Icons.Rounded.Bluetooth,
     ) { ctl ->
         if (devices.isEmpty()) {
             Column(
