@@ -153,7 +153,7 @@ class ScreensTest {
                 types.chunked(2).forEachIndexed { r, row ->
                     androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().weight(1f)) {
                         row.forEachIndexed { c, t ->
-                            val b = pl.mati.caros.core.Model3D.carIcon(t, paints[r * 2 + c], 212.0, 20.0, 420)
+                            val b = pl.mati.caros.core.Model3D.carIcon(t, paints[r * 2 + c], 212.0, 20.0, 420, outline = false)
                             androidx.compose.foundation.Image(b.asImageBitmap(), t, Modifier.weight(1f).fillMaxSize())
                         }
                     }

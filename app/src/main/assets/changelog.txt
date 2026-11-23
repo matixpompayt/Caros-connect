@@ -2,6 +2,9 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+- Auto na ekranie głównym bez białego konturu, krawędzie karoserii bardziej naturalne
+
 ## 2.0-beta.10 · 2026-11-23
 Auta w jakości „studyjnej”
 - Gładkie cieniowanie karoserii i lakier z odbiciami jak w studiu fotograficznym (softboxy, horyzont, efekt Fresnela na krawędziach), szyby z odbiciem, metaliczne felgi – na ekranie głównym i na mapie

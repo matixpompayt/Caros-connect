@@ -126,7 +126,7 @@ fun CarHero3D(modifier: Modifier = Modifier, height: Dp = 200.dp) {
     val scope = rememberCoroutineScope()
     var bmp by remember {
         mutableStateOf(
-            if (still && faces != null) try { Model3D.carIcon(body, paint, HERO_YAW.toDouble(), 20.0, sizePx, faces).asImageBitmap() } catch (_: Exception) { null } else null,
+            if (still && faces != null) try { Model3D.carIcon(body, paint, HERO_YAW.toDouble(), 20.0, sizePx, faces, outline = false).asImageBitmap() } catch (_: Exception) { null } else null,
         )
     }
     val enter = remember { Animatable(if (still) 1f else 0f) }
@@ -139,7 +139,7 @@ fun CarHero3D(modifier: Modifier = Modifier, height: Dp = 200.dp) {
         val f = faces ?: return@LaunchedEffect
         snapshotFlow { (yaw.value / 3f).roundToInt() * 3 }.distinctUntilChanged().collectLatest { y ->
             val b = withContext(Dispatchers.Default) {
-                try { Model3D.carIcon(body, paint, y.toDouble(), 20.0, sizePx, f) } catch (_: Exception) { null }
+                try { Model3D.carIcon(body, paint, y.toDouble(), 20.0, sizePx, f, outline = false) } catch (_: Exception) { null }
             }
             if (b != null) bmp = b.asImageBitmap()
         }
