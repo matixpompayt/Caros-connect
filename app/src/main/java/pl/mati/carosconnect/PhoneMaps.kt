@@ -172,7 +172,7 @@ private fun personBitmap(ctx: Context) = Model3D.personIcon(0xFF2FD3F0.toInt(), 
 /** Mapa parkingu: ciemna, 3D, pinezka auta i Twoja pozycja. */
 @SuppressLint("MissingPermission")
 @Composable
-fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier, live: Boolean = false) {
+fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier, live: Boolean = false, bottomInset: androidx.compose.ui.unit.Dp = 0.dp) {
     val ctx = LocalContext.current
     var is3d by remember { mutableStateOf(true) }
     val h = remember {
@@ -244,6 +244,11 @@ fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier, l
         else src.setGeoJson(Feature.fromGeometry(point(me.latitude, me.longitude)))
     }
 
+    // mapa w tle pod panelem: środek mapy (auto) nad panelem
+    LaunchedEffect(bottomInset, h.ready) {
+        if (!h.ready) return@LaunchedEffect
+        h.map?.setPadding(0, 0, 0, (bottomInset.value * h.density).toInt())
+    }
     // na żywo: mapa płynnie jedzie za autem (bez skakania kamery przy każdej pozycji)
     var placed by remember { mutableStateOf(false) }
     LaunchedEffect(s.lat, s.lon, h.ready) {
@@ -264,7 +269,7 @@ fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier, l
     Box(modifier) {
         androidx.compose.runtime.key(h) { AndroidView(factory = { h.view }, modifier = Modifier.fillMaxSize()) }
         HouseNumbers(h)
-        Column(Modifier.align(Alignment.BottomEnd).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, top = 12.dp, start = 12.dp, bottom = 12.dp + bottomInset), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             MapBtn({ is3d = !is3d }) { Text(if (is3d) "3D" else "2D", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = if (is3d) C.Accent else C.Text) }
             MapBtn({
                 h.map?.animateCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(LatLng(s.lat, s.lon)).zoom(17.0).tilt(if (is3d) 50.0 else 0.0).build()), 700)

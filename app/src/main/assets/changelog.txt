@@ -2,6 +2,14 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Nowy wygląd 2.0
+- Dwa ekrany główne do wyboru (Ustawienia → Wygląd → Ekran główny): „Auto na pierwszym planie” – Twoje auto 3D z CAR OS (obróć palcem), zasięg i szybkie akcje; „Mapa w tle” – mapa z autem na całym ekranie, reszta w panelu wysuwanym od dołu
+- Szybkie akcje: Prowadź do auta, Trasa do radia, Jazda na żywo, Udostępnij miejsce
+- Zakładka Auto: pulpit z pierścieniem paliwa i zasięgiem (liczby „nabijają się” przy zmianie)
+- Pływający pasek zakładek z przesuwanym wskaźnikiem, sprężyste wejścia kart, nowe nagłówki sekcji, karty z połyskiem
+- Pierwsza zakładka nazywa się teraz „Start”; motywy (jasny, ciemny, Liquid Glass) zostają – w nowym stylu
+
 ## 2.0-beta.3 · 2026-11-23
 Jazda na żywo przez link i ostatnia mila
 - Zakładka Auto → „Udostępnij jazdę na żywo”: do celu, na 1 h albo na 4 h – telefon od razu otwiera „Udostępnij” z linkiem. Kto go otworzy, widzi w przeglądarce auto na mapie, trasę, ile zostało i godzinę przyjazdu, bez instalowania aplikacji

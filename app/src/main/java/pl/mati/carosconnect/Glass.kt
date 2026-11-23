@@ -131,7 +131,20 @@ fun GlassBackdrop() {
  */
 fun Modifier.surface(shape: Shape, color: Color = C.Card, border: Color? = null, borderWidth: Dp = 1.dp, heavy: Boolean = false): Modifier =
     if (!C.isGlass) {
-        this.background(color, shape).then(if (border != null) Modifier.border(borderWidth, border, shape) else Modifier)
+        // wygląd 2.0: delikatny pionowy połysk materiału i jaśniejsza krawędź u góry (światło z góry)
+        val light = C.isLight
+        val fill = Brush.verticalGradient(listOf(androidx.compose.ui.graphics.lerp(color, Color.White, if (light) 0.35f else 0.045f), color))
+        this.background(fill, shape).then(
+            when {
+                border == null -> Modifier
+                border == C.Border -> Modifier.border(
+                    borderWidth,
+                    Brush.verticalGradient(listOf(androidx.compose.ui.graphics.lerp(border, Color.White, if (light) 0.55f else 0.16f), border)),
+                    shape,
+                )
+                else -> Modifier.border(borderWidth, border, shape)
+            },
+        )
     } else composed {
         val depth = LocalGlassDepth.current
         val light = C.isLight

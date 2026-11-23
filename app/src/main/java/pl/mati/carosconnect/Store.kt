@@ -73,6 +73,8 @@ object Store {
     }
     /** Wygląd: "auto" (jak telefon), "light", "dark". */
     val theme = MutableStateFlow("auto")
+    /** Ekran główny: "car" – auto 3D na pierwszym planie, "map" – mapa w tle z panelem od dołu. */
+    val layout = MutableStateFlow("car")
     /** Minimalny zasięg paliwa (km) – zapas przy planowaniu tankowania na trasie. */
     val minRange = MutableStateFlow(100)
     /** Notatka i zdjęcie do bieżącego miejsca parkowania. */
@@ -92,6 +94,7 @@ object Store {
         EventLog.importOld(parkLog.value)
         carName.value = p.getString("car_name", null)
         theme.value = p.getString("theme", "auto") ?: "auto"
+        layout.value = p.getString("layout", "car") ?: "car"
         minRange.value = p.getInt("min_range", 100)
         spotNote.value = p.getString("spot_note", "") ?: ""
         spotPhoto.value = p.getString("spot_photo", null)
@@ -145,6 +148,11 @@ object Store {
     fun setTheme(v: String) {
         theme.value = v
         sp?.edit()?.putString("theme", v)?.apply()
+    }
+
+    fun setLayout(v: String) {
+        layout.value = v
+        sp?.edit()?.putString("layout", v)?.apply()
     }
 
     fun setNote(text: String) {

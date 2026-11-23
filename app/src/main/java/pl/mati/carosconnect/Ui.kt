@@ -17,6 +17,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.slideInVertically
+import androidx.compose.material.icons.rounded.Home
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -329,6 +331,33 @@ fun ParkApp(perms: Perms, actions: Actions) {
                 Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
             }
         }
+        val layout by Store.layout.collectAsState()
+        val t0Home = layout == "car"
+        val tabItems = TAB_ITEMS
+        val onTab: (Int) -> Unit = { tab = it; trip = null; LogPage.close() }
+        if (layout == "map") {
+            // ekran „Mapa w tle”: mapa z autem pod spodem, zakładki w panelu wysuwanym od dołu
+            MapShell(perms, actions, tab, onTab) {
+                AnimatedContent(
+                    targetState = Triple(tab, trip, logOpen),
+                    transitionSpec = {
+                        (fadeIn(tween(250, delayMillis = 60)) + slideInVertically(tween(320, easing = FastOutSlowInEasing)) { h -> h / 10 }) togetherWith fadeOut(tween(140))
+                    },
+                    label = "sheetTab",
+                ) { (t, tr, lg) ->
+                    CompositionLocalProvider(LocalStagger provides remember { StaggerCounter() }) {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            if (lg) EventLogPage { LogPage.close() } else when (t) {
+                                0 -> ParkingTab(perms, actions, layout) { picker = true }
+                                1 -> CarTab(actions)
+                                2 -> TripsTab(tr) { trip = it }
+                                else -> SettingsTab(perms, actions, onPickCar = { picker = true }, onUnpair = { unpairAsk = true })
+                            }
+                        }
+                    }
+                }
+            }
+        } else
         Column(Modifier.fillMaxSize().then(if (glass) Modifier else Modifier.background(C.Bg))) {
             Box(Modifier.weight(1f).fillMaxWidth().nestedScroll(pull.nestedScrollConnection)) {
                 val scroll = remember(tab, trip, logOpen) { ScrollState(0) }
@@ -336,12 +365,15 @@ fun ParkApp(perms: Perms, actions: Actions) {
                     Modifier.fillMaxSize().statusBarsPadding().verticalScroll(scroll).padding(horizontal = 18.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    // nagłówek
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    // nagłówek: na ekranie Start (auto na pierwszym planie) jest w karcie auta
+                    if (!(t0Home && tab == 0 && !logOpen)) Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("CAR OS CONNECT", fontSize = 13.sp, color = C.Accent, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
-                            Text(pairing?.car ?: "Moje auto", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            pairing?.driver?.takeIf { it.isNotBlank() }?.let { Text("Cześć, $it", fontSize = 15.sp, color = C.Muted) }
+                            Text(pairing?.car ?: "Moje auto", fontSize = 13.sp, color = C.Accent, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            AnimatedContent(
+                                targetState = if (logOpen) "Dziennik" else tabItems[tab].second,
+                                transitionSpec = { (fadeIn(tween(220)) + slideInVertically(tween(260)) { it / 3 }) togetherWith fadeOut(tween(120)) },
+                                label = "title",
+                            ) { Text(it, fontSize = 32.sp, fontWeight = FontWeight.Bold, color = C.Text) }
                         }
                         StatusPill(driving, car)
                     }
@@ -365,7 +397,7 @@ fun ParkApp(perms: Perms, actions: Actions) {
                         CompositionLocalProvider(LocalStagger provides remember { StaggerCounter() }) {
                             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                                 if (lg) EventLogPage { LogPage.close() } else when (t) {
-                                    0 -> ParkingTab(perms, actions) { picker = true }
+                                    0 -> ParkingTab(perms, actions, layout) { picker = true }
                                     1 -> CarTab(actions)
                                     2 -> TripsTab(tr) { trip = it }
                                     else -> SettingsTab(perms, actions, onPickCar = { picker = true }, onUnpair = { unpairAsk = true })
@@ -382,7 +414,7 @@ fun ParkApp(perms: Perms, actions: Actions) {
                     contentColor = C.Accent,
                 )
             }
-            BottomBar(tab) { tab = it; trip = null; LogPage.close() }
+            BottomBar(tab, onTab)
         }
 
         if (picker) DevicePicker(actions, onDismiss = { picker = false })
@@ -407,56 +439,81 @@ fun ParkApp(perms: Perms, actions: Actions) {
     }
 }
 
+/** Zakładki: Start (auto / parking), Auto (stan, paliwo, serwis), Trasy, Ustawienia. */
+val TAB_ITEMS = listOf(
+    Icons.Rounded.Home to "Start",
+    Icons.Rounded.DirectionsCar to "Auto",
+    Icons.Rounded.Map to "Trasy",
+    Icons.Rounded.Settings to "Ustawienia",
+)
+
 @Composable
 private fun BottomBar(tab: Int, onTab: (Int) -> Unit) {
-    val items = listOf(
-        Icons.Rounded.LocalParking to "Parking",
-        Icons.Rounded.DirectionsCar to "Auto",
-        Icons.Rounded.Map to "Trasy",
-        Icons.Rounded.Settings to "Ustawienia",
+    // Glass: kapsuła z „kroplą wody” (LiquidTabBar.kt); inne motywy: pływająca kapsuła z przesuwanym wskaźnikiem
+    if (C.isGlass) LiquidTabBar(TAB_ITEMS, tab, onTab) else FloatingTabBar(TAB_ITEMS, tab, onTab)
+}
+
+/** Ekran „Mapa w tle”: mapa z autem na całym ekranie, zakładki w panelu wysuwanym od dołu. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MapShell(perms: Perms, actions: Actions, tab: Int, onTab: (Int) -> Unit, content: @Composable () -> Unit) {
+    val spot by Store.spot.collectAsState()
+    val visible = rememberVisible()
+    val me = rememberPhoneLocation(perms.loc && visible)
+    val scaffold = androidx.compose.material3.rememberBottomSheetScaffoldState(
+        bottomSheetState = androidx.compose.material3.rememberStandardBottomSheetState(
+            initialValue = androidx.compose.material3.SheetValue.PartiallyExpanded, skipHiddenState = true,
+        ),
     )
-    // Glass: kapsuła z „kroplą wody” przepływającą między zakładkami (LiquidTabBar.kt)
-    if (C.isGlass) { LiquidTabBar(items, tab, onTab); return }
-    val glass = false
-    val light = C.isLight
-    val barShape = RoundedCornerShape(34.dp)
-    // Glass: pływająca „kapsuła” jak pasek kart w iOS
-    Box(if (glass) Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 10.dp) else Modifier.fillMaxWidth()) {
-        Row(
-            if (glass) Modifier.fillMaxWidth().clip(barShape).surface(barShape).padding(5.dp)
-            else Modifier.fillMaxWidth().background(C.Card).navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp),
-        ) {
-            items.forEachIndexed { i, (icon, label) ->
-                val on = i == tab
-                val src = remember { MutableInteractionSource() }
-                val pill by animateColorAsState(if (on && !glass) C.Accent.copy(alpha = 0.16f) else Color.Transparent, tween(250), label = "pill")
-                val lens by animateColorAsState(
-                    if (on && glass) (if (light) Color.White.copy(alpha = 0.7f) else Color.White.copy(alpha = 0.17f)) else Color.Transparent,
-                    tween(300), label = "lens",
-                )
-                val tint by animateColorAsState(if (on) C.Accent else if (glass) C.Text2 else C.Muted, tween(250), label = "tint")
-                val padH by animateDpAsState(if (on) 20.dp else 12.dp, spring(dampingRatio = 0.6f, stiffness = 500f), label = "padH")
-                val iconScale by animateFloatAsState(if (on) 1.12f else 1f, spring(dampingRatio = 0.4f, stiffness = 450f), label = "iconScale")
+    // inna zakładka – panel w górę; Start – z powrotem do połowy (widać mapę)
+    LaunchedEffect(tab) {
+        try { if (tab == 0) scaffold.bottomSheetState.partialExpand() else scaffold.bottomSheetState.expand() } catch (_: Exception) {}
+    }
+    val peek = 360.dp
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().background(C.Bg)) {
+        val sheetH = maxHeight * 0.9f
+        androidx.compose.material3.BottomSheetScaffold(
+            scaffoldState = scaffold,
+            sheetPeekHeight = peek,
+            sheetShape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
+            sheetContainerColor = if (C.isGlass) C.Dialog else C.Bg,
+            sheetContentColor = C.Text,
+            sheetShadowElevation = 18.dp,
+            sheetTonalElevation = 0.dp,
+            sheetDragHandle = {
+                Box(Modifier.padding(top = 10.dp, bottom = 8.dp).size(42.dp, 5.dp).clip(RoundedCornerShape(3.dp)).background(C.Muted.copy(alpha = 0.45f)))
+            },
+            containerColor = C.Bg,
+            sheetContent = {
+                val scroll = remember(tab) { ScrollState(0) }
                 Column(
-                    Modifier.weight(1f).pressScale(src, 0.9f).clip(RoundedCornerShape(if (glass) 30.dp else 16.dp)).background(lens)
-                        .clickable(interactionSource = src, indication = null) { onTab(i) }.padding(vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                    Modifier.fillMaxWidth().height(sheetH).verticalScroll(scroll).padding(horizontal = 18.dp).padding(bottom = 112.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) { content() }
+            },
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                val s = spot
+                if (s != null) ParkMap(s, me, Modifier.fillMaxSize(), bottomInset = peek - 24.dp)
+                else Box(
+                    Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(C.Accent.copy(alpha = 0.16f), C.Bg))),
+                    contentAlignment = Alignment.TopCenter,
                 ) {
-                    Box(
-                        Modifier.clip(RoundedCornerShape(50)).background(pill).padding(horizontal = if (glass) 12.dp else padH, vertical = 4.dp),
-                    ) {
-                        Icon(icon, label, tint = tint, modifier = Modifier.size(24.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale })
+                    Column(Modifier.padding(top = 150.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        AnimatedLogo(64.dp)
+                        Text("Mapa pokaże auto po pierwszym parkowaniu", fontSize = 14.sp, color = C.Muted)
                     }
-                    Text(label, fontSize = 12.sp, color = tint, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
                 }
+                MapSearchPill(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp).fillMaxWidth())
             }
         }
+        Box(Modifier.align(Alignment.BottomCenter)) { BottomBar(tab, onTab) }
     }
 }
 
 /** Zakładka „Parking”: gdzie stoi auto, kompas, parkometr, pogoda przy aucie, historia. */
 @Composable
-private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
+private fun ParkingTab(perms: Perms, actions: Actions, layout: String, onPickCar: () -> Unit) {
     val ctx = LocalContext.current
     val spot by Store.spot.collectAsState()
     val inService by Store.driving.collectAsState()
@@ -472,6 +529,10 @@ private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
     val active = visible && spot != null
     val me = rememberPhoneLocation(perms.loc && active)
     val azimuth = rememberAzimuth(me, active)
+
+        // wygląd 2.0: auto 3D na pierwszym planie albo (mapa w tle) skrót w panelu
+        if (layout == "map") MapSheetHeader(perms, actions, spot, me, driving)
+        else HomeHero(perms, actions, spot, me, driving)
 
         if (!perms.allOk || car == null) SetupCard(perms, actions, car) { onPickCar() }
 
@@ -520,7 +581,8 @@ private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
                 )
             }
         } else {
-            ParkMap(s, me, Modifier.stagger().fillMaxWidth().height(300.dp).clip(RoundedCornerShape(24.dp)).border(1.dp, C.Border, RoundedCornerShape(24.dp)))
+            // mapa w tle – osobna karta z mapą zbędna
+            if (layout != "map") ParkMap(s, me, Modifier.stagger().fillMaxWidth().height(260.dp).clip(RoundedCornerShape(26.dp)).border(1.dp, C.Border, RoundedCornerShape(26.dp)))
             Card {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(Modifier.size(44.dp).clip(CircleShape).background(C.Accent), contentAlignment = Alignment.Center) {
@@ -540,11 +602,7 @@ private fun ParkingTab(perms: Perms, actions: Actions, onPickCar: () -> Unit) {
             }
             NotePhotoCard()
             FinderCard(s, me, azimuth)
-            // nasza nawigacja piesza (Mapy Google – przycisk w nawigacji)
-            PrimaryButton("Prowadź do auta", Icons.Rounded.DirectionsWalk) {
-                if (!perms.loc) actions.requestLoc()
-                WalkNav.start()
-            }
+            // „Prowadź do auta” – w szybkich akcjach na górze
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             SecondaryButton("Zapisz tutaj", Icons.Rounded.LocationOn, Modifier.weight(1f)) {
@@ -792,7 +850,7 @@ private fun Step(n: Int, text: String) {
 }
 
 @Composable
-private fun StatusPill(driving: Boolean, car: String?) {
+internal fun StatusPill(driving: Boolean, car: String?) {
     val (txt, col) = when {
         car == null -> "Nie skonfigurowano" to C.Orange
         driving -> "W trasie" to C.Green
@@ -1077,6 +1135,17 @@ fun LiveShareCard() {
             )
         }
     }
+    if (pick) LiveSharePicker { pick = false }
+}
+
+/** Okno wyboru: jazda na żywo do celu / 1 h / 4 h – potem od razu „Udostępnij” z linkiem. */
+@Composable
+fun LiveSharePicker(onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    // okno znika po wyborze – praca (klucz, wysyłka, „Udostępnij”) nie może zginąć razem z nim
+    val scope = remember { kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main) }
+    var pick by remember { mutableStateOf(true) }
+    LaunchedEffect(pick) { if (!pick) onDismiss() }
     if (pick) AlertDialog(
         onDismissRequest = { pick = false },
         containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
@@ -1247,12 +1316,15 @@ fun WhatsNewDialog() {
 fun SettingItem(icon: ImageVector, title: String, sub: String, highlight: Boolean = false, onClick: () -> Unit) {
     val src = remember { MutableInteractionSource() }
     Row(
-        Modifier.stagger().pressScale(src, 0.98f).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if (highlight) C.Accent.copy(alpha = 0.14f) else C.Card)
+        Modifier.stagger().pressScale(src, 0.98f).fillMaxWidth().clip(RoundedCornerShape(20.dp))
+            .then(if (highlight) Modifier.background(C.Accent.copy(alpha = 0.14f)) else Modifier.surface(RoundedCornerShape(20.dp), C.Card, border = C.Border))
             .clickable(interactionSource = src, indication = LocalIndication.current, onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Icon(icon, null, tint = C.Accent, modifier = Modifier.size(24.dp))
+        Box(Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)).background(C.Accent.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = C.Accent, modifier = Modifier.size(22.dp))
+        }
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
             Text(sub, fontSize = 13.sp, color = C.Muted)
@@ -1264,22 +1336,26 @@ fun SettingItem(icon: ImageVector, title: String, sub: String, highlight: Boolea
 @Composable
 fun Card(border: Color = C.Border, content: @Composable () -> Unit) {
     Column(
-        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(22.dp)).surface(RoundedCornerShape(22.dp), C.Card, border = border).padding(18.dp),
+        Modifier.stagger().fillMaxWidth().clip(RoundedCornerShape(24.dp)).surface(RoundedCornerShape(24.dp), C.Card, border = border).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) { androidx.compose.runtime.CompositionLocalProvider(LocalGlassDepth provides LocalGlassDepth.current + 1) { content() } }
 }
 
 @Composable
 fun Label(text: String, modifier: Modifier = Modifier) {
-    Text(text.uppercase(), fontSize = 13.sp, letterSpacing = 1.5.sp, color = C.Muted, fontWeight = FontWeight.SemiBold, modifier = modifier.stagger())
+    // wygląd 2.0: nagłówek sekcji jak w iOS / Material 3 – zwykłe litery, większy, wyraźny
+    Text(text, fontSize = 20.sp, color = C.Text, fontWeight = FontWeight.Bold, modifier = modifier.stagger().padding(top = 4.dp, start = 2.dp))
 }
 
 @Composable
 fun PrimaryButton(text: String, icon: ImageVector, onClick: () -> Unit) {
     val src = remember { MutableInteractionSource() }
     Row(
-        Modifier.stagger().pressScale(src).fillMaxWidth().height(60.dp).clip(RoundedCornerShape(if (C.isGlass) 30.dp else 18.dp))
-            .then(if (C.isGlass) Modifier.surface(RoundedCornerShape(30.dp), C.Raised).background(C.Accent.copy(alpha = 0.82f)) else Modifier.background(C.Accent))
+        Modifier.stagger().pressScale(src).fillMaxWidth().height(58.dp).clip(RoundedCornerShape(if (C.isGlass) 29.dp else 20.dp))
+            .then(
+                if (C.isGlass) Modifier.surface(RoundedCornerShape(29.dp), C.Raised).background(C.Accent.copy(alpha = 0.82f))
+                else Modifier.background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(C.Accent, androidx.compose.ui.graphics.lerp(C.Accent, Color.White, 0.22f)))),
+            )
             .clickable(interactionSource = src, indication = LocalIndication.current, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,

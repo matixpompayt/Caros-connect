@@ -46,13 +46,14 @@ fun Modifier.stagger(): Modifier = composed {
     val idx = remember { counter?.let { it.next++ } ?: 0 }
     val p = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        delay(idx.coerceAtMost(10) * 45L)
-        p.animateTo(1f, tween(400, easing = FastOutSlowInEasing))
+        delay(idx.coerceAtMost(10) * 40L)
+        // wygląd 2.0: sprężyście – karta lekko „dojeżdża” na miejsce
+        p.animateTo(1f, spring(dampingRatio = 0.78f, stiffness = 210f))
     }
     Modifier.graphicsLayer {
-        alpha = p.value
-        translationY = (1f - p.value) * 22.dp.toPx()
-        val s = 0.97f + 0.03f * p.value
+        alpha = p.value.coerceIn(0f, 1f)
+        translationY = (1f - p.value) * 30.dp.toPx()
+        val s = 0.95f + 0.05f * p.value
         scaleX = s
         scaleY = s
     }

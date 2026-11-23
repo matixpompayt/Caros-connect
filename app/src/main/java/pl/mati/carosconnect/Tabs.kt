@@ -161,6 +161,8 @@ fun CarTab(actions: Actions) {
         var editOdo by remember { mutableStateOf(false) }
         var editItem by remember { mutableStateOf<CarData.SvcItem?>(null) }
         val editable = s.items.isNotEmpty()
+        // wygląd 2.0: pulpit – pierścień paliwa i zasięg
+        if (s.fuel != null) CarDashboard(s)
         Card {
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(enabled = editable) { editOdo = true },
@@ -305,7 +307,7 @@ private fun ServiceRow(s: CarData.Service, onClick: (() -> Unit)?) {
 
 /** Wyszukiwarka celu → nawigacja w aucie albo ulubione w aucie. */
 @Composable
-private fun SendPlaceCard() {
+internal fun SendPlaceCard() {
     val ctx = LocalContext.current
     val focus = LocalFocusManager.current
     val scope = rememberCoroutineScope()
@@ -1445,6 +1447,7 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
     }
 
     Label("Wygląd", Modifier.padding(top = 6.dp))
+    LayoutChooser()
     ThemeChooser()
     LookSyncSection()
     run {
