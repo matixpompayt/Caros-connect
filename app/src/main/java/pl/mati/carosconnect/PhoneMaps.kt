@@ -14,11 +14,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.MyLocation
+import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -288,7 +290,15 @@ fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier, l
 fun WalkMap(
     s: Store.Spot, me: android.location.Location?, heading: Float?, route: List<LatLng>, gaps: List<List<LatLng>>,
     follow: Boolean, onUserPan: () -> Unit, modifier: Modifier, toDest: Boolean = false,
+    /** Ile dołu zasłania panel – Twoja pozycja zostaje nad nim. */
+    bottomInset: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
+    if (androidx.compose.ui.platform.LocalInspectionMode.current) {
+        // zrzuty ekranu: szkic zamiast MapLibre
+        val start = me?.let { LatLng(it.latitude, it.longitude) }
+        RoutePlanSketch(start, LatLng(s.lat, s.lon), emptyList(), if (route.size >= 2) RoutePreview.Result(route, 0.0, 0.0, null, null, emptyList(), null, null, null, 0L) else null, modifier, 150.dp, bottomInset)
+        return
+    }
     val ctx = LocalContext.current
     val accent = C.Accent.toArgb()
     val pan by androidx.compose.runtime.rememberUpdatedState(onUserPan)
@@ -418,12 +428,12 @@ fun WalkMap(
     }
     // kamera za Tobą: pozycja + kierunek (co 6°, żeby nie drgała), blisko i mocno pochylona
     val hdgStep = heading?.let { (it / 6f).roundToInt() }
-    LaunchedEffect(me?.latitude, me?.longitude, hdgStep, follow, navZoom, h.ready) {
+    LaunchedEffect(me?.latitude, me?.longitude, hdgStep, follow, navZoom, h.ready, bottomInset) {
         if (!h.ready || !follow) return@LaunchedEffect
         val l = me ?: return@LaunchedEffect
         val cam = CameraPosition.Builder().target(LatLng(l.latitude, l.longitude)).zoom(navZoom).tilt(60.0)
             .bearing((heading ?: h.map?.cameraPosition?.bearing?.toFloat() ?: 0f).toDouble())
-            .padding(0.0, 260.0 * h.density, 0.0, 0.0)
+            .padding(0.0, (if (bottomInset > 0.dp) 220.0 else 260.0) * h.density, 0.0, bottomInset.value * h.density)
             .build()
         h.map?.easeCamera(CameraUpdateFactory.newCameraPosition(cam), 700)
     }
@@ -982,4 +992,123 @@ private fun destPin(ctx: Context): android.graphics.Bitmap {
     p.style = android.graphics.Paint.Style.FILL
     c.drawCircle(cx, cy, r * 0.36f, p)
     return b
+}
+
+// ---------- wskazywanie punktu (adres domu / pracy) ----------
+
+/**
+ * Mapa do wskazania miejsca: pinezka stoi na środku widocznej części (między paskiem na górze
+ * a panelem), przesuwasz mapę pod nią. Numery domów widać – łatwo trafić w budynek.
+ */
+@Composable
+fun PickPointMap(
+    start: LatLng, modifier: Modifier,
+    /** Przesuń mapę do punktu (druga wartość – licznik, żeby ten sam punkt dało się wybrać ponownie). */
+    moveTo: Pair<LatLng, Int>?,
+    padTop: androidx.compose.ui.unit.Dp, padBottom: androidx.compose.ui.unit.Dp,
+    /** Zapisany teraz adres – mała kropka w kolorze CAR OS. */
+    saved: LatLng?,
+    /** Twoja pozycja – niebieska kropka. */
+    me: LatLng?,
+    onMoving: (Boolean) -> Unit,
+    onIdle: (LatLng) -> Unit,
+) {
+    val still = androidx.compose.ui.platform.LocalInspectionMode.current
+    val moving = remember { mutableStateOf(false) }
+    Box(modifier) {
+        if (still) {
+            val grid = C.Border
+            androidx.compose.foundation.Canvas(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF2A1840), Color(0xFF1B1030))))) {
+                for (i in -6..14) {
+                    val x = size.width * i / 8f
+                    drawLine(grid.copy(alpha = 0.35f), androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x + size.height * 0.4f, size.height), 6f)
+                }
+                for (i in 0..10) {
+                    val y = size.height * i / 10f
+                    drawLine(Color(0xFFB45AD8).copy(alpha = 0.5f), androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y - size.width * 0.25f), 10f)
+                }
+            }
+            LaunchedEffect(start) { onIdle(start) }
+        } else {
+            PickPointMapView(start, moveTo, padTop, padBottom, saved, me, { moving.value = it; onMoving(it) }, onIdle)
+        }
+        // pinezka: unosi się, gdy mapa jedzie
+        val lift by androidx.compose.animation.core.animateDpAsState(if (moving.value) 14.dp else 0.dp, label = "pinLift")
+        Box(Modifier.fillMaxSize().padding(top = padTop, bottom = padBottom)) {
+            Box(
+                Modifier.align(Alignment.Center).size(width = 14.dp, height = 6.dp).clip(CircleShape)
+                    .background(Color.Black.copy(alpha = if (moving.value) 0.25f else 0.45f)),
+            )
+            androidx.compose.material3.Icon(
+                Icons.Rounded.Place, null, tint = C.Accent,
+                modifier = Modifier.align(Alignment.Center).offset(y = -(25.dp + lift)).size(54.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PickPointMapView(
+    start: LatLng, moveTo: Pair<LatLng, Int>?, padTop: androidx.compose.ui.unit.Dp, padBottom: androidx.compose.ui.unit.Dp,
+    saved: LatLng?, me: LatLng?, onMoving: (Boolean) -> Unit, onIdle: (LatLng) -> Unit,
+) {
+    val ctx = LocalContext.current
+    val cbMove by androidx.compose.runtime.rememberUpdatedState(onMoving)
+    val cbIdle by androidx.compose.runtime.rememberUpdatedState(onIdle)
+    val h = remember {
+        MapHolder(ctx) { m, st ->
+            st.addSource(GeoJsonSource("caros-pick-saved"))
+            st.addLayer(
+                CircleLayer("caros-pick-saved-dot", "caros-pick-saved").withProperties(
+                    PropertyFactory.circleRadius(7f),
+                    PropertyFactory.circleColor(android.graphics.Color.parseColor("#2FD3F0")),
+                    PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE),
+                    PropertyFactory.circleStrokeWidth(2.5f),
+                ),
+            )
+            st.addSource(GeoJsonSource("caros-pick-me"))
+            st.addLayer(
+                CircleLayer("caros-pick-me-dot", "caros-pick-me").withProperties(
+                    PropertyFactory.circleRadius(7f),
+                    PropertyFactory.circleColor(android.graphics.Color.parseColor("#4A8BFF")),
+                    PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE),
+                    PropertyFactory.circleStrokeWidth(2.5f),
+                ),
+            )
+            m.uiSettings.isRotateGesturesEnabled = false
+            m.uiSettings.isTiltGesturesEnabled = false
+            m.cameraPosition = CameraPosition.Builder().target(start).zoom(17.0).tilt(0.0).build()
+        }
+    }
+    rememberMapLifecycle(h)
+    LaunchedEffect(h.ready) {
+        if (!h.ready) return@LaunchedEffect
+        val m = h.map ?: return@LaunchedEffect
+        m.addOnCameraMoveStartedListener { cbMove(true) }
+        m.addOnCameraIdleListener {
+            cbMove(false)
+            m.cameraPosition.target?.let { cbIdle(it) }
+        }
+        m.cameraPosition.target?.let { cbIdle(it) }
+    }
+    LaunchedEffect(h.ready, padTop, padBottom) {
+        if (!h.ready) return@LaunchedEffect
+        h.map?.setPadding(0, (padTop.value * h.density).toInt(), 0, (padBottom.value * h.density).toInt())
+    }
+    LaunchedEffect(h.ready, moveTo) {
+        if (!h.ready) return@LaunchedEffect
+        val t = moveTo ?: return@LaunchedEffect
+        h.map?.animateCamera(CameraUpdateFactory.newLatLngZoom(t.first, 17.5), 700)
+    }
+    LaunchedEffect(h.ready, saved, me) {
+        if (!h.ready) return@LaunchedEffect
+        val st = h.style ?: return@LaunchedEffect
+        val none = FeatureCollection.fromFeatures(emptyList())
+        st.getSourceAs<GeoJsonSource>("caros-pick-saved")?.setGeoJson(saved?.let { FeatureCollection.fromFeatures(listOf(Feature.fromGeometry(point(it.latitude, it.longitude)))) } ?: none)
+        st.getSourceAs<GeoJsonSource>("caros-pick-me")?.setGeoJson(me?.let { FeatureCollection.fromFeatures(listOf(Feature.fromGeometry(point(it.latitude, it.longitude)))) } ?: none)
+    }
+    Box(Modifier.fillMaxSize()) {
+        androidx.compose.runtime.key(h) { AndroidView(factory = { h.view }, modifier = Modifier.fillMaxSize()) }
+        HouseNumbers(h)
+    }
 }

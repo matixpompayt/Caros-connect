@@ -450,33 +450,14 @@ private fun FuelSection(s: CarData.Status) {
 private fun TankDialog(cur: Int, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    var v by remember { mutableStateOf(cur.toString()) }
-    val n = v.toIntOrNull()
-    val ok = n != null && n in 20..150
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
-        title = { Text("Pojemność baku", color = C.Text) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                NumField("Litry", v, { v = it.filter(Char::isDigit).take(3) }, "np. 60")
-                Text("Touran 2.0 TDI ma bak 60 l. Od pojemności zależy zasięg i ile paliwa zostało.", fontSize = 13.sp, color = C.Muted)
-            }
-        },
-        confirmButton = {
-            TextButton(enabled = ok, onClick = {
-                if (!CarData.carSupports(pl.mati.caros.core.Proto.Cmd.FUEL_TANK)) {
-                    Toast.makeText(ctx, "CAR OS w aucie nie przyjmie jeszcze pojemności baku z telefonu – zaktualizuj CAR OS albo ustaw w radiu (Tankowania)", Toast.LENGTH_LONG).show()
-                    onDismiss()
-                    return@TextButton
-                }
-                CarData.setTankLocal(n!!)
-                scope.launch { sendSvc(ctx, JSONObject().put("type", "fuel_tank").put("l", n)) }
-                onDismiss()
-            }) { Text("Zapisz") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Anuluj") } },
-    )
+    TankSheet(cur, onDismiss) { n ->
+        if (!CarData.carSupports(pl.mati.caros.core.Proto.Cmd.FUEL_TANK)) {
+            Toast.makeText(ctx, "CAR OS w aucie nie przyjmie jeszcze pojemności baku z telefonu – zaktualizuj CAR OS albo ustaw w radiu (Tankowania)", Toast.LENGTH_LONG).show()
+            return@TankSheet
+        }
+        CarData.setTankLocal(n)
+        scope.launch { sendSvc(ctx, JSONObject().put("type", "fuel_tank").put("l", n)) }
+    }
 }
 
 @Composable
@@ -569,146 +550,6 @@ private fun HomeWorkRow(work: Boolean, a: CarData.Addr, onEdit: () -> Unit) {
     }
 }
 
-/** Zmiana adresu domu / pracy: wyszukiwarka, obecna lokalizacja telefonu albo usunięcie. */
-@Composable
-private fun PlaceEditDialog(work: Boolean, current: CarData.Addr, onDismiss: () -> Unit) {
-    val ctx = LocalContext.current
-    val focus = LocalFocusManager.current
-    val scope = rememberCoroutineScope()
-    var q by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf<String?>(null) }
-    var results by remember { mutableStateOf<List<CarData.Place>>(emptyList()) }
-
-    fun save(a: CarData.Addr) {
-        val pairing = Store.pairing.value
-        if (pairing == null) {
-            Toast.makeText(ctx, "Najpierw połącz z CAR OS kodem QR", Toast.LENGTH_LONG).show()
-            return
-        }
-        busy = "Zapisuję…"
-        scope.launch {
-            val item = try {
-                Outbox.sendAsync(
-                    ctx,
-                    JSONObject().put("type", "place_set").put("slot", if (work) "work" else "home")
-                        .put("a", a.address).put("lat", a.lat ?: JSONObject.NULL).put("lon", a.lon ?: JSONObject.NULL),
-                    (if (work) "Adres pracy" else "Adres domu") + if (a.isSet) ": ${a.address}" else " – usunięcie",
-                )
-            } catch (_: Exception) {
-                null
-            }
-            busy = null
-            if (item != null) {
-                CarData.setPlaceLocal(work, a)
-                Toast.makeText(
-                    ctx,
-                    Outbox.sentText(item, if (a.isSet) "Zapisano – CAR OS w aucie zmieni adres, gdy będzie online" else "Usunięto – CAR OS zaktualizuje się, gdy będzie online"),
-                    Toast.LENGTH_LONG,
-                ).show()
-                onDismiss()
-            } else {
-                Toast.makeText(ctx, "Nie udało się wysłać – sprawdź internet", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
-    fun search() {
-        if (q.isBlank()) return
-        focus.clearFocus()
-        busy = "Szukam…"
-        scope.launch {
-            results = withContext(Dispatchers.IO) { try { Places.search(q, Locator.lastKnown(ctx)) } catch (_: Exception) { emptyList() } }
-            busy = null
-            if (results.isEmpty()) Toast.makeText(ctx, "Nic nie znaleziono", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    fun pick(r: CarData.Place) {
-        busy = "Zapisuję…"
-        scope.launch {
-            // nazwa miejsca (miejscowość, ulica, firma) albo – dla samego numeru domu – czytelny adres
-            val text = if (r.name.any { it.isLetter() }) {
-                listOf(r.name, r.detail.split(", ").firstOrNull { it.isNotBlank() && it != r.name }.orEmpty())
-                    .filter { it.isNotBlank() }.joinToString(", ")
-            } else {
-                withContext(Dispatchers.IO) { try { Places.reverse(r.lat, r.lon) } catch (_: Exception) { null } }
-                    ?: listOf(r.name, r.detail).filter { it.isNotBlank() }.joinToString(", ")
-            }
-            save(CarData.Addr(text.take(100), r.lat, r.lon))
-        }
-    }
-
-    fun here() {
-        busy = "Ustalam lokalizację…"
-        scope.launch {
-            val loc = withContext(Dispatchers.IO) { try { Locator.freshFix(ctx, 20) } catch (_: Exception) { null } }
-            if (loc == null) {
-                busy = null
-                Toast.makeText(ctx, "Brak lokalizacji – włącz GPS i zezwól aplikacji na lokalizację", Toast.LENGTH_LONG).show()
-                return@launch
-            }
-            val text = withContext(Dispatchers.IO) { try { Places.reverse(loc.latitude, loc.longitude) } catch (_: Exception) { null } }
-                ?: String.format(Locale.US, "%.5f, %.5f", loc.latitude, loc.longitude)
-            save(CarData.Addr(text.take(100), loc.latitude, loc.longitude))
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = { if (busy == null) onDismiss() },
-        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
-        title = { Text(if (work) "Adres pracy" else "Adres domu", color = C.Text) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (current.isSet) Text("Teraz: ${current.address}", fontSize = 14.sp, color = C.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = q, onValueChange = { q = it },
-                        placeholder = { Text("Adres lub miejscowość") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(14.dp),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { search() }),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = C.Accent, unfocusedBorderColor = C.Border,
-                            focusedTextColor = C.Text, unfocusedTextColor = C.Text, cursorColor = C.Accent,
-                        ),
-                    )
-                    Box(
-                        Modifier.size(54.dp).clip(RoundedCornerShape(14.dp)).background(C.Accent).clickable(enabled = busy == null) { search() },
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Rounded.Search, "Szukaj", tint = C.Bg, modifier = Modifier.size(26.dp)) }
-                }
-                results.take(6).forEach { r ->
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(enabled = busy == null) { pick(r) }.padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Icon(if (work) Icons.Rounded.Work else Icons.Rounded.Home, null, tint = C.Accent, modifier = Modifier.size(20.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(r.name, fontSize = 15.sp, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (r.detail.isNotBlank()) Text(r.detail, fontSize = 12.sp, color = C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                }
-                SecondaryButton("Moja obecna lokalizacja", Icons.Rounded.MyLocation, Modifier.fillMaxWidth()) {
-                    if (busy == null) here()
-                }
-                busy?.let { b ->
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
-                        Text(b, fontSize = 14.sp, color = C.Muted)
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss, enabled = busy == null) { Text("Anuluj") } },
-        dismissButton = {
-            if (current.isSet) TextButton(onClick = { if (busy == null) save(CarData.Addr("", null, null)) }) { Text("Usuń adres", color = Color(0xFFFF5A5F)) }
-        },
-    )
-}
 
 @Composable
 private fun FavRow(f: CarData.Place) {
@@ -1212,7 +1053,7 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
             (evs.firstOrNull()?.let { " · ostatnio " + SimpleDateFormat("d.MM HH:mm", PL).format(Date(it.time)) } ?: ""),
     ) { LogPage.show() }
     SettingItem(Icons.Rounded.NewReleases, "Co nowego", "Lista zmian w kolejnych wersjach") { changelog = true }
-    if (changelog) ChangelogDialog { changelog = false }
+    if (changelog) ChangelogSheet { changelog = false }
     UpdateItem()
     Text("CAR OS Connect ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = C.Muted, modifier = Modifier.padding(top = 4.dp))
 

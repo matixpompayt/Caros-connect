@@ -23,6 +23,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import kotlinx.coroutines.launch
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -539,114 +545,252 @@ fun WalkNavScreen(perms: Perms, actions: Actions) {
     // kierunek: przy chodzeniu kurs z GPS, na stojąco kompas
     val heading = me?.takeIf { it.hasBearing() && it.hasSpeed() && it.speed > 1.2f }?.bearing ?: azimuth
 
-    Box(Modifier.fillMaxSize().background(C.Bg)) {
-        // linia trasy: od Ciebie do auta (przebyta część znika); przerywana – dojście do trasy i od trasy do auta
-        val line = if (r != null && snap != null) WalkNav.remainingLine(r, snap) else r?.pts.orEmpty()
-        val gaps = ArrayList<List<LatLng>>()
-        if (r != null && line.isNotEmpty()) {
-            val e = r.pts.last()
-            if (WalkNav.dist(e.latitude, e.longitude, s.lat, s.lon) > 3) gaps += listOf(e, LatLng(s.lat, s.lon))
-            if (me != null && snap != null && snap.off > 8) gaps += listOf(LatLng(me.latitude, me.longitude), line.first())
-        } else if (me != null && !arrived) {
-            gaps += listOf(LatLng(me.latitude, me.longitude), LatLng(s.lat, s.lon))
-        }
-        WalkMap(s, me, heading, line, gaps, follow, { follow = false }, Modifier.fillMaxSize(), toDest)
+    // linia trasy: od Ciebie do auta (przebyta część znika); przerywana – dojście do trasy i od trasy do auta
+    val line = if (r != null && snap != null) WalkNav.remainingLine(r, snap) else r?.pts.orEmpty()
+    val gaps = ArrayList<List<LatLng>>()
+    if (r != null && line.isNotEmpty()) {
+        val e = r.pts.last()
+        if (WalkNav.dist(e.latitude, e.longitude, s.lat, s.lon) > 3) gaps += listOf(e, LatLng(s.lat, s.lon))
+        if (me != null && snap != null && snap.off > 8) gaps += listOf(LatLng(me.latitude, me.longitude), line.first())
+    } else if (me != null && !arrived) {
+        gaps += listOf(LatLng(me.latitude, me.longitude), LatLng(s.lat, s.lon))
+    }
+    val err by WalkNav.error.collectAsState()
+    val src by WalkNav.source.collectAsState()
+    WalkNavUi(
+        s, toDest, me, heading, r, line, gaps, follow, { follow = it }, arrived, direct, remaining, next, toNext,
+        routingFirst = routing && route == null, noRoute = failed || route == null,
+        error = if (failed && route == null) err else "", along = snap?.along, source = if (route != null) src else "",
+        voice = voice, onVoice = { WalkNav.setVoice(ctx, !voice) },
+    )
+}
 
-        // górna karta: manewr
-        Column(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(12.dp).fillMaxWidth()) {
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(C.Accent).padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                val near = direct != null && direct < 40
-                when {
-                    arrived || near || next?.type == "arrive" ->
-                        Icon(if (toDest) Icons.Rounded.Flag else Icons.Rounded.DirectionsCar, null, tint = C.Bg, modifier = Modifier.size(46.dp))
-                    next != null -> Icon(Icons.Rounded.Navigation, null, tint = C.Bg, modifier = Modifier.size(46.dp).rotate(WalkNav.arrow(next)))
-                    me != null && heading != null -> Icon(
-                        Icons.Rounded.Navigation, null, tint = C.Bg,
-                        modifier = Modifier.size(46.dp).rotate(WalkNav.bearing(me.latitude, me.longitude, s.lat, s.lon) - heading),
-                    )
-                    else -> Icon(Icons.Rounded.MyLocation, null, tint = C.Bg, modifier = Modifier.size(42.dp))
-                }
-                Column(Modifier.weight(1f)) {
-                    val (big, small) = when {
-                        me == null -> "Szukam GPS…" to "Wyjdź na zewnątrz, jeśli długo nie łapie"
-                        arrived -> (if (toDest) "Jesteś na miejscu" else "Jesteś przy aucie") to (s.address ?: "")
-                        near -> (if (toDest) "Cel jest blisko" else "Auto jest blisko") to "${WalkNav.distText(direct!!)} – rozejrzyj się"
-                        routing && route == null -> "Wyznaczam trasę…" to WalkNav.distText(direct ?: 0.0) + " w linii prostej"
-                        next != null && toNext != null -> WalkNav.distText(toNext) to WalkNav.text(next)
-                        failed || route == null -> WalkNav.distText(direct ?: 0.0) to "Nie mam trasy pieszej – ponawiam. Idź za strzałką"
-                        else -> WalkNav.distText(remaining ?: 0.0) to "Idź dalej"
-                    }
-                    Text(big, fontSize = 30.sp, fontWeight = FontWeight.Bold, color = C.Bg, maxLines = 1)
-                    if (small.isNotBlank()) Text(small, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = C.Bg.copy(alpha = 0.85f), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                }
-            }
-            val err by WalkNav.error.collectAsState()
-            if (failed && route == null && err.isNotBlank()) Text(
-                err, fontSize = 12.sp, color = C.Text, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(10.dp)).background(C.Dialog).padding(horizontal = 10.dp, vertical = 6.dp),
-            )
+/**
+ * Wygląd prowadzenia jak ekran Start: karta manewru na górze, przyciski na mapie nad panelem,
+ * panel do przeciągania (czas i odległość, auto, notatka i zdjęcie miejsca, skręty po kolei),
+ * na dole duży przycisk „Zakończ” w kapsule.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+internal fun WalkNavUi(
+    s: Store.Spot, toDest: Boolean, me: Location?, heading: Float?, r: WalkNav.Route?,
+    line: List<LatLng>, gaps: List<List<LatLng>>, follow: Boolean, onFollow: (Boolean) -> Unit,
+    arrived: Boolean, direct: Double?, remaining: Double?, next: WalkNav.Step?, toNext: Double?,
+    routingFirst: Boolean, noRoute: Boolean, error: String, along: Double?, source: String,
+    voice: Boolean, onVoice: () -> Unit,
+) {
+    val ctx = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val what = if (toDest) "do celu" else "do auta"
+    val note by Store.spotNote.collectAsState()
+    val photoPath by Store.spotPhoto.collectAsState()
+    val carName by Store.carName.collectAsState()
+    val photo = remember(photoPath, toDest) {
+        if (toDest) null else photoPath?.let { p ->
+            try {
+                val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeFile(p, o)
+                var sample = 1
+                while (o.outWidth / sample > 900) sample *= 2
+                android.graphics.BitmapFactory.decodeFile(p, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
+            } catch (_: Exception) { null }
         }
+    }
+    val scaffold = androidx.compose.material3.rememberBottomSheetScaffoldState(
+        bottomSheetState = androidx.compose.material3.rememberStandardBottomSheetState(
+            initialValue = androidx.compose.material3.SheetValue.PartiallyExpanded, skipHiddenState = false,
+        ),
+    )
+    val sheet = scaffold.bottomSheetState
+    val hidden = sheet.targetValue == androidx.compose.material3.SheetValue.Hidden
+    val rem = remaining
+    val min = rem?.let { (it / 1.3 / 60).roundToInt().coerceAtLeast(1) }
+    val at = rem?.let { java.text.SimpleDateFormat("HH:mm", Locale("pl")).format(java.util.Date(System.currentTimeMillis() + (it / 1.3 * 1000).toLong())) }
 
-        // przyciski po prawej
-        Column(Modifier.align(Alignment.CenterEnd).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            NavRoundBtn({ WalkNav.setVoice(ctx, !voice) }) {
-                Icon(if (voice) Icons.Rounded.VolumeUp else Icons.Rounded.VolumeOff, "Głos", tint = if (voice) C.Accent else C.Text, modifier = Modifier.size(24.dp))
-            }
-            NavRoundBtn({ WalkNav.googleMaps(ctx, s) }) { Icon(Icons.Rounded.Map, "Mapy Google", tint = C.Text, modifier = Modifier.size(24.dp)) }
-        }
-        AnimatedVisibility(!follow, Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 14.dp, bottom = 128.dp), enter = fadeIn(), exit = fadeOut()) {
-            Row(
-                Modifier.clip(RoundedCornerShape(22.dp)).background(C.Dialog).clickable { follow = true }.padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(Icons.Rounded.Navigation, null, tint = C.Accent, modifier = Modifier.size(20.dp))
-                Text("Wyśrodkuj", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
-            }
-        }
-
-        // dolna karta: ile zostało, kiedy będziesz, zakończ
-        AnimatedVisibility(
-            true, Modifier.align(Alignment.BottomCenter),
-            enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut(),
-        ) {
-            Row(
-                Modifier.navigationBarsPadding().padding(12.dp).fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(C.Dialog)
-                    .padding(start = 20.dp, end = 10.dp, top = 14.dp, bottom = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    val rem = remaining
-                    if (arrived) {
-                        Text("Na miejscu", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Green)
-                        Text(if (toDest) s.address ?: "Cel" else Store.carName.value ?: "Twoje auto", fontSize = 15.sp, color = C.Muted)
-                    } else if (rem != null) {
-                        val min = (rem / 1.3 / 60).roundToInt().coerceAtLeast(1)
-                        val at = java.text.SimpleDateFormat("HH:mm", Locale("pl")).format(java.util.Date(System.currentTimeMillis() + (rem / 1.3 * 1000).toLong()))
-                        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("$min min", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = C.Green)
-                            Text(WalkNav.distText(rem), fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = C.Text, modifier = Modifier.padding(bottom = 3.dp))
-                        }
-                        val src by WalkNav.source.collectAsState()
-                        Text("Na miejscu o $at · " + (if (route != null && src.isNotBlank()) src else "pieszo"), fontSize = 15.sp, color = C.Muted)
-                    } else {
-                        Text("Prowadzę $what", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = C.Text)
-                        Text(s.address ?: s.coords, fontSize = 14.sp, color = C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-                Box(
-                    Modifier.clip(RoundedCornerShape(20.dp)).background(if (arrived) C.Accent else NAV_RED.copy(alpha = 0.16f))
-                        .clickable { WalkNav.stop() }.padding(horizontal = 18.dp, vertical = 14.dp),
-                    contentAlignment = Alignment.Center,
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().background(C.Bg)) {
+        val peek = minOf(290.dp, maxHeight * 0.4f)
+        val mapBottom = if (hidden) 140.dp else peek
+        androidx.compose.material3.BottomSheetScaffold(
+            scaffoldState = scaffold,
+            sheetPeekHeight = peek,
+            sheetShape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
+            sheetContainerColor = if (C.isGlass) C.Dialog else C.Bg,
+            sheetContentColor = C.Text,
+            sheetShadowElevation = 18.dp,
+            sheetTonalElevation = 0.dp,
+            sheetDragHandle = {
+                Box(Modifier.padding(top = 10.dp, bottom = 8.dp).size(42.dp, 5.dp).clip(RoundedCornerShape(3.dp)).background(C.Muted.copy(alpha = 0.45f)))
+            },
+            containerColor = C.Bg,
+            sheetContent = {
+                Column(
+                    Modifier.fillMaxWidth().height(maxHeight * 0.85f).verticalScroll(androidx.compose.foundation.rememberScrollState())
+                        .padding(horizontal = 18.dp).padding(bottom = 110.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(Icons.Rounded.Close, null, tint = if (arrived) C.Bg else NAV_RED, modifier = Modifier.size(20.dp))
-                        Text(if (arrived) "Gotowe" else "Zakończ", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = if (arrived) C.Bg else NAV_RED)
+                    // ile zostało – duże jak zasięg na Start
+                    when {
+                        arrived -> Column {
+                            Text("Na miejscu", fontSize = 38.sp, fontWeight = FontWeight.Bold, color = C.Green)
+                            Text(if (toDest) "Jesteś u celu" else "Auto jest tuż obok", fontSize = 15.sp, color = C.Muted)
+                        }
+                        rem != null && min != null -> Column {
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Text("$min min", fontSize = 38.sp, fontWeight = FontWeight.Bold, color = C.Green, maxLines = 1)
+                                Text(" · " + WalkNav.distText(rem), fontSize = 18.sp, color = C.Text2, modifier = Modifier.padding(bottom = 6.dp, start = 2.dp), maxLines = 1)
+                            }
+                            Text("Na miejscu o $at · " + source.ifBlank { "pieszo" }, fontSize = 15.sp, color = C.Muted)
+                        }
+                        else -> Column {
+                            Text("Prowadzę $what", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Text)
+                            Text("Czekam na pozycję GPS", fontSize = 15.sp, color = C.Muted)
+                        }
+                    }
+                    // dokąd: auto (P) albo cel
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).surface(RoundedCornerShape(20.dp), C.Card, border = C.Border).padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Box(Modifier.size(44.dp).clip(CircleShape).background(C.Accent), contentAlignment = Alignment.Center) {
+                            if (toDest) Icon(Icons.Rounded.Flag, null, tint = C.Bg, modifier = Modifier.size(24.dp))
+                            else Text("P", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = C.Bg)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text(if (toDest) "Cel" else carName ?: "Twoje auto", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(s.address ?: s.coords, fontSize = 13.sp, color = C.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    // notatka i zdjęcie miejsca parkowania – najbardziej przydatne właśnie teraz
+                    if (!toDest && (note.isNotBlank() || photo != null)) Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).surface(RoundedCornerShape(20.dp), C.Card, border = C.Border).padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("Gdzie dokładnie", fontSize = 12.sp, color = C.Muted)
+                        if (note.isNotBlank()) Text(note, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+                        photo?.let {
+                            androidx.compose.foundation.Image(
+                                it, "Zdjęcie miejsca", contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                modifier = Modifier.fillMaxWidth().height(170.dp).clip(RoundedCornerShape(14.dp)),
+                            )
+                        }
+                    }
+                    // skręty po kolei
+                    val steps = r?.steps.orEmpty().filter { it.type != "depart" }
+                    if (r != null && steps.isNotEmpty()) {
+                        Text("Trasa krok po kroku", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = C.Text, modifier = Modifier.padding(top = 4.dp))
+                        var prev = 0.0
+                        steps.forEach { st ->
+                            val d = (r.cum[st.idx] - prev).coerceAtLeast(0.0)
+                            prev = r.cum[st.idx]
+                            val done = along != null && r.cum[st.idx] < along - 3
+                            val isNext = next?.idx == st.idx
+                            Row(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                                    .then(if (isNext) Modifier.background(C.Accent.copy(alpha = 0.14f)) else Modifier)
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Box(Modifier.size(38.dp).clip(CircleShape).background(if (isNext) C.Accent else C.Raised), contentAlignment = Alignment.Center) {
+                                    if (st.type == "arrive") Icon(if (toDest) Icons.Rounded.Flag else Icons.Rounded.DirectionsCar, null, tint = if (isNext) C.Bg else C.Text, modifier = Modifier.size(20.dp))
+                                    else Icon(Icons.Rounded.Navigation, null, tint = if (isNext) C.Bg else C.Text, modifier = Modifier.size(20.dp).rotate(WalkNav.arrow(st)))
+                                }
+                                Column(Modifier.weight(1f)) {
+                                    Text(WalkNav.text(st), fontSize = 15.sp, fontWeight = if (isNext) FontWeight.SemiBold else FontWeight.Normal, color = if (done) C.Muted else C.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    Text("po " + WalkNav.distText(d), fontSize = 12.sp, color = C.Muted)
+                                }
+                            }
+                        }
+                    }
+                    SecondaryButton("Otwórz w Mapach Google", Icons.Rounded.Map, Modifier.fillMaxWidth()) { WalkNav.googleMaps(ctx, s) }
+                }
+            },
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                WalkMap(s, me, heading, line, gaps, follow, { onFollow(false) }, Modifier.fillMaxSize(), toDest, bottomInset = mapBottom)
+
+                // góra: karta manewru (jak pasek wyszukiwania na Start)
+                Column(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth()) {
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).surface(RoundedCornerShape(26.dp), C.Card, border = C.Border)
+                            .padding(start = 10.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        val near = direct != null && direct < 40
+                        Box(
+                            Modifier.size(64.dp).clip(RoundedCornerShape(20.dp))
+                                .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(C.Accent, C.Accent.copy(alpha = 0.72f)))),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            when {
+                                arrived || near || next?.type == "arrive" ->
+                                    Icon(if (toDest) Icons.Rounded.Flag else Icons.Rounded.DirectionsCar, null, tint = C.Bg, modifier = Modifier.size(38.dp))
+                                next != null -> Icon(Icons.Rounded.Navigation, null, tint = C.Bg, modifier = Modifier.size(40.dp).rotate(WalkNav.arrow(next)))
+                                me != null && heading != null -> Icon(
+                                    Icons.Rounded.Navigation, null, tint = C.Bg,
+                                    modifier = Modifier.size(40.dp).rotate(WalkNav.bearing(me.latitude, me.longitude, s.lat, s.lon) - heading),
+                                )
+                                else -> Icon(Icons.Rounded.MyLocation, null, tint = C.Bg, modifier = Modifier.size(34.dp))
+                            }
+                        }
+                        Column(Modifier.weight(1f)) {
+                            val (big, small) = when {
+                                me == null -> "Szukam GPS…" to "Wyjdź na zewnątrz, jeśli długo nie łapie"
+                                arrived -> (if (toDest) "Jesteś na miejscu" else "Jesteś przy aucie") to (s.address ?: "")
+                                near -> (if (toDest) "Cel jest blisko" else "Auto jest blisko") to "${WalkNav.distText(direct!!)} – rozejrzyj się"
+                                routingFirst -> "Wyznaczam trasę…" to WalkNav.distText(direct ?: 0.0) + " w linii prostej"
+                                next != null && toNext != null -> WalkNav.distText(toNext) to WalkNav.text(next)
+                                noRoute -> WalkNav.distText(direct ?: 0.0) to "Nie mam trasy pieszej – ponawiam. Idź za strzałką"
+                                else -> WalkNav.distText(rem ?: 0.0) to "Idź dalej"
+                            }
+                            Text(big, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = C.Text, maxLines = 1)
+                            if (small.isNotBlank()) Text(small, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Text2, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    if (error.isNotBlank()) Text(
+                        error, fontSize = 12.sp, color = C.Text, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(10.dp)).background(C.Dialog).padding(horizontal = 10.dp, vertical = 6.dp),
+                    )
+                }
+
+                // prawa strona nad panelem: głos, wyśrodkuj
+                Column(
+                    Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = mapBottom + 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    NavRoundBtn(onVoice) {
+                        Icon(if (voice) Icons.Rounded.VolumeUp else Icons.Rounded.VolumeOff, "Głos", tint = if (voice) C.Accent else androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(22.dp))
+                    }
+                    NavRoundBtn({ onFollow(true) }, on = !follow) {
+                        Icon(Icons.Rounded.Navigation, "Wyśrodkuj", tint = if (!follow) C.Bg else androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(22.dp))
                     }
                 }
+            }
+        }
+
+        // dół: pasek (panel schowany) i „Zakończ” w kapsule zamiast zakładek
+        Column(Modifier.align(Alignment.BottomCenter)) {
+            AnimatedVisibility(hidden, enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut()) {
+                Row(
+                    Modifier.padding(start = 16.dp, end = 16.dp, bottom = 2.dp).fillMaxWidth().height(52.dp)
+                        .clip(RoundedCornerShape(26.dp)).surface(RoundedCornerShape(26.dp), C.Card, border = C.Border)
+                        .clickable { scope.launch { try { sheet.partialExpand() } catch (_: Exception) {} } }.padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(Icons.Rounded.KeyboardArrowUp, "Wysuń", tint = C.Accent, modifier = Modifier.size(26.dp))
+                    Text(if (toDest) "Do celu" else carName ?: "Do auta", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    if (rem != null && !arrived) Text("$min min · ${WalkNav.distText(rem)}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Green, maxLines = 1)
+                }
+            }
+            Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 10.dp)) {
+                SheetButton(
+                    if (arrived) "Gotowe" else "Zakończ prowadzenie", if (arrived) Icons.Rounded.Check else Icons.Rounded.Close,
+                    color = if (arrived) C.Accent else NAV_RED,
+                    sub = if (arrived) null else if (min != null && at != null) "$min min · na miejscu o $at" else null,
+                ) { WalkNav.stop() }
             }
         }
     }
@@ -655,9 +799,9 @@ fun WalkNavScreen(perms: Perms, actions: Actions) {
 private val NAV_RED = androidx.compose.ui.graphics.Color(0xFFE5484D)
 
 @Composable
-private fun NavRoundBtn(onClick: () -> Unit, content: @Composable () -> Unit) {
+private fun NavRoundBtn(onClick: () -> Unit, on: Boolean = false, content: @Composable () -> Unit) {
     Box(
-        Modifier.size(52.dp).clip(CircleShape).background(C.Dialog).clickable(onClick = onClick),
+        Modifier.size(48.dp).clip(CircleShape).background(if (on) C.Accent else androidx.compose.ui.graphics.Color(0xE60A0C0F)).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { content() }
 }

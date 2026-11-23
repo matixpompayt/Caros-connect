@@ -760,28 +760,15 @@ private fun NotePhotoCard() {
         if (photo != null) Text("Usuń zdjęcie", fontSize = 13.sp, color = C.Muted, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { Store.setPhoto(null) }.padding(6.dp))
     }
     if (editNote) {
-        var t by remember { mutableStateOf(note) }
-        AlertDialog(
-            onDismissRequest = { editNote = false },
-            containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
-            title = { Text("Notatka do parkowania", color = C.Text) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = t, onValueChange = { t = it.take(200) },
-                        placeholder = { Text("np. poziom -2, miejsce 47, przy windzie") },
-                        modifier = Modifier.fillMaxWidth(), minLines = 2,
-                        shape = RoundedCornerShape(14.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = C.Accent, unfocusedBorderColor = C.Border,
-                            focusedTextColor = C.Text, unfocusedTextColor = C.Text, cursorColor = C.Accent,
-                        ),
-                    )
-                }
+        val spot by Store.spot.collectAsState()
+        NoteSheet(
+            note, spot?.address, bmp, onDismiss = { editNote = false },
+            onShoot = {
+                val has = androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (has) shoot() else camPerm.launch(android.Manifest.permission.CAMERA)
             },
-            confirmButton = { TextButton(onClick = { Store.setNote(t.trim()); editNote = false }) { Text("Zapisz") } },
-            dismissButton = { TextButton(onClick = { editNote = false }) { Text("Anuluj") } },
-        )
+            onDeletePhoto = { Store.setPhoto(null) },
+        ) { Store.setNote(it) }
     }
     if (bigPhoto && bmp != null) {
         androidx.compose.ui.window.Dialog(onDismissRequest = { bigPhoto = false }) {
@@ -951,30 +938,7 @@ private fun FinderCard(s: Store.Spot, me: Location?, azimuth: Float?) {
 @Composable
 private fun DevicePicker(actions: Actions, onDismiss: () -> Unit) {
     val devices = remember { actions.pairedDevices() }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
-        title = { Text("Wybierz radio w aucie", color = C.Text) },
-        text = {
-            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                if (devices.isEmpty()) Text("Brak sparowanych urządzeń. Sparuj telefon z radiem w ustawieniach Bluetooth.", color = C.Muted)
-                devices.forEach { (name, mac) ->
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { Store.setCar(mac, name); onDismiss() }.padding(vertical = 12.dp, horizontal = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Icon(Icons.Rounded.Bluetooth, null, tint = C.Accent, modifier = Modifier.size(22.dp))
-                        Column {
-                            Text(name, fontSize = 16.sp, color = C.Text)
-                            Text(mac, fontSize = 12.sp, color = C.Muted)
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Zamknij") } },
-    )
+    RadioPickerSheet(devices, onDismiss)
 }
 
 @Composable
@@ -1257,30 +1221,7 @@ fun ChangelogBody(e: Changelog.Entry) {
 
 /** Pełna lista zmian. */
 @Composable
-fun ChangelogDialog(onDismiss: () -> Unit) {
-    val list by Changelog.entries.collectAsState()
-    val upd by Updater.state.collectAsState()
-    val next = (upd as? Updater.State.Available)?.notes
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
-        title = { Text("Co nowego", color = C.Text) },
-        text = {
-            Column(
-                Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                if (next != null && list.none { it.version == next.version }) {
-                    ChangelogVersion(next, "do pobrania", C.Orange)
-                }
-                list.forEach { e ->
-                    ChangelogVersion(e, if (e.version == BuildConfig.VERSION_NAME) "zainstalowana" else null, C.Accent)
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Zamknij") } },
-    )
-}
+fun ChangelogDialog(onDismiss: () -> Unit) = ChangelogSheet(onDismiss)
 
 @Composable
 private fun ChangelogVersion(e: Changelog.Entry, badge: String?, badgeColor: Color) {
@@ -1306,21 +1247,10 @@ fun WhatsNewDialog() {
     val entry = e ?: return
     var all by remember { mutableStateOf(false) }
     if (all) {
-        ChangelogDialog { all = false; Changelog.markSeen() }
+        ChangelogSheet { all = false; Changelog.markSeen() }
         return
     }
-    AlertDialog(
-        onDismissRequest = { Changelog.markSeen() },
-        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
-        title = { Text("Nowość w wersji ${entry.version}", color = C.Text) },
-        text = {
-            Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                ChangelogBody(entry)
-            }
-        },
-        confirmButton = { TextButton(onClick = { Changelog.markSeen() }) { Text("Super") } },
-        dismissButton = { TextButton(onClick = { all = true }) { Text("Wszystkie zmiany") } },
-    )
+    WhatsNewSheet(entry, onAll = { all = true }) { Changelog.markSeen() }
 }
 
 @Composable

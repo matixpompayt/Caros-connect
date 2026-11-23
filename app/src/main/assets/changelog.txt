@@ -2,6 +2,13 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Nowy wygląd kolejnych ekranów – jak Start
+- Prowadź do auta: karta skrętu na górze, na dole panel do przeciągania z czasem i odległością, autem, notatką i zdjęciem miejsca oraz listą skrętów; „Zakończ” w dużej kapsule
+- Adres domu i pracy: mapa na cały ekran z pinezką – przesuwasz mapę, adres czyta się sam; wyszukiwarka na górze, „Tu jestem”, „Przy aucie”, „Zapisz” na dole
+- Pojemność baku, notatka do parkowania (teraz razem ze zdjęciem), wybór radia w aucie i „Co nowego” – panele wysuwane od dołu zamiast okienek
+- Pojemność baku: duża liczba z −/+ i szybkie wartości; notatka: podpowiedzi „Poziom -2”, „Przy windzie”…; radio: wybrane podświetlone, skrót do ustawień Bluetooth
+
 ## 2.0-beta.13 · 2026-11-23
 Nowe „Wyślij do auta” – wygląda jak ekran Start z mapą
 - Trasa na mapie na cały ekran: budynki 3D, Twoje auto 3D na starcie, pinezka celu, inne warianty na szaro

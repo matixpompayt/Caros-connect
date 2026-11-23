@@ -208,4 +208,72 @@ class ScreensTest {
 
     @Test fun plannerDark() = planner(false)
     @Test fun plannerLight() = planner(true)
+
+    // ---------- panele od dołu ----------
+
+    private fun sheet(content: @Composable () -> Unit) {
+        pal(false)
+        paparazzi.snapshot { CompositionLocalProvider(LocalInspectionMode provides true) {
+            Box(Modifier.fillMaxSize().background(C.Bg)) { content() }
+        } }
+    }
+
+    @Test fun tankSheet() = sheet { TankSheet(60, {}) {} }
+
+    @Test fun noteSheet() = sheet { NoteSheet("Poziom -2, miejsce 47", "ul. Kostrzyńska 12, Dębno", null, {}, {}, {}) {} }
+
+    @Test fun radioSheet() {
+        Store.carMac.value = "41:42:43:44:45:46"
+        sheet {
+            RadioPickerSheet(
+                listOf("JBL Flip 5" to "11:22:33:44:55:66", "TS10 CAR" to "41:42:43:44:45:46", "Galaxy Buds2" to "AA:BB:CC:DD:EE:FF"), {},
+            )
+        }
+    }
+
+    @Test fun changelogSheet() {
+        Changelog.entries.value = listOf(
+            Changelog.Entry("2.0-beta.10", "23.11.2026", "Nowe „Wyślij do auta”", listOf("Trasa na mapie na cały ekran", "Panel do przeciągania jak na Start")),
+            Changelog.Entry("2.0-beta.9", "22.11.2026", "Modele aut w jakości studyjnej", listOf("Gładkie cieniowanie i odbicia lakieru")),
+        )
+        sheet { ChangelogSheet {} }
+    }
+
+    @Test fun whatsNewSheet() = sheet {
+        WhatsNewSheet(Changelog.Entry("2.0-beta.10", "23.11.2026", "Nowe „Wyślij do auta”", listOf("Trasa na mapie na cały ekran", "Panel do przeciągania jak na Start", "Duży przycisk „Nawiguj w aucie”")), {}) {}
+    }
+
+    @Test fun addressPicker() {
+        pal(false)
+        paparazzi.snapshot { CompositionLocalProvider(LocalInspectionMode provides true) {
+            AddressPickerScreen(
+                false, CarData.Addr("ul. Kostrzyńska 12, Dębno", 52.7440, 14.6020), {},
+                previewResults = listOf(
+                    CarData.Place("Jana Pawła II 77", "Cychry, gmina Dębno, zachodniopomorskie", 52.7440, 14.6020),
+                    CarData.Place("Jana Pawła II 77", "Dębno, zachodniopomorskie", 52.7378, 14.6990),
+                ),
+                previewAddr = "Jana Pawła II 77, Cychry",
+            )
+        } }
+    }
+
+    @Test fun walkNav() {
+        pal(false)
+        Store.spotNote.value = "Poziom -2, miejsce 47, przy windzie"
+        val pts = (0..20).map { LatLng(52.5884 - (20 - minOf(it, 10) - 10) * 0.0002 - 0.002 + minOf(it, 10) * 0.0002, 14.6456 - (20 - it).coerceAtMost(10) * 0.0003) }
+        val cum = DoubleArray(pts.size) { it * 22.0 }
+        val steps = listOf(
+            WalkNav.Step(0, "depart", "", "Jana Pawła II", pts[0].latitude, pts[0].longitude),
+            WalkNav.Step(10, "turn", "right", "Wincentego Witosa", pts[10].latitude, pts[10].longitude),
+            WalkNav.Step(20, "arrive", "", "", pts[20].latitude, pts[20].longitude),
+        )
+        val route = WalkNav.Route(pts, cum, steps)
+        val me = android.location.Location("gps").apply { latitude = pts[0].latitude; longitude = pts[0].longitude; accuracy = 6f }
+        paparazzi.snapshot { CompositionLocalProvider(LocalInspectionMode provides true) {
+            WalkNavUi(
+                spot, false, me, 20f, route, pts, emptyList(), true, {}, false, 380.0, 440.0, steps[1], 220.0,
+                routingFirst = false, noRoute = false, error = "", along = 0.0, source = "chodniki OSM", voice = true, onVoice = {},
+            )
+        } }
+    }
 }
