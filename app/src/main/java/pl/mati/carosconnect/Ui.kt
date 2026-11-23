@@ -11,6 +11,11 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.fadeOut
@@ -470,6 +475,14 @@ private fun MapShell(perms: Perms, actions: Actions, tab: Int, onTab: (Int) -> U
     val spot by Store.spot.collectAsState()
     val visible = rememberVisible()
     val me = rememberPhoneLocation(perms.loc && visible)
+    val inService by Store.driving.collectAsState()
+    val linked by Store.linked.collectAsState()
+    val driving = inService || linked
+    // auto w drodze – na mapie w tle zamiast zaparkowanego
+    val liveCar = rememberLiveCar(me, driving, spot)
+    // ostatnia pozycja w drodze – znaczek zanika płynnie, gdy auto stanie
+    var lastLive by remember { mutableStateOf<CarData.Live?>(null) }
+    if (liveCar != null && liveCar != lastLive) lastLive = liveCar
     val scaffold = androidx.compose.material3.rememberBottomSheetScaffoldState(
         // trzy pozycje: rozwinięty, do połowy, schowany (zostaje pasek z nazwą auta – pociągnij w górę)
         bottomSheetState = androidx.compose.material3.rememberStandardBottomSheetState(
@@ -507,8 +520,9 @@ private fun MapShell(perms: Perms, actions: Actions, tab: Int, onTab: (Int) -> U
             },
         ) {
             Box(Modifier.fillMaxSize()) {
-                val s = spot
-                if (s != null) ParkMap(s, me, Modifier.fillMaxSize(), bottomInset = if (hidden) 150.dp else peek + 4.dp)
+                val lc = liveCar
+                val s = spot ?: lc?.let { Store.Spot(it.lat, it.lon, it.time, 0f, src = Store.SRC_CAR) }
+                if (s != null) ParkMap(s, me, Modifier.fillMaxSize(), bottomInset = if (hidden) 150.dp else peek + 4.dp, liveCar = lc, hideMe = driving && lc != null)
                 else Box(
                     Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(C.Accent.copy(alpha = 0.16f), C.Bg))),
                     contentAlignment = Alignment.TopCenter,
@@ -525,6 +539,13 @@ private fun MapShell(perms: Perms, actions: Actions, tab: Int, onTab: (Int) -> U
                         .statusBarsPadding().height(18.dp),
                 )
                 MapSearchPill(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp).fillMaxWidth())
+                // auto w drodze: znaczek pod wyszukiwarką
+                androidx.compose.animation.AnimatedVisibility(
+                    liveCar != null,
+                    modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(start = 16.dp, top = 76.dp),
+                    enter = fadeIn() + androidx.compose.animation.slideInVertically { -it / 2 },
+                    exit = fadeOut(),
+                ) { lastLive?.let { LiveChip(it, driving) } }
             }
         }
         Column(Modifier.align(Alignment.BottomCenter)) {
@@ -592,10 +613,10 @@ private fun ParkingTab(perms: Perms, actions: Actions, layout: String, onPickCar
         if (driving && icp != null) {
             LiveCard(
                 CarData.Live(icp.latitude, icp.longitude, if (icp.hasSpeed()) (icp.speed * 3.6f).roundToInt() else 0, icp.bearing.toInt(), icp.time, true),
-                null, "jesteś w aucie · ${LiveFeed.label(iv)}",
+                null, "jesteś w aucie · ${LiveFeed.label(iv)}", showMap = layout != "map",
             )
         } else if (liveActive && lv != null) {
-            LiveCard(lv, me, if (fb.isNotBlank()) "na żywo · ${LiveFeed.label(iv)}" else "co ok. minutę (szybciej z Firebase – Ustawienia)")
+            LiveCard(lv, me, if (fb.isNotBlank()) "na żywo · ${LiveFeed.label(iv)}" else "co ok. minutę (szybciej z Firebase – Ustawienia)", showMap = layout != "map")
         }
 
         val s = spot
@@ -696,10 +717,11 @@ fun shareSpot(ctx: android.content.Context, s: Store.Spot) {
 
 /** Auto w drodze: mapa z autem i prędkość. */
 @Composable
-private fun LiveCard(l: CarData.Live, me: android.location.Location?, sub: String) {
+private fun LiveCard(l: CarData.Live, me: android.location.Location?, sub: String, showMap: Boolean = true) {
     val ctx = LocalContext.current
     val spot = remember(l.time, l.lat, l.lon) { Store.Spot(l.lat, l.lon, l.time, 0f, src = Store.SRC_CAR) }
-    ParkMap(spot, me, Modifier.stagger().fillMaxWidth().height(260.dp).clip(RoundedCornerShape(24.dp)).border(1.dp, C.Border, RoundedCornerShape(24.dp)), live = true)
+    // wygląd „mapa w tle” – auto w drodze widać na dużej mapie, bez drugiej małej
+    if (showMap) ParkMap(spot, me, Modifier.stagger().fillMaxWidth().height(260.dp).clip(RoundedCornerShape(24.dp)).border(1.dp, C.Border, RoundedCornerShape(24.dp)), live = true)
     Card {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.size(44.dp).clip(CircleShape).background(C.Green), contentAlignment = Alignment.Center) {
@@ -713,6 +735,45 @@ private fun LiveCard(l: CarData.Live, me: android.location.Location?, sub: Strin
         SecondaryButton("Pokaż w Mapach", Icons.Rounded.Map, Modifier.fillMaxWidth()) {
             try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(spot.mapsUrl))) } catch (_: Exception) {}
         }
+    }
+}
+
+/**
+ * Gdzie jest auto w drodze (null – stoi / brak świeżych danych): telefon w aucie → GPS telefonu,
+ * inaczej pozycja wysłana przez auto (Firebase / przekaźnik) – świeża i nowsza niż zapisane parkowanie.
+ */
+@Composable
+internal fun rememberLiveCar(me: Location?, driving: Boolean, spot: Store.Spot?): CarData.Live? {
+    val live by CarData.live.collectAsState()
+    var tick by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(Unit) { while (true) { delay(30_000); tick++ } }
+    val lv = live
+    val now = System.currentTimeMillis() + 0 * tick
+    return when {
+        driving && me != null -> CarData.Live(
+            me.latitude, me.longitude, if (me.hasSpeed()) (me.speed * 3.6f).roundToInt() else 0,
+            if (me.hasBearing()) me.bearing.toInt() else 0, me.time, true,
+        )
+        !driving && lv != null && lv.moving && now - lv.time < 10 * 60_000L && (spot == null || lv.time > spot.time) -> lv
+        else -> null
+    }
+}
+
+/** Znaczek na mapie w tle: auto w drodze, prędkość, jak świeża pozycja. */
+@Composable
+private fun LiveChip(l: CarData.Live, inCar: Boolean) {
+    val pulse = rememberInfiniteTransition(label = "live")
+    val a by pulse.animateFloat(0.35f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "dot")
+    Row(
+        Modifier.clip(RoundedCornerShape(18.dp)).background(Color(0xE60A0C0F)).padding(start = 10.dp, end = 14.dp, top = 7.dp, bottom = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(Modifier.size(9.dp).clip(CircleShape).background(C.Green.copy(alpha = if (LocalInspectionMode.current) 1f else a)))
+        Text(
+            (if (inCar) "Jedziesz" else "Auto w drodze") + " · ${l.speed} km/h" + if (inCar) "" else " · ${agoText(l.time)}",
+            fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1,
+        )
     }
 }
 

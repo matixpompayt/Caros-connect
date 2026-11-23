@@ -2,6 +2,13 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Auto w drodze na dużej mapie (wygląd „mapa w tle”)
+- Gdy auto jedzie, mapa na Start pokazuje je tam, gdzie jest teraz (zamiast zaparkowanego z pinezką „P”), kamera jedzie za nim – przesuń palcem, żeby się rozejrzeć, przycisk auta wraca do śledzenia
+- Jesteś w aucie – na mapie samo auto (bez ludzika); auto jedzie bez Ciebie – auto i Ty
+- Pod wyszukiwarką znaczek „Auto w drodze · 62 km/h · przed chwilą” (w aucie: „Jedziesz · 62 km/h”)
+- W panelu karta „Auto w drodze” bez drugiej małej mapy (wszystko widać na dużej); po zaparkowaniu mapa wraca do miejsca parkowania
+
 ## 2.0-beta.25 · 2026-11-23
 - Jazda na żywo: „Zakończ” działa od razu – telefon sam wyłącza link na stronie (bez czekania na radio), karta znika natychmiast i nie wraca, zanim auto dostanie komendę; radio przestaje wysyłać pozycję, gdy będzie online
 - Mapa na Start: przyciski 3D / auto / Twoja pozycja wyżej – nie nachodzą już na panel

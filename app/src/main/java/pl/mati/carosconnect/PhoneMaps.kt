@@ -174,12 +174,24 @@ private fun walkArrow(ctx: Context): android.graphics.Bitmap {
 
 private fun personBitmap(ctx: Context) = Model3D.personIcon(0xFF2FD3F0.toInt(), (64 * ctx.resources.displayMetrics.density).toInt())
 
-/** Mapa parkingu: ciemna, 3D, pinezka auta i Twoja pozycja. */
+/**
+ * Mapa parkingu: ciemna, 3D, pinezka auta i Twoja pozycja. [liveCar] – auto jedzie: model auta w miejscu,
+ * gdzie jest teraz (bez pinezki „P” parkowania), kamera jedzie za nim, dopóki nie przesuniesz mapy.
+ * [hideMe] – telefon jest w aucie: bez ludzika (auto = Ty).
+ */
 @SuppressLint("MissingPermission")
 @Composable
-fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier, live: Boolean = false, bottomInset: androidx.compose.ui.unit.Dp = 0.dp) {
+fun ParkMap(
+    s: Store.Spot, me: android.location.Location?, modifier: Modifier, live: Boolean = false, bottomInset: androidx.compose.ui.unit.Dp = 0.dp,
+    liveCar: CarData.Live? = null, hideMe: Boolean = false,
+) {
     val ctx = LocalContext.current
     var is3d by remember { mutableStateOf(true) }
+    val moving = live || liveCar != null
+    val carLat = liveCar?.lat ?: s.lat
+    val carLon = liveCar?.lon ?: s.lon
+    // kamera za autem w drodze; przesunięcie mapy palcem wyłącza, przycisk auta włącza z powrotem
+    var follow by remember { mutableStateOf(true) }
     val h = remember {
         MapHolder(ctx) { m, st ->
             val below = CarMapStyle.firstSymbolId(st)
@@ -241,12 +253,23 @@ fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier, l
         st.getLayer("caros-car-layer")?.setProperties(PropertyFactory.iconOffset(arrayOf(0f, if (b != null) -26f else 0f)))
     }
 
-    // pozycja telefonu → ludzik
-    LaunchedEffect(me?.latitude, me?.longitude, h.ready) {
+    // pozycja telefonu → ludzik (w aucie – bez ludzika, auto to Ty)
+    LaunchedEffect(me?.latitude, me?.longitude, h.ready, hideMe) {
         if (!h.ready) return@LaunchedEffect
         val src = h.style?.getSourceAs<GeoJsonSource>("caros-me") ?: return@LaunchedEffect
-        if (me == null) src.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+        if (me == null || hideMe) src.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
         else src.setGeoJson(Feature.fromGeometry(point(me.latitude, me.longitude)))
+    }
+    // auto w drodze – bez pinezki „P” (to już nie jest miejsce parkowania)
+    LaunchedEffect(liveCar != null, h.ready) {
+        if (!h.ready) return@LaunchedEffect
+        h.style?.getLayer("caros-car-layer")?.setProperties(PropertyFactory.visibility(if (liveCar != null) Property.NONE else Property.VISIBLE))
+    }
+    LaunchedEffect(h.ready) {
+        if (!h.ready) return@LaunchedEffect
+        h.map?.addOnCameraMoveStartedListener { reason ->
+            if (reason == org.maplibre.android.maps.MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) follow = false
+        }
     }
 
     // mapa w tle pod panelem: środek mapy (auto) nad panelem
@@ -256,13 +279,21 @@ fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier, l
     }
     // na żywo: mapa płynnie jedzie za autem (bez skakania kamery przy każdej pozycji)
     var placed by remember { mutableStateOf(false) }
-    LaunchedEffect(s.lat, s.lon, h.ready) {
+    var wasMoving by remember { mutableStateOf(moving) }
+    LaunchedEffect(carLat, carLon, h.ready, moving) {
         if (!h.ready) return@LaunchedEffect
-        h.style?.getSourceAs<GeoJsonSource>("caros-car")?.setGeoJson(Feature.fromGeometry(point(s.lat, s.lon)))
-        if (live && placed) h.map?.easeCamera(CameraUpdateFactory.newLatLng(LatLng(s.lat, s.lon)), 900)
-        else {
-            h.map?.cameraPosition = CameraPosition.Builder().target(LatLng(s.lat, s.lon)).zoom(17.0).tilt(if (is3d) 50.0 else 0.0).build()
-            placed = true
+        h.style?.getSourceAs<GeoJsonSource>("caros-car")?.setGeoJson(Feature.fromGeometry(point(carLat, carLon)))
+        val started = moving && !wasMoving
+        wasMoving = moving
+        when {
+            // auto ruszyło – kamera przelatuje do niego i dalej jedzie za nim
+            started -> { follow = true; h.map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(carLat, carLon), 16.0), 900) }
+            moving && placed -> if (follow) h.map?.easeCamera(CameraUpdateFactory.newLatLng(LatLng(carLat, carLon)), 900)
+            else -> {
+                h.map?.cameraPosition = CameraPosition.Builder().target(LatLng(carLat, carLon)).zoom(17.0).tilt(if (is3d) 50.0 else 0.0).build()
+                placed = true
+                follow = true
+            }
         }
     }
     LaunchedEffect(is3d, h.ready) {
@@ -277,8 +308,9 @@ fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier, l
         Column(Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, top = 12.dp, start = 12.dp, bottom = 12.dp + bottomInset), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             MapBtn({ is3d = !is3d }) { Text(if (is3d) "3D" else "2D", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = if (is3d) C.Accent else C.Text) }
             MapBtn({
-                h.map?.animateCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(LatLng(s.lat, s.lon)).zoom(17.0).tilt(if (is3d) 50.0 else 0.0).build()), 700)
-            }) { Icon(Icons.Rounded.DirectionsCar, "Pokaż auto", tint = C.Text, modifier = Modifier.size(22.dp)) }
+                follow = true
+                h.map?.animateCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(LatLng(carLat, carLon)).zoom(if (moving) 16.0 else 17.0).tilt(if (is3d) 50.0 else 0.0).build()), 700)
+            }) { Icon(Icons.Rounded.DirectionsCar, "Pokaż auto", tint = if (moving && follow) C.Accent else C.Text, modifier = Modifier.size(22.dp)) }
             MapBtn({
                 me?.let { l -> h.map?.animateCamera(CameraUpdateFactory.newLatLng(LatLng(l.latitude, l.longitude)), 700) }
             }) { Icon(Icons.Rounded.MyLocation, "Moja pozycja", tint = C.Text, modifier = Modifier.size(22.dp)) }
