@@ -68,6 +68,7 @@ import org.maplibre.geojson.Point
 import kotlin.math.roundToInt
 import org.maplibre.android.style.expressions.Expression
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.graphicsLayer
 
 /** Wspólne: MapView MapLibre w trybie TextureView (zaokrąglone rogi, animacje) + cykl życia. */
 private class MapHolder(ctx: Context, onStyle: (MapLibreMap, Style) -> Unit) {
@@ -79,7 +80,8 @@ private class MapHolder(ctx: Context, onStyle: (MapLibreMap, Style) -> Unit) {
 
     init {
         MapLibre.getInstance(ctx)
-        view = MapView(ctx, MapLibreMapOptions.createFromAttributes(ctx, null).textureMode(true))
+        // kolor do czasu narysowania mapy – tło motywu zamiast domyślnego beżu (błysk przy otwieraniu)
+        view = MapView(ctx, MapLibreMapOptions.createFromAttributes(ctx, null).textureMode(true).foregroundLoadColor(C.Bg.toArgb()))
         view.onCreate(null)
         // przeciąganie mapy jednym palcem nie przewija całej strony
         @Suppress("ClickableViewAccessibility")
@@ -428,6 +430,9 @@ fun WalkMap(
     }
     // kamera za Tobą: pozycja + kierunek (co 6°, żeby nie drgała), blisko i mocno pochylona
     val hdgStep = heading?.let { (it / 6f).roundToInt() }
+    // pierwsze ustawienie kamery (zaraz po wczytaniu mapy) – od razu, bez przelotu od auta do Ciebie
+    val readyAt = remember { longArrayOf(0L) }
+    LaunchedEffect(h.ready) { if (h.ready) readyAt[0] = android.os.SystemClock.uptimeMillis() }
     LaunchedEffect(me?.latitude, me?.longitude, hdgStep, follow, navZoom, h.ready, bottomInset) {
         if (!h.ready || !follow) return@LaunchedEffect
         val l = me ?: return@LaunchedEffect
@@ -435,12 +440,23 @@ fun WalkMap(
             .bearing((heading ?: h.map?.cameraPosition?.bearing?.toFloat() ?: 0f).toDouble())
             .padding(0.0, (if (bottomInset > 0.dp) 220.0 else 260.0) * h.density, 0.0, (bottomInset.value * h.density).toDouble())
             .build()
-        h.map?.easeCamera(CameraUpdateFactory.newCameraPosition(cam), 700)
+        val upd = CameraUpdateFactory.newCameraPosition(cam)
+        if (readyAt[0] == 0L || android.os.SystemClock.uptimeMillis() - readyAt[0] < 1500) h.map?.moveCamera(upd)
+        else h.map?.easeCamera(upd, 700)
     }
 
     Box(modifier) {
-        androidx.compose.runtime.key(h) { AndroidView(factory = { h.view }, modifier = Modifier.fillMaxSize()) }
+        FadingMap(h)
         HouseNumbers(h)
+    }
+}
+
+/** Mapa pojawia się łagodnie, gdy styl jest wczytany (bez pustego / migającego prostokąta). */
+@Composable
+private fun FadingMap(h: MapHolder) {
+    val a by androidx.compose.animation.core.animateFloatAsState(if (h.ready) 1f else 0f, androidx.compose.animation.core.tween(350), label = "mapIn")
+    androidx.compose.runtime.key(h) {
+        AndroidView(factory = { h.view }, modifier = Modifier.fillMaxSize().graphicsLayer { alpha = a })
     }
 }
 
@@ -1110,7 +1126,7 @@ private fun PickPointMapView(
         st.getSourceAs<GeoJsonSource>("caros-pick-me")?.setGeoJson(me?.let { FeatureCollection.fromFeatures(listOf(Feature.fromGeometry(point(it.latitude, it.longitude)))) } ?: none)
     }
     Box(Modifier.fillMaxSize()) {
-        androidx.compose.runtime.key(h) { AndroidView(factory = { h.view }, modifier = Modifier.fillMaxSize()) }
+        FadingMap(h)
         HouseNumbers(h)
     }
 }

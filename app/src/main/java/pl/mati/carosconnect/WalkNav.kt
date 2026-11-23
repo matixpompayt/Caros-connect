@@ -613,19 +613,9 @@ internal fun WalkNavUi(
         val peek = minOf(290.dp, maxHeight * 0.4f)
         val sheetH = maxHeight * 0.85f
         val mapBottom = if (hidden) 140.dp else peek
-        // wyjście: panel zjeżdża w dół (postęp zaczyna maleć)
-        LaunchedEffect(Unit) {
-            var last = p.value
-            var gone = false
-            androidx.compose.runtime.snapshotFlow { p.value }.collect { v ->
-                if (!gone && v < last - 1e-4f) {
-                    gone = true
-                    launch { try { sheet.hide() } catch (_: Exception) {} }
-                }
-                last = v
-            }
-        }
+        // wejście: panel wyjeżdża spod ekranu (przy wyjściu zjeżdża), mapa i karta stoją w miejscu
         androidx.compose.material3.BottomSheetScaffold(
+            modifier = Modifier.sheetSlide(p, 0.12f, 0.8f, peek + 40.dp),
             scaffoldState = scaffold,
             sheetPeekHeight = peek,
             sheetShape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
@@ -639,7 +629,7 @@ internal fun WalkNavUi(
             containerColor = C.Bg,
             sheetContent = {
                 Column(
-                    Modifier.fillMaxWidth().height(sheetH).reveal(p, 0.2f, 0.85f, dy = 70.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())
+                    Modifier.fillMaxWidth().height(sheetH).verticalScroll(androidx.compose.foundation.rememberScrollState())
                         .padding(horizontal = 18.dp).padding(bottom = 110.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
@@ -722,8 +712,8 @@ internal fun WalkNavUi(
                 }
             },
         ) {
-            Box(Modifier.fillMaxSize()) {
-                WalkMap(s, me, heading, line, gaps, follow, { onFollow(false) }, Modifier.fillMaxSize().reveal(p, 0f, 0.8f, scale = 1.1f, fade = false), toDest, bottomInset = mapBottom)
+            Box(Modifier.fillMaxSize().sheetBody(p, 0.12f, 0.8f, peek + 40.dp)) {
+                WalkMap(s, me, heading, line, gaps, follow, { onFollow(false) }, Modifier.fillMaxSize(), toDest, bottomInset = mapBottom)
 
                 // góra: karta manewru (jak pasek wyszukiwania na Start)
                 Column(Modifier.align(Alignment.TopCenter).reveal(p, 0.1f, 0.7f, dy = (-90).dp).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth()) {

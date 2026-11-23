@@ -222,6 +222,7 @@ internal fun AddressPickerScreen(
         val peek = minOf(330.dp, maxHeight * 0.45f)
         val sheetH = maxHeight * 0.85f
         BottomSheetScaffold(
+            modifier = Modifier.sheetSlide(p, 0.12f, 0.8f, peek + 40.dp),
             scaffoldState = scaffold,
             sheetPeekHeight = peek,
             sheetShape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
@@ -235,7 +236,7 @@ internal fun AddressPickerScreen(
             containerColor = C.Bg,
             sheetContent = {
                 Column(
-                    Modifier.fillMaxWidth().height(sheetH).reveal(p, 0.2f, 0.85f, dy = 70.dp).verticalScroll(rememberScrollState())
+                    Modifier.fillMaxWidth().height(sheetH).verticalScroll(rememberScrollState())
                         .padding(horizontal = 18.dp).padding(bottom = 110.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
@@ -300,9 +301,9 @@ internal fun AddressPickerScreen(
                 }
             },
         ) {
-            Box(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().sheetBody(p, 0.12f, 0.8f, peek + 40.dp)) {
                 PickPointMap(
-                    start, Modifier.fillMaxSize().reveal(p, 0f, 0.8f, scale = 1.1f, fade = false), moveTo, padTop = headerH, padBottom = peek,
+                    start, Modifier.fillMaxSize(), moveTo, padTop = headerH, padBottom = peek,
                     saved = saved, me = me,
                     onMoving = { moving = it },
                     onIdle = { center = it },
