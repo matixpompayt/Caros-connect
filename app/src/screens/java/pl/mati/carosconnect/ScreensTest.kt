@@ -14,6 +14,8 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -73,7 +75,7 @@ class ScreensTest {
 
     private fun home(light: Boolean) {
         pal(light)
-        paparazzi.snapshot {
+        paparazzi.snapshot { CompositionLocalProvider(LocalInspectionMode provides true) {
             Screen {
                 HomeHero(perms, actions, spot, null, false)
                 Label("Gdzie stoi auto")
@@ -83,14 +85,14 @@ class ScreensTest {
                 }
             }
         }
-    }
+    }}
 
     @Test fun homeDark() = home(false)
     @Test fun homeLight() = home(true)
 
     private fun map(light: Boolean) {
         pal(light)
-        paparazzi.snapshot {
+        paparazzi.snapshot { CompositionLocalProvider(LocalInspectionMode provides true) {
             Box(Modifier.fillMaxSize().background(C.Bg)) {
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(C.Accent.copy(alpha = 0.25f), C.Raised, C.Bg))))
                 MapSearchPill(Modifier.align(Alignment.TopCenter).padding(horizontal = 16.dp, vertical = 40.dp).fillMaxWidth())
@@ -106,14 +108,14 @@ class ScreensTest {
                 Box(Modifier.align(Alignment.BottomCenter)) { FloatingTabBar(TAB_ITEMS, 0) {} }
             }
         }
-    }
+    }}
 
     @Test fun mapDark() = map(false)
     @Test fun mapLight() = map(true)
 
     @Test fun autoTab() {
         pal(false)
-        paparazzi.snapshot {
+        paparazzi.snapshot { CompositionLocalProvider(LocalInspectionMode provides true) {
             Column(Modifier.fillMaxSize().background(C.Bg)) {
                 Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text("Auto", fontSize = 32.sp, color = C.Text)
@@ -125,11 +127,11 @@ class ScreensTest {
                 FloatingTabBar(TAB_ITEMS, 1) {}
             }
         }
-    }
+    }}
 
     @Test fun settingsLook() {
         pal(false)
-        paparazzi.snapshot {
+        paparazzi.snapshot { CompositionLocalProvider(LocalInspectionMode provides true) {
             Column(Modifier.fillMaxSize().background(C.Bg)) {
                 Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Label("Wygląd")
@@ -139,5 +141,5 @@ class ScreensTest {
                 FloatingTabBar(TAB_ITEMS, 3) {}
             }
         }
-    }
+    }}
 }
