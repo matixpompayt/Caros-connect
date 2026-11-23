@@ -2,6 +2,15 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Potwierdzenia z auta, plan trasy wspólny z CAR OS, ten sam wygląd
+- Zakładka Auto: „Wysłane do auta” – przy każdej komendzie (trasa, ulubione, adres, serwis, tankowanie, klucze) widać: czeka na internet, wysłano, auto wykonało albo błąd
+- Bez internetu komenda czeka w kolejce i wychodzi sama, gdy internet wróci (także w tle)
+- Plan trasy liczony we wspólnym module z CAR OS – w aucie te same stacje, ceny paliwa z całej Europy i ile zostanie zasięgu
+- Klucz Tankerkönig zapisany w telefonie trafia też do radia (ceny z Niemiec w planie trasy w aucie)
+- Paliwo: litry w baku z czujnika auta (CAN), gdy radio je odczytuje – zamiast szacunku z tankowań
+- Ustawienia → Wygląd: „Ten sam wygląd w aucie” – Glass, jasny / ciemny i kolor akcentu zmieniają się razem w telefonie i w radiu; nowy wybór koloru akcentu w motywie jasnym i ciemnym
+
 ## 2.0-beta.1 · 2026-11-23
 CAR OS Connect 2.0 – pierwsza wersja testowa
 - Nowy protokół auto ↔ telefon (wersja 2): telefon wie, jaką wersję CAR OS ma auto i co ono potrafi

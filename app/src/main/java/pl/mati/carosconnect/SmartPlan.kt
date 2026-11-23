@@ -2,6 +2,8 @@ package pl.mati.carosconnect
 
 import android.content.Context
 import pl.mati.caros.core.AlongRoute
+import pl.mati.caros.core.RoutePlan
+import pl.mati.caros.core.StationPrices
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -89,16 +91,10 @@ object SmartPlan {
         val fullKm: Double? = null, val fullGuess: Boolean = false, val deKeyMissing: Boolean = false, val deOk: Boolean? = null,
     )
 
-    private var cacheKey = ""
-    private var cacheTotal = 0.0
-    private var cacheVal: Stops? = null
-
     /**
      * Postoje: tankowanie – tyle razy, ile trzeba (np. 1000 km), zanim zasięg spadnie poniżej minimum z ustawień,
      * zakładając tankowanie do pełna; przerwa co ok. 2 h jazdy (jeśli nie wypada przy tankowaniu).
-     * Stacje z OSM (jedno zapytanie), ceny na stacjach z oficjalnych źródeł (DE, FR, AT, IT, ES),
-     * w Polsce cena maksymalna, w innych krajach UE – średnia z biuletynu Komisji Europejskiej.
-     * Najtańsze (w złotych) pierwsze. Wynik zapamiętany dla trasy.
+     * Liczone we wspólnym module (core/RoutePlan) – tak samo w CAR OS w aucie. Najtańsze (w złotych) pierwsze.
      * Rzuca [java.io.IOException], gdy nie udało się nic sprawdzić (brak internetu / serwery zajęte).
      */
     suspend fun stops(
@@ -109,144 +105,21 @@ object SmartPlan {
         if (n < 2) return@withContext Stops(emptyList(), 0.0, fuel)
         val lats = DoubleArray(n) { r.pts[it].latitude }
         val lons = DoubleArray(n) { r.pts[it].longitude }
-        val cum = DoubleArray(n)
-        for (k in 1 until n) cum[k] = cum[k - 1] + RoutePreview.dist(r.pts[k - 1], r.pts[k])
-        val total = cum.last()
-        val totalKm = total / 1000
-        val key = String.format(
-            java.util.Locale.US, "%.3f,%.3f|%.3f,%.3f|%d|%d|%s|%d|%d",
-            lats[0], lons[0], lats[n - 1], lons[n - 1], ((rangeKm ?: -1.0) / 20).roundToInt(), reserveKm, fuel.key, tkKey.length,
-            ((fullKmCar ?: -1.0) / 20).roundToInt(),
+        val res = RoutePlan.stops(
+            ctx, lats, lons, r.travelS, r.depart, rangeKm, reserveKm, fuel.type, tkKey, RoutePreview.tomtomKey(ctx),
+            fullKmCar, FuelPrices.data.value?.today?.get(fuel),
         )
-        // ta sama trasa (np. tylko doszedł postój z listy) – bez ponownego szukania
-        synchronized(this@SmartPlan) {
-            if (key == cacheKey && abs(total - cacheTotal) < maxOf(3000.0, cacheTotal * 0.03)) cacheVal?.let { return@withContext it }
-        }
-        val speed = total / r.travelS.coerceAtLeast(60.0) // m/s
-        val fullGuess = fullKmCar == null
-        val fullKm = fullKmCar ?: maxOf(rangeKm ?: 0.0, 650.0)
-        val wins = ArrayList<AlongRoute.Window>()
-        val meta = ArrayList<Pair<String, Int>>()
-        // tankowania: kolejno, zanim zasięg spadnie poniżej minimum; po każdym – pełny bak
-        val fuelAt = ArrayList<Double>() // przewidywane miejsca tankowania (m)
-        if (rangeKm != null) {
-            var pos = 0.0
-            var left = rangeKm * 1000
-            var k = 0
-            while (left - (total - pos) < reserveKm * 1000 && k < 6) {
-                val target = (pos + left - reserveKm * 1000).coerceIn(pos + 5_000, total)
-                val back = minOf(70_000.0, target - pos - 5_000).coerceAtLeast(5_000.0)
-                wins += AlongRoute.Window(target, back, 10_000.0, "fuel"); meta += "fuel" to (++k)
-                val at = (target - minOf(20_000.0, back / 2)).coerceAtLeast(pos + 1_000)
-                fuelAt += at
-                pos = at
-                left = fullKm * 1000
-                if (fullKm <= reserveKm + 30) break // bak za mały na sensowny plan
-            }
-        }
-        // przerwy co ok. 2 h – pomiń, gdy w pobliżu (25 km) i tak jest tankowanie
-        var t = 2 * 3600.0
-        var nb = 0
-        while (t < r.travelS - 20 * 60 && nb < 6) {
-            val target = t * speed
-            if (fuelAt.none { abs(it - target) < 25_000 }) {
-                wins += AlongRoute.Window(target, 30_000.0, 20_000.0, "rest"); meta += "break" to (t / 3600).roundToInt()
-                nb++
-            }
-            t += 2 * 3600.0
-        }
-        if (wins.isEmpty()) return@withContext Stops(emptyList(), totalKm, fuel, if (rangeKm != null) fullKm else null, fullGuess)
-        val fuelIdx = meta.indices.filter { meta[it].first == "fuel" }
-
-        // kraje w oknach tankowania (co ~8 km) → które źródła cen zapytać i w jakich punktach
-        val perCountry = HashMap<String, ArrayList<Pair<Double, Double>>>()
-        for (i in fuelIdx) {
-            val w = wins[i]
-            val lo = (w.targetM - w.backM).coerceAtLeast(0.0)
-            val hi = (w.targetM + w.fwdM).coerceAtMost(total)
-            var m = lo
-            var lastCenter = -1e12
-            while (m <= hi) {
-                val k = cum.indexOfFirst { it >= m }.let { if (it < 0) n - 1 else it }
-                val iso = Countries.at(ctx, lats[k], lons[k])
-                if (iso != null && iso in StationPrices.stationCountries) {
-                    val step = when (iso) { "DE" -> 40_000.0; "FR" -> 25_000.0; "IT" -> 18_000.0; "AT" -> 15_000.0; else -> 30_000.0 }
-                    val list = perCountry.getOrPut(iso) { ArrayList() }
-                    if (m - lastCenter >= step || list.isEmpty()) { list += lats[k] to lons[k]; lastCenter = m }
-                }
-                m += 8_000.0
-            }
-        }
-        // równolegle: stacje z OSM (jedno zapytanie) + ceny na stacjach w krajach z danymi + kurs euro + średnie UE
-        val (hits, priced, rate) = coroutineScope {
-            val osm = async {
-                AlongRoute.findAll(lats, lons, cum, wins, if (fuelIdx.isNotEmpty()) 8 else 3, RoutePreview.tomtomKey(ctx), fuelTag = StationPrices.osmTag(fuel))
-            }
-            val px = perCountry.map { (iso, centers) -> async { iso to StationPrices.stations(iso, fuel, centers, tkKey) } }
-            val eur = async { if (fuelIdx.isNotEmpty()) StationPrices.eurPln(ctx) else null }
-            val eu = async { if (fuelIdx.isNotEmpty()) EuFuel.refresh(ctx) }
-            eu.await()
-            Triple(osm.await(), px.awaitAll(), eur.await())
-        }
-        val plMax = FuelPrices.data.value?.today?.get(fuel)
-        val deOk = priced.firstOrNull { it.first == "DE" }?.let { it.second != null }
-        val allPx = priced.flatMap { it.second.orEmpty() }
-
-        val groups = wins.indices.map { i ->
-            val (kind, h) = meta[i]
-            var opts = hits[i].map { x ->
-                Opt(
-                    CarData.Place(x.name, if (x.rest) "Miejsce na przerwę" else "Stacja paliw", x.lat, x.lon),
-                    x.atM / 1000, r.depart + (x.atM / speed * 1000).toLong(), x.offM, x.rest,
-                    cheap = !x.rest && StationPrices.cheapBrand(x.brand + " " + x.name),
-                )
-            }
-            if (kind == "fuel") {
-                val w = wins[i]
-                val lo = (w.targetM - w.backM).coerceAtLeast(0.0)
-                val hi = (w.targetM + w.fwdM).coerceAtMost(total)
-                val list = opts.toMutableList()
-                // ceny na stacjach: dopisz do stacji z OSM (do 150 m) albo dodaj stację, której w OSM nie było
-                for (t2 in allPx) {
-                    val (off, at) = AlongRoute.nearRoute(t2.lat, t2.lon, lats, lons, cum, lo, hi)
-                    if (off > 1200 || at < lo - 500 || at > hi + 500) continue
-                    val pln = if (t2.cur == "PLN") t2.price else rate?.let { t2.price * it }
-                    val j = list.indexOfFirst { o -> o.src != "station" && RoutePreview.dist(LatLng(o.place.lat, o.place.lon), LatLng(t2.lat, t2.lon)) < 150 }
-                    if (j >= 0) list[j] = list[j].copy(price = t2.price, cur = t2.cur, pln = pln, open = t2.open, src = "station")
-                    else list += Opt(
-                        CarData.Place(t2.name, "Stacja paliw", t2.lat, t2.lon), at / 1000, r.depart + (at / speed * 1000).toLong(), off, false,
-                        price = t2.price, cur = t2.cur, pln = pln, open = t2.open, src = "station",
+        Stops(
+            res.groups.map { g ->
+                Group(g.kind, g.hours, g.atKm, g.options.map { o ->
+                    Opt(
+                        CarData.Place(o.place.name, o.place.detail, o.place.lat, o.place.lon), o.atKm, o.atTime, o.offM, o.rest,
+                        o.price, o.cur, o.pln, o.cheap, o.open, o.src, o.iso,
                     )
-                }
-                // bez ceny na stacji: Polska – cena maksymalna, reszta UE – średnia w kraju
-                for (k in list.indices) {
-                    val o = list[k]
-                    val iso = Countries.at(ctx, o.place.lat, o.place.lon)
-                    if (o.src == "station") { list[k] = o.copy(iso = iso); continue }
-                    list[k] = when {
-                        iso == "PL" && plMax != null -> o.copy(price = plMax, cur = "PLN", pln = plMax, src = "max", iso = iso)
-                        else -> EuFuel.price(iso, fuel)?.let { e -> o.copy(price = e, cur = "EUR", pln = rate?.let { e * it }, src = "avg", iso = iso) } ?: o.copy(iso = iso)
-                    }
-                }
-                // najtańsze (w złotych) pierwsze; przy tej samej cenie – cena ze stacji przed szacunkiem, tańsza sieć, lepiej położona
-                val order = HashMap<Opt, Int>()
-                list.forEachIndexed { k, o -> order.putIfAbsent(o, k) }
-                opts = list.sortedWith(
-                    compareBy<Opt>(
-                        { if (it.open) 0 else 1 },
-                        { it.pln?.let { p -> (p * 20).roundToInt() } ?: Int.MAX_VALUE }, // co 5 gr
-                        { if (it.src == "station") 0 else 1 },
-                        { if (it.cheap) 0 else 1 },
-                        { order[it] ?: 999 },
-                    ),
-                ).take(4)
-            }
-            Group(kind, h, wins[i].targetM / 1000, opts, if (kind == "fuel") h else 1)
-        }
-        val needDe = perCountry.containsKey("DE") && tkKey.isBlank() && fuel != FuelPrices.Fuel.LPG
-        val res = Stops(groups, totalKm, fuel, fullKm, fullGuess, needDe, deOk)
-        synchronized(this@SmartPlan) { cacheKey = key; cacheTotal = total; cacheVal = res }
-        res
+                }, g.n)
+            },
+            res.totalKm, fuel, res.fullKm, res.fullGuess, res.deKeyMissing, res.deOk,
+        )
     }
 
     /** Pełny bak w km (pojemność / średnie spalanie), gdy wiadomo. */

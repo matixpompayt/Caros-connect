@@ -1,5 +1,8 @@
 package pl.mati.carosconnect
 
+import pl.mati.caros.core.StationPrices
+import pl.mati.caros.core.Countries
+import pl.mati.caros.core.EuFuel
 import kotlin.math.abs
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked

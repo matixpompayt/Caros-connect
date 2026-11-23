@@ -44,6 +44,8 @@ object Link {
         val stop: Store.Spot? = null,
         /** Ostatnia komenda, której CAR OS w aucie nie zna (typ, czas) – „zaktualizuj CAR OS”. */
         val nack: Pair<String, Long>? = null,
+        /** Potwierdzenia komend wysłanych z telefonu (protokół 2). */
+        val acks: List<Proto.Ack> = emptyList(),
     )
 
     private const val PREFIX = "#caros1."
@@ -102,6 +104,35 @@ object Link {
         throw last ?: IOException("Brak połączenia")
     }
 
+    /**
+     * Same potwierdzenia z radia od [sinceSec] (czas unix) – lekkie odpytanie zaraz po wysłaniu komendy
+     * (bez pobierania całego statusu). Blokujące.
+     */
+    fun fetchAcks(p: Pairing, sinceSec: Long): List<Proto.Ack> {
+        val c = URL(RELAY + topicOf(p.key) + "/json?poll=1&since=" + sinceSec).openConnection() as HttpURLConnection
+        c.connectTimeout = 8_000
+        c.readTimeout = 12_000
+        c.setRequestProperty("User-Agent", "CarOS-Connect")
+        val out = ArrayList<Proto.Ack>()
+        try {
+            if (c.responseCode !in 200..299) throw IOException("Przekaźnik: HTTP ${c.responseCode}")
+            c.inputStream.bufferedReader().useLines { lines ->
+                for (line in lines) {
+                    val o = try { JSONObject(line) } catch (_: Exception) { continue }
+                    if (o.optString("event") != "message") continue
+                    val msg = o.optString("message")
+                    // status i trasy są duże – potwierdzenia mieszczą się w kilkuset znakach
+                    if (msg.length > 1500) continue
+                    val plain = decrypt(p.key, msg) ?: continue
+                    try { Proto.ackFrom(JSONObject(plain))?.let { out += it } } catch (_: Exception) {}
+                }
+            }
+        } finally {
+            c.disconnect()
+        }
+        return out
+    }
+
     /** Kopia ustawień do radia w częściach (przekaźnik przyjmuje do 4 KB na wiadomość). */
     fun sendRestore(p: Pairing, text: String) {
         val gz = gzip(text.toByteArray())
@@ -129,6 +160,7 @@ object Link {
         val trips = ArrayList<CarData.Trip>()
         var live: CarData.Live? = null
         var nack: Pair<String, Long>? = null
+        val acks = ArrayList<Proto.Ack>()
         val parts = HashMap<String, Array<String?>>()
         val meta = HashMap<String, Pair<Long, String>>()
         val repParts = HashMap<String, Array<String?>>()
@@ -165,7 +197,9 @@ object Link {
                             Proto.Msg.NACK -> {
                                 val t = o.optLong("time") * 1000
                                 if (nack == null || t >= nack!!.second) nack = m.optString("of") to t
+                                Proto.ackFrom(m)?.let { acks += it }
                             }
+                            Proto.Msg.ACK -> Proto.ackFrom(m)?.let { acks += it }
                             "live" -> {
                                 val l = CarData.Live(m.getDouble("lat"), m.getDouble("lon"), m.optInt("spd"), m.optInt("brg"), m.getLong("t"), m.optBoolean("m", true))
                                 if (live == null || l.time >= live!!.time) live = l
@@ -216,6 +250,6 @@ object Link {
             } catch (_: Exception) {
             }
         }
-        return Inbox(park, status, trips, backup, carIcon, live, report, stop, nack)
+        return Inbox(park, status, trips, backup, carIcon, live, report, stop, nack, acks)
     }
 }

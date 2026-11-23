@@ -1,5 +1,6 @@
 package pl.mati.carosconnect
 
+import pl.mati.caros.core.StationPrices
 import org.maplibre.android.geometry.LatLng
 import androidx.compose.ui.graphics.graphicsLayer
 import android.net.Uri
@@ -146,6 +147,7 @@ fun CarTab(actions: Actions) {
         return
     }
     CarCompatBanner()
+    OutboxCard()
     val s = st
     if (s == null) {
         Card {
@@ -392,10 +394,10 @@ private fun FuelSection(s: CarData.Status) {
         val pct = left?.let { if (f.tank > 0) (it / f.tank * 100).roundToInt().coerceIn(0, 100) else null }
         val reserve = Store.minRange.value
         StatBox(
-            if (f.estimated) "W baku (szac.)" else "W baku",
+            if (f.fromCan) "W baku" else if (f.estimated) "W baku (szac.)" else "W baku",
             left?.let { String.format(PL, "%.1f l", it) } ?: "—",
             Modifier.weight(1f),
-            sub = pct?.let { "$it% baku" },
+            sub = pct?.let { "$it% baku" + if (f.fromCan) " · czujnik auta" else "" },
             subColor = f.range?.let { r -> if (r < reserve) Color(0xFFFF5A5F) else if (r < reserve * 1.6) C.Orange else null },
         )
         StatBox(
@@ -581,24 +583,22 @@ private fun PlaceEditDialog(work: Boolean, current: CarData.Addr, onDismiss: () 
         }
         busy = "Zapisuję…"
         scope.launch {
-            val ok = withContext(Dispatchers.IO) {
-                try {
-                    Link.send(
-                        pairing,
-                        JSONObject().put("type", "place_set").put("slot", if (work) "work" else "home")
-                            .put("a", a.address).put("lat", a.lat ?: JSONObject.NULL).put("lon", a.lon ?: JSONObject.NULL),
-                    )
-                    true
-                } catch (_: Exception) {
-                    false
-                }
+            val item = try {
+                Outbox.sendAsync(
+                    ctx,
+                    JSONObject().put("type", "place_set").put("slot", if (work) "work" else "home")
+                        .put("a", a.address).put("lat", a.lat ?: JSONObject.NULL).put("lon", a.lon ?: JSONObject.NULL),
+                    (if (work) "Adres pracy" else "Adres domu") + if (a.isSet) ": ${a.address}" else " – usunięcie",
+                )
+            } catch (_: Exception) {
+                null
             }
             busy = null
-            if (ok) {
+            if (item != null) {
                 CarData.setPlaceLocal(work, a)
                 Toast.makeText(
                     ctx,
-                    if (a.isSet) "Zapisano – CAR OS w aucie zmieni adres, gdy będzie online" else "Usunięto – CAR OS zaktualizuje się, gdy będzie online",
+                    Outbox.sentText(item, if (a.isSet) "Zapisano – CAR OS w aucie zmieni adres, gdy będzie online" else "Usunięto – CAR OS zaktualizuje się, gdy będzie online"),
                     Toast.LENGTH_LONG,
                 ).show()
                 onDismiss()
@@ -751,24 +751,24 @@ suspend fun sendToCar(
     if (via.size > 3 && !CarData.carSupports(pl.mati.caros.core.Proto.Feat.STOPS8)) {
         Toast.makeText(ctx, "CAR OS w aucie przyjmie tylko 3 punkty po drodze – zaktualizuj CAR OS (wersja testowa 2.0)", Toast.LENGTH_LONG).show()
     }
-    val ok = withContext(Dispatchers.IO) {
-        try {
-            val o = JSONObject().put("type", type).put("n", p.name).put("d", p.detail).put("lat", p.lat).put("lon", p.lon)
-            if (via.isNotEmpty()) o.put("via", org.json.JSONArray().apply {
-                via.forEach { v -> put(JSONObject().put("n", v.name).put("d", v.detail).put("lat", v.lat).put("lon", v.lon)) }
-            })
-            if (shape.isNotEmpty()) o.put("shape", org.json.JSONArray().apply {
-                shape.forEach { q -> put(org.json.JSONArray().put(Math.round(q.latitude * 1e5) / 1e5).put(Math.round(q.longitude * 1e5) / 1e5)) }
-            })
-            Link.send(pairing, o)
-            true
-        } catch (_: Exception) {
-            false
-        }
+    val o = JSONObject().put("type", type).put("n", p.name).put("d", p.detail).put("lat", p.lat).put("lon", p.lon)
+    if (via.isNotEmpty()) o.put("via", org.json.JSONArray().apply {
+        via.forEach { v -> put(JSONObject().put("n", v.name).put("d", v.detail).put("lat", v.lat).put("lon", v.lon)) }
+    })
+    if (shape.isNotEmpty()) o.put("shape", org.json.JSONArray().apply {
+        shape.forEach { q -> put(org.json.JSONArray().put(Math.round(q.latitude * 1e5) / 1e5).put(Math.round(q.longitude * 1e5) / 1e5)) }
+    })
+    val label = when (type) {
+        "route" -> "Trasa: ${p.name}" + if (via.isNotEmpty()) " (+${via.size})" else ""
+        "fav_add" -> "Ulubione: ${p.name}"
+        else -> "Usuń z ulubionych: ${p.name}"
     }
+    val item = try { Outbox.sendAsync(ctx, o, label) } catch (_: Exception) { null }
+    val ok = item != null
     Toast.makeText(
         ctx,
-        if (!ok) "Nie udało się wysłać – sprawdź internet"
+        if (item == null) "Nie udało się wysłać – sprawdź internet"
+        else if (item.state == Outbox.State.QUEUED) Outbox.sentText(item, "")
         else when (type) {
             "route" -> "Wysłano do auta: ${p.name}" + (if (via.isNotEmpty()) " przez ${via.size} ${if (via.size == 1) "punkt" else "punkty"}" else "") + ". Trasa pojawi się w CAR OS (radio musi mieć internet)"
             "fav_add" -> "Dodano do ulubionych w aucie"
@@ -1444,6 +1444,7 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
 
     Label("Wygląd", Modifier.padding(top = 6.dp))
     ThemeChooser()
+    LookSyncSection()
     run {
         val nums by CarMapStyle.houseNumbers.collectAsState()
         ToggleRow("Numery domów na mapie", "Widoczne po mocnym przybliżeniu (poziom ulic)", nums) { CarMapStyle.setHouseNumbersPref(it) }
@@ -1567,8 +1568,18 @@ private val DATE = SimpleDateFormat("dd.MM.yyyy", PL)
 
 /** Wysyła zmianę serwisu do radia, potem po chwili pobiera potwierdzony stan. */
 private suspend fun sendSvc(ctx: android.content.Context, o: JSONObject) {
-    val p = Store.pairing.value ?: return
-    val ok = withContext(Dispatchers.IO) { try { Link.send(p, o); true } catch (_: Exception) { false } }
+    if (Store.pairing.value == null) return
+    val label = when (o.optString("type")) {
+        "svc_item" -> "Serwis: zmiana"
+        "svc_done" -> "Serwis: wykonano"
+        "svc_odo" -> "Przebieg: ${o.optInt("km")} km"
+        "fuel_add" -> "Tankowanie"
+        "fuel_del" -> "Usunięcie tankowania"
+        "fuel_tank" -> "Pojemność baku: ${o.optInt("l")} l"
+        else -> o.optString("type")
+    }
+    val item = try { Outbox.sendAsync(ctx, o, label) } catch (_: Exception) { null }
+    val ok = item != null && item.state != Outbox.State.QUEUED
     Toast.makeText(
         ctx,
         if (ok) "Zapisano – zmiana trafi do radia" else "Zapisano w telefonie – wyślę, gdy będzie internet",
@@ -1895,12 +1906,17 @@ private fun TankerkoenigSection() {
             SecondaryButton(if (busy) "Sprawdzam…" else "Zapisz", Icons.Rounded.Check, Modifier.weight(1f)) {
                 if (busy) return@SecondaryButton
                 StationPrices.setKey(ctx, key)
-                if (key.isBlank()) { status = "Klucz usunięty"; return@SecondaryButton }
+                // ten sam klucz do CAR OS w aucie (plan trasy w radiu też pokaże ceny z Niemiec)
+                val toCar = Store.pairing.value != null && CarData.carSupports(pl.mati.caros.core.Proto.Feat.CFG_TK)
+                if (toCar) scope.launch {
+                    try { Outbox.sendAsync(ctx, JSONObject().put("type", "cfg").put("tk", key.trim()), "Klucz Tankerkönig") } catch (_: Exception) {}
+                }
+                if (key.isBlank()) { status = "Klucz usunięty" + if (toCar) " (także w aucie)" else ""; return@SecondaryButton }
                 busy = true
                 scope.launch {
                     val err = StationPrices.test(key)
                     busy = false
-                    status = if (err == null) "Klucz działa – ceny z Niemiec będą przy stacjach" else "Klucz nie działa: $err"
+                    status = if (err == null) "Klucz działa – ceny z Niemiec będą przy stacjach" + (if (toCar) ", także w planie trasy w aucie" else "") else "Klucz nie działa: $err"
                 }
             }
         }
@@ -1947,8 +1963,9 @@ private fun TrafficKeySection() {
             status = "Wysyłam…"
             scope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 status = try {
-                    Link.send(p, org.json.JSONObject().put("type", "cfg").put("tomtom", key.trim()))
-                    if (key.isBlank()) "Wysłano – korki w radiu wyłączone" else "Wysłano – radio sprawdzi klucz i pokaże wynik na ekranie"
+                    val item = Outbox.send(ctx, org.json.JSONObject().put("type", "cfg").put("tomtom", key.trim()), "Klucz TomTom")
+                    if (item.state == Outbox.State.QUEUED) Outbox.sentText(item, "")
+                    else if (key.isBlank()) "Wysłano – korki w radiu wyłączone" else "Wysłano – radio sprawdzi klucz i pokaże wynik na ekranie"
                 } catch (e: Exception) {
                     "Nie udało się wysłać: " + (e.message ?: "brak internetu")
                 }
@@ -2161,4 +2178,37 @@ private fun WidgetsSection() {
             if (i < Widgets.all.lastIndex) Box(Modifier.fillMaxWidth().height(1.dp).background(C.Border.copy(alpha = 0.5f)))
         }
     }
+}
+
+/** Kolor akcentu (motyw jasny / ciemny) i wspólny wygląd z CAR OS w aucie. */
+@Composable
+private fun LookSyncSection() {
+    val on by LookSync.enabled.collectAsState()
+    val mode by Store.theme.collectAsState()
+    val acc by LookSync.accent.collectAsState()
+    val car by CarData.car.collectAsState()
+    if (mode != "glass") {
+        Text("Kolor akcentu", fontSize = 14.sp, color = C.Text2, modifier = Modifier.padding(horizontal = 4.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            pl.mati.caros.core.Look.ACCENTS.forEach { c ->
+                val sel = (acc ?: 0xFF2FD3F0.toInt()) == c
+                Box(
+                    Modifier.size(28.dp).clip(CircleShape).background(Color(c))
+                        .border(if (sel) 3.dp else 1.dp, if (sel) C.Text else C.Border, CircleShape)
+                        .clickable { LookSync.setAccent(if (c == 0xFF2FD3F0.toInt()) null else c) },
+                )
+            }
+        }
+    }
+    val supported = car?.supports(pl.mati.caros.core.Proto.Cmd.LOOK) == true
+    ToggleRow(
+        "Ten sam wygląd w aucie",
+        when {
+            Store.pairing.collectAsState().value == null -> "Po połączeniu z CAR OS: Glass, jasny / ciemny i kolor akcentu zmieniają się razem w telefonie i w radiu"
+            car != null && !supported -> "CAR OS w aucie jest za stary – zaktualizuj radio do wersji testowej 2.0"
+            on -> "Glass, jasny / ciemny i kolor akcentu zmieniają się razem w telefonie i w radiu"
+            else -> "Wyłączone – telefon i radio mają osobny wygląd"
+        },
+        on,
+    ) { LookSync.setEnabled(it) }
 }

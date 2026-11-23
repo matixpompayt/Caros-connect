@@ -60,6 +60,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.DoneAll
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DirectionsCar
@@ -243,10 +248,12 @@ fun ParkApp(perms: Perms, actions: Actions) {
     val glass = themeMode == "glass"
     val gSpec by GlassTheme.spec.collectAsState()
     val light = when (themeMode) { "light" -> true; "dark" -> false; "glass" -> GlassTheme.isLight(gSpec, sysDark); else -> !sysDark }
+    // kolor akcentu wybrany w telefonie albo z auta (wspólny wygląd)
+    val lookAcc by LookSync.accent.collectAsState()
     val target = when {
         glass -> GlassTheme.pal(light, gSpec.accent?.let { Color(it) } ?: GlassState.autoAccent ?: GlassTheme.DEFAULT_ACCENT)
-        light -> C.LIGHT
-        else -> C.DARK
+        light -> lookAcc?.let { C.LIGHT.copy(accent = GlassTheme.accentFor(Color(it), true)) } ?: C.LIGHT
+        else -> lookAcc?.let { C.DARK.copy(accent = Color(it)) } ?: C.DARK
     }
     if (C.pal != target) C.pal = target
     // widżety w tym samym wyglądzie co aplikacja (motyw, Glass, akcent)
@@ -993,6 +1000,57 @@ fun CarCompatBanner(always: Boolean = false) {
             "OK", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.Accent,
             modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { CarData.setNack(null) }.padding(8.dp),
         )
+    }
+}
+
+/**
+ * Ostatnio wysłane do auta (protokół 2): czeka na internet / wysłano / auto wykonało / błąd.
+ * Pokazuje do 4 komend z ostatnich 12 h.
+ */
+@Composable
+fun OutboxCard() {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val all by Outbox.items.collectAsState()
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { delay(30_000); now = System.currentTimeMillis() } }
+    val list = all.filter { now - it.time < 12 * 3600_000L }.take(4)
+    if (list.isEmpty()) return
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card).padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("Wysłane do auta", fontSize = 13.sp, color = C.Muted)
+        list.forEach { it ->
+            val (icon, tint) = when (it.state) {
+                Outbox.State.QUEUED -> Icons.Rounded.CloudOff to C.Orange
+                Outbox.State.SENT -> Icons.Rounded.Schedule to C.Accent
+                Outbox.State.DONE -> Icons.Rounded.DoneAll to C.Green
+                Outbox.State.FAILED -> Icons.Rounded.ErrorOutline to Color(0xFFFF5A5F)
+                Outbox.State.UNKNOWN -> Icons.Rounded.SystemUpdate to C.Orange
+                Outbox.State.NOACK -> Icons.Rounded.Check to C.Muted
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))
+                Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                    Text(it.label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(Outbox.stateText(it) + " · " + agoText(if (it.doneAt > 0) it.doneAt else it.time), fontSize = 12.sp, color = C.Text2, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+                if (it.state == Outbox.State.QUEUED) Text(
+                    "Wyślij", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.Accent,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
+                        scope.launch {
+                            val left = Outbox.flushAsync(ctx)
+                            if (left > 0) android.widget.Toast.makeText(ctx, "Nadal brak internetu – wyślę sama, gdy wróci", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }.padding(8.dp),
+                )
+                else if (it.state != Outbox.State.SENT) Icon(
+                    Icons.Rounded.Close, "Ukryj", tint = C.Muted,
+                    modifier = Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).clickable { Outbox.dismiss(it.mid) }.padding(6.dp),
+                )
+            }
+        }
     }
 }
 

@@ -172,8 +172,8 @@ object TripPlan {
     /** Akcja z powiadomienia: wyślij cel do radia (trasa będzie gotowa po uruchomieniu). */
     fun sendRoute(ctx: Context) {
         val p = plan.value ?: return
-        val pairing = Store.pairing.value ?: return
-        Link.send(pairing, JSONObject().put("type", "route").put("n", p.name).put("d", p.detail).put("lat", p.lat).put("lon", p.lon))
+        if (Store.pairing.value == null) return
+        Outbox.send(ctx, JSONObject().put("type", "route").put("n", p.name).put("d", p.detail).put("lat", p.lat).put("lon", p.lon), "Trasa: ${p.name}")
     }
 }
 

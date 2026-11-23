@@ -1,5 +1,6 @@
 package pl.mati.carosconnect
 
+import pl.mati.caros.core.StationPrices
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
@@ -74,6 +75,8 @@ class MainActivity : ComponentActivity(), Actions {
         FuelPrices.init(this)
         StationPrices.init(this)
         GlassTheme.init(this)
+        Outbox.init(this)
+        LookSync.init(this)
         SyncWorker.schedule(this)
         if (savedInstanceState == null) { handleShare(intent); openTabFrom(intent); walkFrom(intent); widgetActionFrom(intent) }
         setContent {
@@ -90,6 +93,8 @@ class MainActivity : ComponentActivity(), Actions {
         matchCarByName()
         startIfCarConnected()
         refreshFromCar()
+        // komendy, które czekały na internet
+        lifecycleScope.launch { Outbox.flushAsync(this@MainActivity) }
         Updater.init(this)
         Updater.check(silent = true)
     }

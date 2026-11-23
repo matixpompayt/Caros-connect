@@ -82,7 +82,8 @@ object CarData {
         fun toJson(): JSONObject = JSONObject().put("id", id).put("t", time).put("o", odo).put("l", liters).put("c", cost).put("f", full)
     }
 
-    data class Fuel(val tank: Int, val fills: List<Fill>, val avg: Double?, val range: Double?, val costKm: Double?, val estimated: Boolean, val left: Double? = null)
+    /** [fromCan] – litry w baku z czujnika auta (dekoder CAN radia), nie szacunek z tankowań. */
+    data class Fuel(val tank: Int, val fills: List<Fill>, val avg: Double?, val range: Double?, val costKm: Double?, val estimated: Boolean, val left: Double? = null, val fromCan: Boolean = false)
 
     val live = MutableStateFlow<Live?>(null)
 
@@ -179,10 +180,13 @@ object CarData {
         if (cur != null && cur.time > s.time) return
         status.value = s
         try {
-            val peer = Proto.carFromStatus(JSONObject(raw))
+            val js = JSONObject(raw)
+            val peer = Proto.carFromStatus(js)
             // auto zaktualizowane – stary „nie zna komendy” już nieaktualny
             if (car.value?.app != peer.app) setNack(null)
             car.value = peer
+            // wspólny wygląd: wygląd z radia
+            LookSync.onCar(pl.mati.caros.core.Look.fromJson(js.optJSONObject("look")))
         } catch (_: Exception) {}
         sp?.edit()?.putString("status", raw)?.apply()
         if (s.body != null) setCarIcon(s.body, s.paint)
@@ -342,6 +346,7 @@ object CarData {
                     f.optBoolean("est", true),
                     // litry w baku z radia (nowszy CAR OS); po zmianie w telefonie – liczymy sami
                     if (!f.has("left") || f.isNull("left") || o.optBoolean("pending")) null else f.optDouble("left"),
+                    f.optString("src") == "can",
                 )
             },
             home = addrFrom(o.optJSONObject("home")),

@@ -58,6 +58,9 @@ object Sync {
                         EventLog.add(EventLog.Cat.CAR, "CAR OS w aucie nie zna komendy „$type” – zaktualizuj CAR OS", err = true)
                     }
                 }
+                // potwierdzenia komend z telefonu + to, co czekało na internet
+                if (inbox.acks.isNotEmpty()) Outbox.onAcks(ctx, inbox.acks)
+                try { Outbox.flush(ctx) } catch (_: Exception) {}
                 if (CarData.status.value?.time != beforeStatus) EventLog.bump(EventLog.Metric.IN)
                 try { checkBattery(ctx) } catch (_: Exception) {}
                 try { checkLive(ctx) } catch (_: Exception) {}

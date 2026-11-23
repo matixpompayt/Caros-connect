@@ -196,3 +196,6 @@ object FuelPrices {
         return Snapshot(days, now, tomorrow, tomorrowSame, change, cur?.first ?: max.lastOrNull()?.first, o.optString("updated"))
     }
 }
+
+/** Ten sam rodzaj paliwa we wspólnym module (plan trasy, ceny na stacjach). */
+val FuelPrices.Fuel.type: pl.mati.caros.core.FuelType get() = pl.mati.caros.core.FuelType.of(key)
