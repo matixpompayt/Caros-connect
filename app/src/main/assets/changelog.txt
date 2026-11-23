@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 2.0-beta.19 · 2026-11-23
 Płynniejsze wejście w „Prowadź do auta” (i w adres domu/pracy)
 - Panel wyjeżdża spod ekranu w całości (wcześniej pusty panel stał, a tylko jego treść podjeżdżała), przy zamykaniu zjeżdża w dół
 - Mapa nie powiększa się już przy wejściu i nie mignie beżowym prostokątem – pojawia się łagodnie, gdy jest gotowa
