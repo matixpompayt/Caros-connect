@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 2.0-beta.1 · 2026-11-23
 CAR OS Connect 2.0 – pierwsza wersja testowa
 - Nowy protokół auto ↔ telefon (wersja 2): telefon wie, jaką wersję CAR OS ma auto i co ono potrafi
 - Ustawienia → Aktualizacja: wersja CAR OS w aucie i czy jest zgodna z telefonem
