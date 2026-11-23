@@ -1003,6 +1003,115 @@ fun CarCompatBanner(always: Boolean = false) {
     }
 }
 
+/** Ostatnia mila: auto zaparkowane niedaleko celu – „Prowadź pieszo” (do godziny po zaparkowaniu). */
+@Composable
+fun LastMileCard() {
+    val o by LastMile.offer.collectAsState()
+    val of = o ?: return
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { delay(60_000); now = System.currentTimeMillis() } }
+    if (now - of.parkTime > 3600_000L) return
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card).padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.DirectionsWalk, null, tint = C.Accent, modifier = Modifier.size(26.dp))
+        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+            Text("Do celu pieszo: ${of.name}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${WalkNav.distText(of.meters.toDouble())} od auta · ok. ${LastMile.minutes(of.meters)} min chodnikami", fontSize = 12.sp, color = C.Text2)
+        }
+        Text(
+            "Prowadź", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = C.Bg,
+            modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(C.Accent).clickable { WalkNav.startToDest(of.name, of.lat, of.lon) }
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+        )
+        Icon(
+            Icons.Rounded.Close, "Ukryj", tint = C.Muted,
+            modifier = Modifier.padding(start = 4.dp).size(32.dp).clip(RoundedCornerShape(8.dp)).clickable { LastMile.dismiss() }.padding(6.dp),
+        )
+    }
+}
+
+/**
+ * Jazda na żywo przez link: włącz (do celu / 1 h / 4 h) – telefon od razu proponuje wysłanie linku;
+ * gdy trwa – „Wyślij link” i „Zakończ”. Tylko z CAR OS 2.0 w aucie.
+ */
+@Composable
+fun LiveShareCard() {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val car by CarData.car.collectAsState()
+    val pairing by Store.pairing.collectAsState()
+    val info by TripShare.info.collectAsState()
+    var pick by remember { mutableStateOf(false) }
+    if (pairing == null || car?.supports(pl.mati.caros.core.Proto.Cmd.SHARE) != true) return
+    val i = info?.takeIf { it.until > System.currentTimeMillis() }
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).surface(RoundedCornerShape(16.dp), C.Card)
+            .clickable(enabled = i == null) { pick = true }.padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.Share, null, tint = if (i != null) C.Green else C.Accent, modifier = Modifier.size(24.dp))
+        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+            if (i == null) {
+                Text("Udostępnij jazdę na żywo", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+                Text("Link: bliscy widzą auto, trasę i przyjazd w przeglądarce", fontSize = 12.sp, color = C.Text2)
+            } else {
+                Text("Udostępniasz jazdę na żywo", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+                Text(
+                    if (i.toDest) "Do dojechania do celu" else "Do " + java.text.SimpleDateFormat("H:mm", Locale("pl")).format(java.util.Date(i.until)),
+                    fontSize = 12.sp, color = C.Text2,
+                )
+            }
+        }
+        if (i != null) {
+            Text(
+                "Wyślij link", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.Accent,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { try { ctx.startActivity(TripShare.chooser(i.link)) } catch (_: Exception) {} }.padding(8.dp),
+            )
+            Text(
+                "Zakończ", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFFF5A5F),
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
+                    scope.launch { withContext(kotlinx.coroutines.Dispatchers.IO) { try { TripShare.stop(ctx) } catch (_: Exception) {} } }
+                }.padding(8.dp),
+            )
+        }
+    }
+    if (pick) AlertDialog(
+        onDismissRequest = { pick = false },
+        containerColor = C.DialogBg, modifier = Modifier.glassDialog(),
+        title = { Text("Udostępnij jazdę na żywo", color = C.Text) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Wyślesz link (SMS, WhatsApp…). Kto go otworzy, zobaczy w przeglądarce auto na mapie, trasę i godzinę przyjazdu – bez aplikacji. " +
+                        "Link jest zaszyfrowany i kończy się sam.",
+                    color = C.Muted, fontSize = 14.sp,
+                )
+                listOf(0 to "Do celu (gdy w aucie jest trasa; bez trasy – 2 h)", 60 to "Na 1 godzinę", 240 to "Na 4 godziny").forEach { (min, label) ->
+                    Text(
+                        label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text,
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.Raised).clickable {
+                            pick = false
+                            scope.launch {
+                                val r = withContext(kotlinx.coroutines.Dispatchers.IO) { try { TripShare.start(ctx, min) } catch (_: Exception) { null } }
+                                if (r == null) {
+                                    android.widget.Toast.makeText(ctx, "Nie udało się – połącz z CAR OS", android.widget.Toast.LENGTH_LONG).show()
+                                } else {
+                                    if (r.second.state == Outbox.State.QUEUED) android.widget.Toast.makeText(ctx, "Brak internetu – auto zacznie udostępniać, gdy wróci", android.widget.Toast.LENGTH_LONG).show()
+                                    try { ctx.startActivity(TripShare.chooser(r.first)) } catch (_: Exception) {}
+                                }
+                            }
+                        }.padding(horizontal = 14.dp, vertical = 12.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = { pick = false }) { Text("Anuluj") } },
+    )
+}
+
 /**
  * Ostatnio wysłane do auta (protokół 2): czeka na internet / wysłano / auto wykonało / błąd.
  * Pokazuje do 4 komend z ostatnich 12 h.
@@ -1199,7 +1308,10 @@ fun SecondaryButton(text: String, icon: ImageVector, modifier: Modifier = Modifi
 // ---------- mapa ----------
 
 /** Pinezka „P” w kolorze CAR OS. */
-fun carPin(): Bitmap {
+fun carPin(): Bitmap = pinBitmap("P")
+
+/** Pinezka z literą / znakiem (P – auto, ⚑ – cel pieszo). */
+fun pinBitmap(label: String): Bitmap {
     val w = 84
     val h = 104
     val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
@@ -1220,7 +1332,7 @@ fun carPin(): Bitmap {
     p.textSize = 42f
     p.isFakeBoldText = true
     p.textAlign = Paint.Align.CENTER
-    c.drawText("P", w / 2f, 57f, p)
+    c.drawText(label, w / 2f, 57f, p)
     return b
 }
 

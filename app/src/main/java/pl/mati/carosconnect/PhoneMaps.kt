@@ -281,7 +281,7 @@ fun ParkMap(s: Store.Spot, me: android.location.Location?, modifier: Modifier, l
 @Composable
 fun WalkMap(
     s: Store.Spot, me: android.location.Location?, heading: Float?, route: List<LatLng>, gaps: List<List<LatLng>>,
-    follow: Boolean, onUserPan: () -> Unit, modifier: Modifier,
+    follow: Boolean, onUserPan: () -> Unit, modifier: Modifier, toDest: Boolean = false,
 ) {
     val ctx = LocalContext.current
     val accent = C.Accent.toArgb()
@@ -333,9 +333,10 @@ fun WalkMap(
                 if (below != null) st.addLayerBelow(l, below) else st.addLayer(l)
             }
             // auto 3D + pinezka „P”
-            st.addImage("caros-car-pin", carPin())
+            // ostatnia mila: zamiast auta – flaga celu
+            st.addImage("caros-car-pin", if (toDest) pinBitmap("⚑") else carPin())
             st.addSource(GeoJsonSource("caros-car"))
-            CarData.carBody.value?.let { st.addImage("caros-car-3d", carModel(ctx, it, CarData.carPaint.value)) }
+            if (!toDest) CarData.carBody.value?.let { st.addImage("caros-car-3d", carModel(ctx, it, CarData.carPaint.value)) }
             st.addLayer(
                 SymbolLayer("caros-car-3d-layer", "caros-car").withProperties(
                     PropertyFactory.iconImage("caros-car-3d"),
@@ -344,14 +345,14 @@ fun WalkMap(
                     PropertyFactory.iconIgnorePlacement(true),
                     PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
                     PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
-                    PropertyFactory.visibility(if (CarData.carBody.value != null) Property.VISIBLE else Property.NONE),
+                    PropertyFactory.visibility(if (CarData.carBody.value != null && !toDest) Property.VISIBLE else Property.NONE),
                 ),
             )
             st.addLayer(
                 SymbolLayer("caros-car-layer", "caros-car").withProperties(
                     PropertyFactory.iconImage("caros-car-pin"),
                     PropertyFactory.iconAnchor(Property.ICON_ANCHOR_BOTTOM),
-                    PropertyFactory.iconOffset(arrayOf(0f, if (CarData.carBody.value != null) -26f else 0f)),
+                    PropertyFactory.iconOffset(arrayOf(0f, if (CarData.carBody.value != null && !toDest) -26f else 0f)),
                     PropertyFactory.iconSize(0.8f),
                     PropertyFactory.iconAllowOverlap(true),
                     PropertyFactory.iconIgnorePlacement(true),

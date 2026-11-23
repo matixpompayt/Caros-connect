@@ -46,6 +46,8 @@ object Link {
         val nack: Pair<String, Long>? = null,
         /** Potwierdzenia komend wysłanych z telefonu (protokół 2). */
         val acks: List<Proto.Ack> = emptyList(),
+        /** Ostatnia mila: cel trasy przy zaparkowaniu (nazwa, lat, lon, metry od auta, czas postoju). */
+        val lastMile: LastMile.Offer? = null,
     )
 
     private const val PREFIX = "#caros1."
@@ -161,6 +163,7 @@ object Link {
         var live: CarData.Live? = null
         var nack: Pair<String, Long>? = null
         val acks = ArrayList<Proto.Ack>()
+        var lastMile: LastMile.Offer? = null
         val parts = HashMap<String, Array<String?>>()
         val meta = HashMap<String, Pair<Long, String>>()
         val repParts = HashMap<String, Array<String?>>()
@@ -186,6 +189,9 @@ object Link {
                                 }
                                 if (park == null || s.time >= park!!.time) {
                                     park = s
+                                    lastMile = m.optJSONObject("dest")?.let { d ->
+                                        LastMile.Offer(d.optString("n").ifBlank { "Cel" }, d.optDouble("lat"), d.optDouble("lon"), d.optInt("m"), s.time)
+                                    }
                                     m.optString("body").ifBlank { null }?.let { b -> carIcon = b to (if (m.has("paint")) m.optInt("paint") else null) }
                                 }
                             }
@@ -250,6 +256,6 @@ object Link {
             } catch (_: Exception) {
             }
         }
-        return Inbox(park, status, trips, backup, carIcon, live, report, stop, nack, acks)
+        return Inbox(park, status, trips, backup, carIcon, live, report, stop, nack, acks, lastMile)
     }
 }

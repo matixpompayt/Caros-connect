@@ -147,6 +147,8 @@ fun CarTab(actions: Actions) {
         return
     }
     CarCompatBanner()
+    LastMileCard()
+    LiveShareCard()
     OutboxCard()
     val s = st
     if (s == null) {

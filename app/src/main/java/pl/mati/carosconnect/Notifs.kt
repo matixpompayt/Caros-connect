@@ -29,6 +29,8 @@ object Notifs {
     const val ID_BATTERY = 7
     const val CH_FUEL = "fuel_prices"
     const val ID_FUEL = 9
+    const val ID_LASTMILE = 10
+    const val ID_SHARE = 11
 
     fun channels(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
@@ -102,6 +104,42 @@ object Notifs {
             .setOngoing(true)
             .apply { if (Build.VERSION.SDK_INT >= 31) setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE) }
             .build()
+    }
+
+    fun cancel(ctx: Context, id: Int) {
+        try { ctx.getSystemService(NotificationManager::class.java)?.cancel(id) } catch (_: Exception) {}
+    }
+
+    /** Ostatnia mila: „Do celu pieszo” z przyciskiem prowadzenia. */
+    fun lastMile(ctx: Context, o: LastMile.Offer) {
+        channels(ctx)
+        val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
+        val walk = PendingIntent.getActivity(ctx, 3, WalkNav.destIntent(ctx, o.name, o.lat, o.lon), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val n = Notification.Builder(ctx, CH_PARK)
+            .setSmallIcon(android.R.drawable.ic_dialog_map)
+            .setContentTitle("Do celu pieszo: ${o.name}")
+            .setContentText("${WalkNav.distText(o.meters.toDouble())} od auta · ok. ${LastMile.minutes(o.meters)} min – poprowadzę chodnikami")
+            .setContentIntent(walk)
+            .setAutoCancel(true)
+            .addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Prowadź pieszo", walk).build())
+            .build()
+        try { nm.notify(ID_LASTMILE, n) } catch (_: SecurityException) {}
+    }
+
+    /** Jazda na żywo włączona w radiu – link do wysłania bliskim. */
+    fun shareLink(ctx: Context, link: String, text: String) {
+        channels(ctx)
+        val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
+        val send = PendingIntent.getActivity(ctx, 4, TripShare.chooser(link), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val n = Notification.Builder(ctx, CH_LIVE)
+            .setSmallIcon(android.R.drawable.ic_menu_share)
+            .setContentTitle("Jazda na żywo – link gotowy")
+            .setContentText(text)
+            .setContentIntent(send)
+            .setAutoCancel(true)
+            .addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Wyślij link", send).build())
+            .build()
+        try { nm.notify(ID_SHARE, n) } catch (_: SecurityException) {}
     }
 
     fun parked(ctx: Context, s: Store.Spot) {

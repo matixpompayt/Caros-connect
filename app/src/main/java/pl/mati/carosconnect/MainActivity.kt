@@ -77,6 +77,7 @@ class MainActivity : ComponentActivity(), Actions {
         GlassTheme.init(this)
         Outbox.init(this)
         LookSync.init(this)
+        LastMile.init(this)
         SyncWorker.schedule(this)
         if (savedInstanceState == null) { handleShare(intent); openTabFrom(intent); walkFrom(intent); widgetActionFrom(intent) }
         setContent {
@@ -177,6 +178,13 @@ class MainActivity : ComponentActivity(), Actions {
         if (i?.getBooleanExtra("walk_to_car", false) == true) {
             i.removeExtra("walk_to_car")
             WalkNav.start()
+        }
+        // ostatnia mila – prowadzenie pieszo do celu
+        val n = i?.getStringExtra("walk_dest_n")
+        if (n != null && i.hasExtra("walk_dest_lat")) {
+            WalkNav.startToDest(n, i.getDoubleExtra("walk_dest_lat", 0.0), i.getDoubleExtra("walk_dest_lon", 0.0))
+            i.removeExtra("walk_dest_n")
+            Notifs.cancel(this, Notifs.ID_LASTMILE)
         }
     }
 

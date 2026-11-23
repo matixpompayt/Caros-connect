@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DirectionsCar
+import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.Navigation
@@ -85,13 +86,29 @@ object WalkNav {
         val length get() = cum.last()
     }
 
+    /** Ostatnia mila: cel pieszo (po zaparkowaniu) – null = prowadzenie do auta. */
+    val dest = MutableStateFlow<Store.Spot?>(null)
+
     fun start() {
+        dest.value = null
         if (Store.spot.value != null) active.value = true
+    }
+
+    /** Prowadzenie pieszo do celu trasy (ostatnia mila). */
+    fun startToDest(name: String, lat: Double, lon: Double) {
+        dest.value = Store.Spot(lat, lon, System.currentTimeMillis(), 0f, name)
+        active.value = true
     }
 
     fun stop() {
         active.value = false
+        dest.value = null
     }
+
+    /** Intencja: otwórz od razu prowadzenie pieszo do celu (powiadomienie „ostatnia mila”). */
+    fun destIntent(ctx: Context, name: String, lat: Double, lon: Double): Intent =
+        Intent(ctx, MainActivity::class.java).putExtra("walk_dest_n", name).putExtra("walk_dest_lat", lat).putExtra("walk_dest_lon", lon)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
 
     /** Intencja: otwórz aplikację od razu w nawigacji do auta (powiadomienie, widżet). */
     fun intent(ctx: Context): Intent =
@@ -413,7 +430,11 @@ object WalkNav {
 fun WalkNavScreen(perms: Perms, actions: Actions) {
     val ctx = LocalContext.current
     val spot by Store.spot.collectAsState()
-    val s = spot ?: run { WalkNav.stop(); return }
+    val destSpot by WalkNav.dest.collectAsState()
+    // ostatnia mila – do celu; inaczej do auta
+    val toDest = destSpot != null
+    val s = destSpot ?: spot ?: run { WalkNav.stop(); return }
+    val what = if (toDest) "do celu" else "do auta"
     val me = rememberPhoneLocation(perms.loc)
     val azimuth = rememberAzimuth(me, true)
     val voice by WalkNav.voice.collectAsState()
@@ -433,7 +454,7 @@ fun WalkNavScreen(perms: Perms, actions: Actions) {
     DisposableEffect(Unit) {
         view.keepScreenOn = true
         WalkNav.initVoice(ctx)
-        EventLog.add(EventLog.Cat.PARK, "Prowadzenie do auta – start")
+        EventLog.add(EventLog.Cat.PARK, "Prowadzenie $what – start" + if (toDest) ": ${s.address ?: ""}" else "")
         onDispose {
             view.keepScreenOn = false
             WalkNav.shutdownVoice()
@@ -493,7 +514,7 @@ fun WalkNavScreen(perms: Perms, actions: Actions) {
         val rr = r ?: return@LaunchedEffect
         if (spokenStep == -1) {
             spokenStep = -2
-            WalkNav.say("Prowadzę do auta. " + WalkNav.distText(rr.length) + ". " + (next?.let { WalkNav.text(it) } ?: ""))
+            WalkNav.say("Prowadzę $what. " + WalkNav.distText(rr.length) + ". " + (next?.let { WalkNav.text(it) } ?: ""))
             return@LaunchedEffect
         }
         val n = next ?: return@LaunchedEffect
@@ -510,8 +531,8 @@ fun WalkNavScreen(perms: Perms, actions: Actions) {
         if (direct != null && direct < maxOf(12.0, (me?.accuracy ?: 0f).toDouble().coerceAtMost(25.0)) && !arrived) {
             arrived = true
             WalkNav.buzz(ctx)
-            WalkNav.say("Jesteś przy aucie")
-            EventLog.add(EventLog.Cat.PARK, "Prowadzenie do auta – na miejscu")
+            WalkNav.say(if (toDest) "Jesteś na miejscu" else "Jesteś przy aucie")
+            EventLog.add(EventLog.Cat.PARK, "Prowadzenie $what – na miejscu")
         }
     }
 
@@ -529,7 +550,7 @@ fun WalkNavScreen(perms: Perms, actions: Actions) {
         } else if (me != null && !arrived) {
             gaps += listOf(LatLng(me.latitude, me.longitude), LatLng(s.lat, s.lon))
         }
-        WalkMap(s, me, heading, line, gaps, follow, { follow = false }, Modifier.fillMaxSize())
+        WalkMap(s, me, heading, line, gaps, follow, { follow = false }, Modifier.fillMaxSize(), toDest)
 
         // górna karta: manewr
         Column(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(12.dp).fillMaxWidth()) {
@@ -541,7 +562,7 @@ fun WalkNavScreen(perms: Perms, actions: Actions) {
                 val near = direct != null && direct < 40
                 when {
                     arrived || near || next?.type == "arrive" ->
-                        Icon(Icons.Rounded.DirectionsCar, null, tint = C.Bg, modifier = Modifier.size(46.dp))
+                        Icon(if (toDest) Icons.Rounded.Flag else Icons.Rounded.DirectionsCar, null, tint = C.Bg, modifier = Modifier.size(46.dp))
                     next != null -> Icon(Icons.Rounded.Navigation, null, tint = C.Bg, modifier = Modifier.size(46.dp).rotate(WalkNav.arrow(next)))
                     me != null && heading != null -> Icon(
                         Icons.Rounded.Navigation, null, tint = C.Bg,
@@ -552,8 +573,8 @@ fun WalkNavScreen(perms: Perms, actions: Actions) {
                 Column(Modifier.weight(1f)) {
                     val (big, small) = when {
                         me == null -> "Szukam GPS…" to "Wyjdź na zewnątrz, jeśli długo nie łapie"
-                        arrived -> "Jesteś przy aucie" to (s.address ?: "")
-                        near -> "Auto jest blisko" to "${WalkNav.distText(direct!!)} – rozejrzyj się"
+                        arrived -> (if (toDest) "Jesteś na miejscu" else "Jesteś przy aucie") to (s.address ?: "")
+                        near -> (if (toDest) "Cel jest blisko" else "Auto jest blisko") to "${WalkNav.distText(direct!!)} – rozejrzyj się"
                         routing && route == null -> "Wyznaczam trasę…" to WalkNav.distText(direct ?: 0.0) + " w linii prostej"
                         next != null && toNext != null -> WalkNav.distText(toNext) to WalkNav.text(next)
                         failed || route == null -> WalkNav.distText(direct ?: 0.0) to "Nie mam trasy pieszej – ponawiam. Idź za strzałką"
@@ -601,7 +622,7 @@ fun WalkNavScreen(perms: Perms, actions: Actions) {
                     val rem = remaining
                     if (arrived) {
                         Text("Na miejscu", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Green)
-                        Text(Store.carName.value ?: "Twoje auto", fontSize = 15.sp, color = C.Muted)
+                        Text(if (toDest) s.address ?: "Cel" else Store.carName.value ?: "Twoje auto", fontSize = 15.sp, color = C.Muted)
                     } else if (rem != null) {
                         val min = (rem / 1.3 / 60).roundToInt().coerceAtLeast(1)
                         val at = java.text.SimpleDateFormat("HH:mm", Locale("pl")).format(java.util.Date(System.currentTimeMillis() + (rem / 1.3 * 1000).toLong()))
@@ -612,7 +633,7 @@ fun WalkNavScreen(perms: Perms, actions: Actions) {
                         val src by WalkNav.source.collectAsState()
                         Text("Na miejscu o $at · " + (if (route != null && src.isNotBlank()) src else "pieszo"), fontSize = 15.sp, color = C.Muted)
                     } else {
-                        Text("Prowadzę do auta", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = C.Text)
+                        Text("Prowadzę $what", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = C.Text)
                         Text(s.address ?: s.coords, fontSize = 14.sp, color = C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }

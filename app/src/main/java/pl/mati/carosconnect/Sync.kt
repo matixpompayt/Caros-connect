@@ -47,6 +47,8 @@ object Sync {
                 val beforeStatus = CarData.status.value?.time
                 val inbox = Link.fetchInbox(p)
                 inbox.park?.let { Store.offerCarSpot(ctx, it, final = true) }
+                // ostatnia mila: auto stoi 150 m – 3 km od celu trasy → prowadzenie pieszo
+                inbox.lastMile?.let { LastMile.offer(ctx, it) }
                 inbox.stop?.let { Store.offerCarSpot(ctx, it, final = false) }
                 inbox.carIcon?.let { (b, p) -> CarData.setCarIcon(b, p) }
                 inbox.status?.let { CarData.setStatusJson(it) }

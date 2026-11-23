@@ -121,8 +121,12 @@ object CarData {
     private var sp: SharedPreferences? = null
     private var dir: File? = null
 
+    /** Kontekst aplikacji – do powiadomień ze statusu (np. link jazdy na żywo z radia). */
+    private var appCtx: Context? = null
+
     fun init(ctx: Context) {
         if (sp != null) return
+        appCtx = ctx.applicationContext
         val p = ctx.applicationContext.getSharedPreferences("car", Context.MODE_PRIVATE)
         sp = p
         dir = ctx.applicationContext.filesDir
@@ -187,6 +191,8 @@ object CarData {
             car.value = peer
             // wspólny wygląd: wygląd z radia
             LookSync.onCar(pl.mati.caros.core.Look.fromJson(js.optJSONObject("look")))
+            // jazda na żywo przez link (włączona w radiu albo z telefonu)
+            if (peer.supports(Proto.Cmd.SHARE)) TripShare.onStatus(appCtx, js.optJSONObject("share"))
         } catch (_: Exception) {}
         sp?.edit()?.putString("status", raw)?.apply()
         if (s.body != null) setCarIcon(s.body, s.paint)

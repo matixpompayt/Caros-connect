@@ -2,6 +2,13 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Jazda na żywo przez link i ostatnia mila
+- Zakładka Auto → „Udostępnij jazdę na żywo”: do celu, na 1 h albo na 4 h – telefon od razu otwiera „Udostępnij” z linkiem. Kto go otworzy, widzi w przeglądarce auto na mapie, trasę, ile zostało i godzinę przyjazdu, bez instalowania aplikacji
+- Link zaszyfrowany (klucz tylko w linku), kończy się sam po dojechaniu albo po czasie; „Zakończ” w zakładce Auto albo w radiu
+- Udostępnianie włączone w radiu: telefon pokaże powiadomienie z linkiem do wysłania
+- Ostatnia mila: gdy auto stanie 150 m – 3 km od celu trasy, powiadomienie „Do celu pieszo” i karta w zakładce Auto – prowadzenie chodnikami od auta do celu (z głosem)
+
 ## 2.0-beta.2 · 2026-11-23
 Potwierdzenia z auta, plan trasy wspólny z CAR OS, ten sam wygląd
 - Zakładka Auto: „Wysłane do auta” – przy każdej komendzie (trasa, ulubione, adres, serwis, tankowanie, klucze) widać: czeka na internet, wysłano, auto wykonało albo błąd
