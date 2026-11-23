@@ -2,6 +2,10 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Auta w jakości „studyjnej”
+- Gładkie cieniowanie karoserii i lakier z odbiciami jak w studiu fotograficznym (softboxy, horyzont, efekt Fresnela na krawędziach), szyby z odbiciem, metaliczne felgi – na ekranie głównym i na mapie
+
 ## 2.0-beta.9 · 2026-11-23
 Realistyczne auta i chowany panel
 - Nowe, realistyczne modele 3D auta (ekran główny, mapa): zaokrąglona karoseria, szyby z odbiciem nieba, słupki, lusterka, reflektory i lampy, atrapa, tablice, felgi z ramionami, nadkola, odblask lakieru – te same co w CAR OS
