@@ -430,11 +430,12 @@ fun ParkApp(perms: Perms, actions: Actions) {
         WhatsNewDialog()
         // nawigacja piesza do auta – na całym ekranie, nad wszystkim
         val walking by WalkNav.active.collectAsState()
+        // wejście / wyjście: elementy wlatują po kolei (karta z góry, panel z dołu), przy końcu – odwrotnie
         androidx.compose.animation.AnimatedVisibility(
             walking,
-            enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.96f),
-            exit = androidx.compose.animation.fadeOut(),
-        ) { WalkNavScreen(perms, actions) }
+            enter = androidx.compose.animation.EnterTransition.None,
+            exit = androidx.compose.animation.ExitTransition.None,
+        ) { WalkNavScreen(perms, actions, screenProgress()) }
       }
     }
 }

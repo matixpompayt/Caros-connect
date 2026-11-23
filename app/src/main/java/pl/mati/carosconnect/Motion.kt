@@ -115,3 +115,43 @@ fun AnimatedLogo(size: Dp, accent: Color = C.Accent) {
         drawCircle(Color(0xFFEEF1F4), stroke * 0.7f, c)
     }
 }
+
+// ---------- wejście i wyjście ekranów na cały ekran ----------
+
+/**
+ * Postęp wejścia ekranu z AnimatedVisibility: 0 → 1 przy wejściu, 1 → 0 przy wyjściu
+ * (AnimatedVisibility trzyma treść, aż ta animacja się skończy). Elementy ekranu dzielą go
+ * między siebie ([reveal]) – wlatują po kolei, a przy wyjściu znikają w odwrotnej kolejności.
+ */
+@OptIn(androidx.compose.animation.ExperimentalAnimationApi::class)
+@Composable
+fun androidx.compose.animation.AnimatedVisibilityScope.screenProgress(): androidx.compose.runtime.State<Float> =
+    transition.animateFloat(
+        transitionSpec = {
+            if (targetState == androidx.compose.animation.EnterExitState.Visible) tween(620, easing = FastOutSlowInEasing)
+            else tween(380, easing = FastOutSlowInEasing)
+        },
+        label = "screen",
+    ) { if (it == androidx.compose.animation.EnterExitState.Visible) 1f else 0f }
+
+/** Część postępu [p] między [from] a [to] → 0..1. */
+fun seg(p: Float, from: Float, to: Float): Float = ((p - from) / (to - from)).coerceIn(0f, 1f)
+
+/** Gotowy postęp (zrzuty ekranu, ekran bez animacji). */
+val SHOWN: androidx.compose.runtime.State<Float> = androidx.compose.runtime.mutableFloatStateOf(1f)
+
+/**
+ * Element ekranu pojawia się w swojej części postępu [p]: przesunięcie o [dy] (ujemne – z góry),
+ * skala od [scale], przenikanie. Czyta postęp tylko przy rysowaniu – bez przeliczania ekranu.
+ */
+fun Modifier.reveal(
+    p: androidx.compose.runtime.State<Float>, from: Float, to: Float,
+    dy: Dp = 0.dp, scale: Float = 1f, fade: Boolean = true,
+): Modifier = graphicsLayer {
+    val q = seg(p.value, from, to)
+    if (fade) alpha = q
+    translationY = (1f - q) * dy.toPx()
+    val s = scale + (1f - scale) * q
+    scaleX = s
+    scaleY = s
+}

@@ -1012,6 +1012,8 @@ fun PickPointMap(
     me: LatLng?,
     onMoving: (Boolean) -> Unit,
     onIdle: (LatLng) -> Unit,
+    /** Postęp wejścia ekranu – pinezka spada na mapę, przy wyjściu odlatuje w górę. */
+    pinIn: androidx.compose.runtime.State<Float> = SHOWN,
 ) {
     val still = androidx.compose.ui.platform.LocalInspectionMode.current
     val moving = remember { mutableStateOf(false) }
@@ -1036,12 +1038,12 @@ fun PickPointMap(
         val lift by androidx.compose.animation.core.animateDpAsState(if (moving.value) 14.dp else 0.dp, label = "pinLift")
         Box(Modifier.fillMaxSize().padding(top = padTop, bottom = padBottom)) {
             Box(
-                Modifier.align(Alignment.Center).size(width = 14.dp, height = 6.dp).clip(CircleShape)
+                Modifier.align(Alignment.Center).reveal(pinIn, 0.55f, 1f, scale = 0.2f).size(width = 14.dp, height = 6.dp).clip(CircleShape)
                     .background(Color.Black.copy(alpha = if (moving.value) 0.25f else 0.45f)),
             )
             androidx.compose.material3.Icon(
                 Icons.Rounded.Place, null, tint = C.Accent,
-                modifier = Modifier.align(Alignment.Center).offset(y = -(25.dp + lift)).size(54.dp),
+                modifier = Modifier.align(Alignment.Center).offset(y = -(25.dp + lift)).reveal(pinIn, 0.45f, 1f, dy = (-160).dp).size(54.dp),
             )
         }
     }

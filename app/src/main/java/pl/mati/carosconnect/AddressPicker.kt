@@ -77,10 +77,19 @@ import org.maplibre.android.geometry.LatLng
 /** Zmiana adresu domu / pracy – mapa na cały ekran z pinezką (jak „Wyślij do auta”). */
 @Composable
 internal fun PlaceEditDialog(work: Boolean, current: CarData.Addr, onDismiss: () -> Unit) {
+    // wejście i wyjście z animacją: okno zamyka się dopiero, gdy elementy „odlecą”
+    val vis = remember { androidx.compose.animation.core.MutableTransitionState(false).apply { targetState = true } }
+    if (vis.isIdle && !vis.currentState && !vis.targetState) LaunchedEffect(Unit) { onDismiss() }
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { vis.targetState = false },
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
-    ) { AddressPickerScreen(work, current, onDismiss) }
+    ) {
+        androidx.compose.animation.AnimatedVisibility(
+            vis,
+            enter = androidx.compose.animation.EnterTransition.None,
+            exit = androidx.compose.animation.ExitTransition.None,
+        ) { AddressPickerScreen(work, current, { vis.targetState = false }, p = screenProgress()) }
+    }
 }
 
 /**
@@ -94,6 +103,8 @@ internal fun AddressPickerScreen(
     work: Boolean, current: CarData.Addr, onDismiss: () -> Unit,
     /** Zrzuty ekranu: wyniki wyszukiwania i adres pinezki bez sieci. */
     previewResults: List<CarData.Place> = emptyList(), previewAddr: String? = null,
+    /** Postęp wejścia / wyjścia ekranu (0..1). */
+    p: androidx.compose.runtime.State<Float> = SHOWN,
 ) {
     val ctx = LocalContext.current
     val still = LocalInspectionMode.current
@@ -207,7 +218,7 @@ internal fun AddressPickerScreen(
     // wyniki wyszukiwania → panel wyżej
     LaunchedEffect(results) { if (results.isNotEmpty() && !still) try { scaffold.bottomSheetState.partialExpand() } catch (_: Exception) {} }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(C.Bg)) {
+    BoxWithConstraints(Modifier.fillMaxSize().reveal(p, 0f, 0.3f).background(C.Bg)) {
         val peek = minOf(330.dp, maxHeight * 0.45f)
         val sheetH = maxHeight * 0.85f
         BottomSheetScaffold(
@@ -224,7 +235,7 @@ internal fun AddressPickerScreen(
             containerColor = C.Bg,
             sheetContent = {
                 Column(
-                    Modifier.fillMaxWidth().height(sheetH).verticalScroll(rememberScrollState())
+                    Modifier.fillMaxWidth().height(sheetH).reveal(p, 0.2f, 0.85f, dy = 70.dp).verticalScroll(rememberScrollState())
                         .padding(horizontal = 18.dp).padding(bottom = 110.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
@@ -291,14 +302,15 @@ internal fun AddressPickerScreen(
         ) {
             Box(Modifier.fillMaxSize()) {
                 PickPointMap(
-                    start, Modifier.fillMaxSize(), moveTo, padTop = headerH, padBottom = peek,
+                    start, Modifier.fillMaxSize().reveal(p, 0f, 0.8f, scale = 1.1f, fade = false), moveTo, padTop = headerH, padBottom = peek,
                     saved = saved, me = me,
                     onMoving = { moving = it },
                     onIdle = { center = it },
+                    pinIn = p,
                 )
                 // góra: wyszukiwarka (jak „Dokąd jedziemy?”)
                 Row(
-                    Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth()
+                    Modifier.align(Alignment.TopCenter).reveal(p, 0.1f, 0.7f, dy = (-90).dp).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth()
                         .onSizeChanged { with(density) { headerH = it.height.toDp() + 36.dp } }
                         .height(56.dp).clip(RoundedCornerShape(28.dp)).surface(RoundedCornerShape(28.dp), C.Card, border = C.Border)
                         .padding(start = 4.dp, end = 6.dp),
@@ -331,7 +343,7 @@ internal fun AddressPickerScreen(
                 }
                 // prawa strona nad panelem: Twoja pozycja, obecny adres
                 Column(
-                    Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = peek + 14.dp),
+                    Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = peek + 14.dp).reveal(p, 0.5f, 1f, scale = 0.5f),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     if (me != null) PickFloatBtn(Icons.Rounded.MyLocation, "Moja pozycja") { sel = null; go(me) }
@@ -340,7 +352,7 @@ internal fun AddressPickerScreen(
             }
         }
         // dół: zapisz (w miejscu paska zakładek)
-        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 10.dp)) {
+        Box(Modifier.align(Alignment.BottomCenter).reveal(p, 0.3f, 0.95f, dy = 120.dp).fillMaxWidth().navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 10.dp)) {
             SheetButton(
                 "Zapisz jako adres $label", Icons.Rounded.Check,
                 enabled = center != null && !moving, busy = busy == "Zapisuję…" || busy == "Ustalam lokalizację…",

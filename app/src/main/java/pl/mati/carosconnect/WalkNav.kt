@@ -433,7 +433,7 @@ object WalkNav {
 
 /** Ekran nawigacji pieszej do auta – na całym ekranie, nad zakładkami. */
 @Composable
-fun WalkNavScreen(perms: Perms, actions: Actions) {
+fun WalkNavScreen(perms: Perms, actions: Actions, p: androidx.compose.runtime.State<Float> = SHOWN) {
     val ctx = LocalContext.current
     val spot by Store.spot.collectAsState()
     val destSpot by WalkNav.dest.collectAsState()
@@ -561,7 +561,7 @@ fun WalkNavScreen(perms: Perms, actions: Actions) {
         s, toDest, me, heading, r, line, gaps, follow, { follow = it }, arrived, direct, remaining, next, toNext,
         routingFirst = routing && route == null, noRoute = failed || route == null,
         error = if (failed && route == null) err else "", along = snap?.along, source = if (route != null) src else "",
-        voice = voice, onVoice = { WalkNav.setVoice(ctx, !voice) },
+        voice = voice, onVoice = { WalkNav.setVoice(ctx, !voice) }, p = p,
     )
 }
 
@@ -578,6 +578,8 @@ internal fun WalkNavUi(
     arrived: Boolean, direct: Double?, remaining: Double?, next: WalkNav.Step?, toNext: Double?,
     routingFirst: Boolean, noRoute: Boolean, error: String, along: Double?, source: String,
     voice: Boolean, onVoice: () -> Unit,
+    /** Postęp wejścia / wyjścia ekranu (0..1). */
+    p: androidx.compose.runtime.State<Float> = SHOWN,
 ) {
     val ctx = LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -607,10 +609,22 @@ internal fun WalkNavUi(
     val min = rem?.let { (it / 1.3 / 60).roundToInt().coerceAtLeast(1) }
     val at = rem?.let { java.text.SimpleDateFormat("HH:mm", Locale("pl")).format(java.util.Date(System.currentTimeMillis() + (it / 1.3 * 1000).toLong())) }
 
-    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().background(C.Bg)) {
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().reveal(p, 0f, 0.3f).background(C.Bg)) {
         val peek = minOf(290.dp, maxHeight * 0.4f)
         val sheetH = maxHeight * 0.85f
         val mapBottom = if (hidden) 140.dp else peek
+        // wyjście: panel zjeżdża w dół (postęp zaczyna maleć)
+        LaunchedEffect(Unit) {
+            var last = p.value
+            var gone = false
+            androidx.compose.runtime.snapshotFlow { p.value }.collect { v ->
+                if (!gone && v < last - 1e-4f) {
+                    gone = true
+                    launch { try { sheet.hide() } catch (_: Exception) {} }
+                }
+                last = v
+            }
+        }
         androidx.compose.material3.BottomSheetScaffold(
             scaffoldState = scaffold,
             sheetPeekHeight = peek,
@@ -625,7 +639,7 @@ internal fun WalkNavUi(
             containerColor = C.Bg,
             sheetContent = {
                 Column(
-                    Modifier.fillMaxWidth().height(sheetH).verticalScroll(androidx.compose.foundation.rememberScrollState())
+                    Modifier.fillMaxWidth().height(sheetH).reveal(p, 0.2f, 0.85f, dy = 70.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())
                         .padding(horizontal = 18.dp).padding(bottom = 110.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
@@ -709,10 +723,10 @@ internal fun WalkNavUi(
             },
         ) {
             Box(Modifier.fillMaxSize()) {
-                WalkMap(s, me, heading, line, gaps, follow, { onFollow(false) }, Modifier.fillMaxSize(), toDest, bottomInset = mapBottom)
+                WalkMap(s, me, heading, line, gaps, follow, { onFollow(false) }, Modifier.fillMaxSize().reveal(p, 0f, 0.8f, scale = 1.1f, fade = false), toDest, bottomInset = mapBottom)
 
                 // góra: karta manewru (jak pasek wyszukiwania na Start)
-                Column(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth()) {
+                Column(Modifier.align(Alignment.TopCenter).reveal(p, 0.1f, 0.7f, dy = (-90).dp).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth()) {
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).surface(RoundedCornerShape(26.dp), C.Card, border = C.Border)
                             .padding(start = 10.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
@@ -758,7 +772,7 @@ internal fun WalkNavUi(
 
                 // prawa strona nad panelem: głos, wyśrodkuj
                 Column(
-                    Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = mapBottom + 14.dp),
+                    Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = mapBottom + 14.dp).reveal(p, 0.5f, 1f, scale = 0.5f),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     NavRoundBtn(onVoice) {
@@ -773,7 +787,7 @@ internal fun WalkNavUi(
 
         // dół: pasek (panel schowany) i „Zakończ” w kapsule zamiast zakładek
         Column(Modifier.align(Alignment.BottomCenter)) {
-            AnimatedVisibility(hidden, enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut()) {
+            AnimatedVisibility(hidden && p.value > 0.99f, enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut()) {
                 Row(
                     Modifier.padding(start = 16.dp, end = 16.dp, bottom = 2.dp).fillMaxWidth().height(52.dp)
                         .clip(RoundedCornerShape(26.dp)).surface(RoundedCornerShape(26.dp), C.Card, border = C.Border)
@@ -786,7 +800,7 @@ internal fun WalkNavUi(
                     if (rem != null && !arrived) Text("$min min · ${WalkNav.distText(rem)}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Green, maxLines = 1)
                 }
             }
-            Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 10.dp)) {
+            Box(Modifier.reveal(p, 0.3f, 0.95f, dy = 120.dp).fillMaxWidth().navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 10.dp)) {
                 SheetButton(
                     if (arrived) "Gotowe" else "Zakończ prowadzenie", if (arrived) Icons.Rounded.Check else Icons.Rounded.Close,
                     color = if (arrived) C.Accent else NAV_RED,

@@ -2,6 +2,12 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Animacje wejścia i wyjścia
+- Prowadź do auta i adres domu/pracy: mapa najeżdża z lekkim przybliżeniem, karta na górze zjeżdża z góry, panel i przycisk na dole wysuwają się od dołu, przyciski na mapie „wyskakują” – po kolei
+- Przy zamknięciu wszystko znika w odwrotnej kolejności (panel prowadzenia zjeżdża w dół), okno zamyka się dopiero po animacji
+- Adres domu/pracy: pinezka spada na mapę przy otwarciu
+
 ## 2.0-beta.15 · 2026-11-23
 Nowy wygląd kolejnych ekranów – jak Start
 - Prowadź do auta: karta skrętu na górze, na dole panel do przeciągania z czasem i odległością, autem, notatką i zdjęciem miejsca oraz listą skrętów; „Zakończ” w dużej kapsule
