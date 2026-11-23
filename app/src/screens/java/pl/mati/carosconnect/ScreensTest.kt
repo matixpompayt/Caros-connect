@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.cash.paparazzi.DeviceConfig
@@ -153,7 +154,7 @@ class ScreensTest {
                     androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().weight(1f)) {
                         row.forEachIndexed { c, t ->
                             val b = pl.mati.caros.core.Model3D.carIcon(t, paints[r * 2 + c], 212.0, 20.0, 420)
-                            androidx.compose.foundation.Image(androidx.compose.ui.graphics.asImageBitmap(b), t, Modifier.weight(1f).fillMaxSize())
+                            androidx.compose.foundation.Image(b.asImageBitmap(), t, Modifier.weight(1f).fillMaxSize())
                         }
                     }
                 }
