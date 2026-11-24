@@ -1,5 +1,7 @@
 package pl.mati.carosconnect
 
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -104,6 +106,12 @@ fun WaypointList(
             Text("Start " + (startLabel ?: "– brak"), fontSize = 14.sp, color = C.Text2, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         }
         val target = if (dragIdx >= 0) (dragIdx + (dragDy / rowPx).roundToInt()).coerceIn(0, points.lastIndex) else -1
+        // dużo punktów (stacje i postoje z planu) – lista się przewija, nagłówek nie zasłania mapy
+        val many = points.size > 5
+        val listScroll = rememberScrollState()
+        Column(
+            if (many) Modifier.fillMaxWidth().heightIn(max = rowH * 5.5f).verticalScroll(listScroll) else Modifier.fillMaxWidth(),
+        ) {
         points.forEachIndexed { i, p ->
             val isDest = i == points.lastIndex
             val shift = when {
@@ -124,7 +132,8 @@ fun WaypointList(
                     // po kolejności: pośrednie A, B, C…; cel – pinezka
                     if (isDest) Icon(Icons.Rounded.Place, null, tint = Color(0xFFE5483F), modifier = Modifier.size(24.dp))
                     else Box(Modifier.size(22.dp).clip(CircleShape).background(Color(0xFFFFB347)), contentAlignment = Alignment.Center) {
-                        Text(('A' + i).toString(), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1205))
+                        val lb = stopLabel(i)
+                        Text(lb, fontSize = if (lb.length > 1) 10.sp else 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1205))
                     }
                 }
                 Text(p.name, fontSize = 15.sp, fontWeight = if (isDest) FontWeight.SemiBold else FontWeight.Normal, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -151,7 +160,8 @@ fun WaypointList(
                 }
             }
         }
-        if (points.size < 4) Row(
+        } // punkty
+        if (points.size <= pl.mati.caros.core.Proto.MAX_STOPS) Row(
             Modifier.fillMaxWidth().height(rowH - 6.dp).clip(RoundedCornerShape(12.dp)).clickable(enabled = canAdd, onClick = onAdd),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -165,4 +175,14 @@ fun WaypointList(
             )
         }
     }
+}
+
+/** Etykieta punktu po drodze: A–Z, potem numery (27, 28…). */
+fun stopLabel(i: Int): String = if (i < 26) ('A' + i).toString() else (i + 1).toString()
+
+/** 1 punkt, 2–4 punkty, 5 punktów, 22 punkty… */
+fun punktow(n: Int): String = when {
+    n == 1 -> "punkt"
+    n % 10 in 2..4 && n % 100 !in 12..14 -> "punkty"
+    else -> "punktów"
 }

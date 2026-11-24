@@ -587,6 +587,8 @@ suspend fun sendToCar(
     }
     if (via.size > 3 && !CarData.carSupports(pl.mati.caros.core.Proto.Feat.STOPS8)) {
         Toast.makeText(ctx, "CAR OS w aucie przyjmie tylko 3 punkty po drodze – zaktualizuj CAR OS (wersja testowa 2.0)", Toast.LENGTH_LONG).show()
+    } else if (via.size > 8 && !CarData.carSupports(pl.mati.caros.core.Proto.Feat.STOPS_MANY)) {
+        Toast.makeText(ctx, "CAR OS w aucie przyjmie tylko 8 punktów po drodze – zaktualizuj CAR OS (2.0-beta.15 lub nowszy)", Toast.LENGTH_LONG).show()
     }
     val o = JSONObject().put("type", type).put("n", p.name).put("d", p.detail).put("lat", p.lat).put("lon", p.lon)
     if (via.isNotEmpty()) o.put("via", org.json.JSONArray().apply {
@@ -607,7 +609,7 @@ suspend fun sendToCar(
         if (item == null) "Nie udało się wysłać – sprawdź internet"
         else if (item.state == Outbox.State.QUEUED) Outbox.sentText(item, "")
         else when (type) {
-            "route" -> "Wysłano do auta: ${p.name}" + (if (via.isNotEmpty()) " przez ${via.size} ${if (via.size == 1) "punkt" else "punkty"}" else "") + ". Trasa pojawi się w CAR OS (radio musi mieć internet)"
+            "route" -> "Wysłano do auta: ${p.name}" + (if (via.isNotEmpty()) " przez ${via.size} ${punktow(via.size)}" else "") + ". Trasa pojawi się w CAR OS (radio musi mieć internet)"
             "fav_add" -> "Dodano do ulubionych w aucie"
             else -> "Usunięto z ulubionych w aucie"
         },

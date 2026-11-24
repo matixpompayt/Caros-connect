@@ -337,7 +337,7 @@ private fun Planner(
                     // cel
                     Column {
                         Text(dest.name, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = C.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        val sub = dest.detail.ifBlank { if (points.size > 1) "przez ${points.size - 1} ${if (points.size == 2) "punkt" else "punkty"}" else "" }
+                        val sub = dest.detail.ifBlank { if (points.size > 1) "przez ${points.size - 1} ${punktow(points.size - 1)}" else "" }
                         if (sub.isNotBlank()) Text(sub, fontSize = 14.sp, color = C.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                     when {
@@ -351,8 +351,8 @@ private fun Planner(
                     // szybkie akcje jak na Start
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                         RoundAction(Icons.Rounded.Add, "Dodaj punkt") {
-                            if (r != null && points.size < 4) pickMode = true
-                            else Toast.makeText(ctx, if (points.size >= 4) "Najwięcej 3 punkty po drodze" else "Poczekaj na wyznaczenie trasy", Toast.LENGTH_SHORT).show()
+                            if (r != null && points.size <= pl.mati.caros.core.Proto.MAX_STOPS) pickMode = true
+                            else Toast.makeText(ctx, if (points.size > pl.mati.caros.core.Proto.MAX_STOPS) "Najwięcej ${pl.mati.caros.core.Proto.MAX_STOPS} punktów po drodze" else "Poczekaj na wyznaczenie trasy", Toast.LENGTH_SHORT).show()
                         }
                         RoundAction(if (faved) Icons.Rounded.Star else Icons.Rounded.StarBorder, if (faved) "W ulubionych" else "Ulubione") { fav() }
                         RoundAction(Icons.Rounded.Schedule, "Wyjazd o…") { pickTime(1) }
@@ -524,7 +524,7 @@ private fun Planner(
                     }
                     WaypointList(
                         start?.second, points, { points = it },
-                        onAdd = { pickMode = true }, canAdd = r != null && !loading && points.size < 4,
+                        onAdd = { pickMode = true }, canAdd = r != null && !loading && points.size <= pl.mati.caros.core.Proto.MAX_STOPS,
                         modifier = Modifier.weight(1f), bg = Color.Transparent, rowH = 44.dp,
                     )
                 }

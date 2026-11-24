@@ -74,11 +74,30 @@ object Link {
     fun gzip(b: ByteArray): ByteArray = RelayCrypto.gzip(b)
     fun gunzip(b: ByteArray): ByteArray = RelayCrypto.gunzip(b)
 
+    /** Przekaźnik przyjmuje do 4 KB na wiadomość – większe idą w częściach (gdy radio je składa). */
+    private const val MAX_BODY = 3900
+
     /** Wiadomość do radia (blokujące – poza wątkiem głównym). */
     fun send(p: Pairing, o: JSONObject) {
         // protokół 2: wersja protokołu i aplikacji – auto wie, z jakim telefonem rozmawia
         Proto.stamp(o, BuildConfig.VERSION_NAME)
-        val body = encrypt(p.key, o.toString())
+        val plain = o.toString()
+        val body = encrypt(p.key, plain)
+        val bodies = if (body.length > MAX_BODY && CarData.carSupports(Proto.Feat.PARTS)) {
+            pl.mati.caros.core.Parts.split(plain).map { encrypt(p.key, Proto.stamp(it, BuildConfig.VERSION_NAME).toString()) }
+        } else listOf(body)
+        bodies.forEachIndexed { i, b ->
+            post(p, b)?.let { e ->
+                EventLog.onSendFailed(o, e)
+                throw e
+            }
+            if (i < bodies.lastIndex) Thread.sleep(300)
+        }
+        EventLog.onSent(o)
+    }
+
+    /** Jedna wiadomość do przekaźnika (3 próby); null = wysłano, inaczej ostatni błąd. */
+    private fun post(p: Pairing, body: String): Exception? {
         var last: Exception? = null
         for (attempt in 0..2) {
             try {
@@ -91,7 +110,7 @@ object Link {
                 try {
                     c.outputStream.use { it.write(body.toByteArray()) }
                     val code = c.responseCode
-                    if (code in 200..299) { EventLog.onSent(o); return }
+                    if (code in 200..299) return null
                     last = IOException("HTTP $code")
                     if (code == 429) Thread.sleep(6000)
                 } finally {
@@ -102,8 +121,7 @@ object Link {
                 Thread.sleep(2000)
             }
         }
-        EventLog.onSendFailed(o, last)
-        throw last ?: IOException("Brak połączenia")
+        return last ?: IOException("Brak połączenia")
     }
 
     /**

@@ -908,7 +908,7 @@ fun RoutePlanMap(
             }),
         )
         st.getSourceAs<GeoJsonSource>("caros-pl-stops")?.setGeoJson(
-            FeatureCollection.fromFeatures(stops.mapIndexed { i, v -> Feature.fromGeometry(point(v.latitude, v.longitude)).also { it.addStringProperty("t", ('A' + i).toString()) } }),
+            FeatureCollection.fromFeatures(stops.mapIndexed { i, v -> Feature.fromGeometry(point(v.latitude, v.longitude)).also { it.addStringProperty("t", stopLabel(i)) } }),
         )
         st.getSourceAs<GeoJsonSource>("caros-pl-dest")?.setGeoJson(Feature.fromGeometry(point(dest.latitude, dest.longitude)))
         st.getSourceAs<GeoJsonSource>("caros-pl-start")?.setGeoJson(start?.let { FeatureCollection.fromFeatures(listOf(Feature.fromGeometry(point(it.latitude, it.longitude)))) } ?: none)

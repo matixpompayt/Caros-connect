@@ -2,6 +2,12 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+- Trasa: stacje i postoje z planu podróży bez limitu 8 – dodajesz, ile chcesz (do 100 punktów); ręcznie w planerze też już nie tylko 3
+- Dużo punktów: lista na górze planera się przewija (nie zasłania mapy), po literze Z kolejne punkty mają numery
+- Duża trasa idzie do auta w częściach (przekaźnik przyjmuje do 4 KB) – potrzebny CAR OS 2.0-beta.15 lub nowszy; ze starszym telefon ostrzeże
+- Poprawki: „średnia z biuletynu Komisji Europejskiej (null)” i ujemny zasięg na miejscu („-1133 km”) – teraz „po ostatnim tankowaniu zabraknie ok. … km – zaznacz kolejną stację”
+
 ## 2.0-beta.28 · 2026-11-24
 Alarm: auto jedzie bez Ciebie
 - Gdy nie jesteś w aucie, telefon czuwa w tle (małe ciche powiadomienie „Czuwanie”) i dostaje pozycję auta na żywo – zamiast co 15 min

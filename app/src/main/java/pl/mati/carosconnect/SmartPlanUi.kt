@@ -329,8 +329,10 @@ private fun StopsPicker(
             val total = totalKmOf(st)
             val atEnd = rangeAt(total)
             val (txt, col) = when {
+                refuels.isNotEmpty() && atEnd != null && atEnd < 0 ->
+                    "Po ostatnim zaznaczonym tankowaniu zabraknie ok. ${(-atEnd).roundToInt()} km do celu – zaznacz kolejną stację dalej na trasie" to Color(0xFFFF6B6B)
                 refuels.isNotEmpty() && atEnd != null -> "Po zatankowaniu do pełna na miejscu zostanie ok. ${atEnd.roundToInt()} km zasięgu" +
-                    (if (atEnd < reserve) " – poniżej minimum $reserve km" else "") to (if (atEnd < 0) Color(0xFFFF6B6B) else if (atEnd < reserve) C.Orange else C.Green)
+                    (if (atEnd < reserve) " – poniżej minimum $reserve km" else "") to (if (atEnd < reserve) C.Orange else C.Green)
                 refuels.isNotEmpty() -> "Na miejscu: zależy, ile zatankujesz" to C.Muted
                 range - total >= 0 -> "Bez tankowania na miejscu zostanie ok. ${(range - total).roundToInt()} km zasięgu" +
                     (if (range - total < reserve) " – poniżej minimum $reserve km" else "") to (if (range - total < reserve) C.Orange else C.Green)
@@ -350,6 +352,9 @@ private fun StopsPicker(
                     Toast.makeText(ctx, "Najwyżej $MAX_VIA punktów po drodze – odznacz któryś postój", Toast.LENGTH_LONG).show()
                     return@SmartButton
                 }
+                if (list.size + chosen.size > 8 && !CarData.carSupports(pl.mati.caros.core.Proto.Feat.STOPS_MANY)) {
+                    Toast.makeText(ctx, "Zapisano – ale CAR OS w aucie przyjmie tylko 8 punktów, zaktualizuj go (2.0-beta.15 lub nowszy)", Toast.LENGTH_LONG).show()
+                }
                 for (o in chosen.sortedBy { it.atKm }) {
                     val at = SmartPlan.insertIndex(r, list, o.atKm)
                     list = list.take(at) + o.place + list.drop(at)
@@ -363,8 +368,8 @@ private fun StopsPicker(
     }
 }
 
-/** Najwięcej punktów po drodze (CAR OS przyjmuje tyle przystanków). */
-private const val MAX_VIA = 8
+/** Najwięcej punktów po drodze (praktycznie bez limitu – CAR OS 2.0-beta.15+ przyjmuje tyle). */
+private const val MAX_VIA = pl.mati.caros.core.Proto.MAX_STOPS
 
 private fun totalKmOf(st: SmartPlan.Stops) = st.totalKm
 
