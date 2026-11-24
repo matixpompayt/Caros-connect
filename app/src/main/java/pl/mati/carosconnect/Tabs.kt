@@ -592,7 +592,7 @@ suspend fun sendToCar(
     }
     val o = JSONObject().put("type", type).put("n", p.name).put("d", p.detail).put("lat", p.lat).put("lon", p.lon)
     if (via.isNotEmpty()) o.put("via", org.json.JSONArray().apply {
-        via.forEach { v -> put(JSONObject().put("n", v.name).put("d", v.detail).put("lat", v.lat).put("lon", v.lon)) }
+        via.forEach { v -> put(JSONObject().put("n", v.name).put("d", v.detail).put("lat", v.lat).put("lon", v.lon).apply { v.kind?.let { put("k", it) } }) }
     })
     if (shape.isNotEmpty()) o.put("shape", org.json.JSONArray().apply {
         shape.forEach { q -> put(org.json.JSONArray().put(Math.round(q.latitude * 1e5) / 1e5).put(Math.round(q.longitude * 1e5) / 1e5)) }

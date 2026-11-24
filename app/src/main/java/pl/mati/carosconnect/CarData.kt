@@ -16,7 +16,8 @@ object CarData {
         val kmLeft: Int?, val daysLeft: Int?, val text: String, val fraction: Float,
     )
 
-    data class Place(val name: String, val detail: String, val lat: Double, val lon: Double)
+    /** Miejsce; [kind] – punkt z planu podróży: "fuel" (stacja), "break" (postój), null – zwykły punkt. */
+    data class Place(val name: String, val detail: String, val lat: Double, val lon: Double, val kind: String? = null)
 
     /** Dom / praca z CAR OS: adres + współrzędne (gdy znane). */
     data class Addr(val address: String, val lat: Double?, val lon: Double?) {

@@ -1,5 +1,7 @@
 package pl.mati.carosconnect
 
+import androidx.compose.material.icons.rounded.Coffee
+import androidx.compose.material.icons.rounded.LocalGasStation
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.background
@@ -105,6 +107,7 @@ fun WaypointList(
             }
             Text("Start " + (startLabel ?: "– brak"), fontSize = 14.sp, color = C.Text2, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         }
+        val labels = stopLabels(points.map { it.kind })
         val target = if (dragIdx >= 0) (dragIdx + (dragDy / rowPx).roundToInt()).coerceIn(0, points.lastIndex) else -1
         // dużo punktów (stacje i postoje z planu) – lista się przewija, nagłówek nie zasłania mapy
         val many = points.size > 5
@@ -132,8 +135,14 @@ fun WaypointList(
                     // po kolejności: pośrednie A, B, C…; cel – pinezka
                     if (isDest) Icon(Icons.Rounded.Place, null, tint = Color(0xFFE5483F), modifier = Modifier.size(24.dp))
                     else Box(Modifier.size(22.dp).clip(CircleShape).background(Color(0xFFFFB347)), contentAlignment = Alignment.Center) {
-                        val lb = stopLabel(i)
-                        Text(lb, fontSize = if (lb.length > 1) 10.sp else 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1205))
+                        when (p.kind) {
+                            "fuel" -> Icon(Icons.Rounded.LocalGasStation, "Stacja", tint = Color(0xFF1A1205), modifier = Modifier.size(14.dp))
+                            "break" -> Icon(Icons.Rounded.Coffee, "Postój", tint = Color(0xFF1A1205), modifier = Modifier.size(14.dp))
+                            else -> {
+                                val lb = labels[i]
+                                Text(lb, fontSize = if (lb.length > 1) 10.sp else 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1205))
+                            }
+                        }
                     }
                 }
                 Text(p.name, fontSize = 15.sp, fontWeight = if (isDest) FontWeight.SemiBold else FontWeight.Normal, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -179,6 +188,34 @@ fun WaypointList(
 
 /** Etykieta punktu po drodze: A–Z, potem numery (27, 28…). */
 fun stopLabel(i: Int): String = if (i < 26) ('A' + i).toString() else (i + 1).toString()
+
+/** Etykiety punktów: litery kolejno tylko dla zwykłych punktów; stacje i postoje ("") mają ikonę. */
+fun stopLabels(kinds: List<String?>): List<String> {
+    var n = 0
+    return kinds.map { if (it == null) stopLabel(n++) else "" }
+}
+
+/**
+ * Najlepsze miejsce nowego punktu w kolejności (indeks w [points], zawsze przed celem): najmniejszy
+ * objazd w linii prostej między sąsiednimi punktami trasy (start → punkty → cel).
+ */
+fun bestInsertIndex(start: org.maplibre.android.geometry.LatLng?, points: List<CarData.Place>, np: CarData.Place): Int {
+    if (points.size <= 1) return 0
+    fun d(aLat: Double, aLon: Double, bLat: Double, bLon: Double): Double {
+        val x = Math.toRadians(bLon - aLon) * Math.cos(Math.toRadians((aLat + bLat) / 2))
+        val y = Math.toRadians(bLat - aLat)
+        return Math.sqrt(x * x + y * y)
+    }
+    var best = points.lastIndex
+    var bestCost = Double.MAX_VALUE
+    for (k in 0..points.lastIndex) {
+        val prev = if (k == 0) start?.let { it.latitude to it.longitude } ?: continue else points[k - 1].lat to points[k - 1].lon
+        val next = points[k]
+        val cost = d(prev.first, prev.second, np.lat, np.lon) + d(np.lat, np.lon, next.lat, next.lon) - d(prev.first, prev.second, next.lat, next.lon)
+        if (cost < bestCost) { bestCost = cost; best = k }
+    }
+    return best
+}
 
 /** 1 punkt, 2–4 punkty, 5 punktów, 22 punkty… */
 fun punktow(n: Int): String = when {

@@ -1,5 +1,8 @@
 package pl.mati.carosconnect
 
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.rounded.Place
+import androidx.compose.material.icons.rounded.Search
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -204,6 +207,13 @@ private fun Planner(
     }
     val dest = points.lastOrNull() ?: place
     val via = points.dropLast(1).map { LatLng(it.lat, it.lon) }
+
+    /** Nowy punkt po drodze – w najlepsze miejsce kolejności (najmniejszy objazd), zawsze przed celem. */
+    fun addPoint(np: CarData.Place) {
+        val at = bestInsertIndex(start?.first, points, np)
+        points = points.take(at) + np + points.drop(at)
+        Toast.makeText(ctx, "Dodano punkt: ${np.name}", Toast.LENGTH_SHORT).show()
+    }
 
     LaunchedEffect(points, offsetMin, mode, picked, start?.first) {
         if (preview != null) return@LaunchedEffect
@@ -501,19 +511,22 @@ private fun Planner(
                     flowUrl = flowUrl,
                     focus = jams.getOrNull(jamSel)?.first?.pts,
                     padTop = headerH, padBottom = mapBottom, is3d = is3d, fitKey = fitKey,
+                    stopKinds = points.dropLast(1).map { it.kind },
                     onLongPress = if (!pickMode) null else { ll: LatLng ->
                         pickMode = false
                         scope.launch {
                             val name = withContext(Dispatchers.IO) { Locator.address(ctx, ll.latitude, ll.longitude) }
-                            val np = CarData.Place(name?.substringBefore(",")?.ifBlank { null } ?: "Punkt na mapie", name ?: "", ll.latitude, ll.longitude)
-                            // nowy punkt przed celem (kolejność można potem zmienić)
-                            points = points.dropLast(1) + np + points.takeLast(1)
-                            Toast.makeText(ctx, "Dodano punkt: ${np.name}", Toast.LENGTH_SHORT).show()
+                            addPoint(CarData.Place(name?.substringBefore(",")?.ifBlank { null } ?: "Punkt na mapie", name ?: "", ll.latitude, ll.longitude))
                         }
                     },
                 )
-                // góra: punkty trasy (jak pasek wyszukiwania na Start)
-                Row(
+                // góra: punkty trasy (jak pasek wyszukiwania na Start); przy dodawaniu – wyszukiwarka
+                if (pickMode) PickSearch(
+                    r?.pts, onBack = { pickMode = false },
+                    onPick = { np -> pickMode = false; addPoint(np) },
+                    modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth(),
+                )
+                else Row(
                     Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth()
                         .onSizeChanged { with(density) { headerH = it.height.toDp() + 40.dp } }
                         .clip(RoundedCornerShape(26.dp)).surface(RoundedCornerShape(26.dp), C.Card, border = C.Border)
@@ -652,7 +665,7 @@ private fun PickBanner(onCancel: () -> Unit) {
         Icon(Icons.Rounded.TouchApp, null, tint = C.Bg, modifier = Modifier.size(28.dp))
         Column(Modifier.weight(1f)) {
             Text("Przytrzymaj palec na mapie", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = C.Bg)
-            Text("w miejscu, przez które chcesz jechać – punkt doda się przed celem", fontSize = 13.sp, color = C.Bg.copy(alpha = 0.85f))
+            Text("albo wyszukaj u góry – punkt wskoczy w najlepsze miejsce trasy", fontSize = 13.sp, color = C.Bg.copy(alpha = 0.85f))
         }
         Box(Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onCancel), contentAlignment = Alignment.Center) {
             Icon(Icons.Rounded.Close, "Anuluj", tint = C.Bg, modifier = Modifier.size(24.dp))
@@ -713,4 +726,99 @@ private fun CircleBtn(icon: androidx.compose.ui.graphics.vector.ImageVector, des
 private fun durText(s: Double): String {
     val m = (s / 60).roundToInt()
     return if (m >= 60) "${m / 60} h ${"%02d".format(m % 60)} min" else "$m min"
+}
+
+/**
+ * Dodawanie punktu: wyszukiwarka u góry (zamiast listy punktów). Wyniki od najbliższych trasie.
+ * Przytrzymanie palca na mapie działa jak dotąd.
+ */
+@Composable
+private fun PickSearch(route: List<LatLng>?, onBack: () -> Unit, onPick: (CarData.Place) -> Unit, modifier: Modifier) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    var q by remember { mutableStateOf("") }
+    var results by remember { mutableStateOf<List<Pair<CarData.Place, Double?>>>(emptyList()) }
+    var busy by remember { mutableStateOf(false) }
+
+    /** Odległość od trasy (km) – co któryś punkt trasy wystarczy. */
+    fun offRoute(p: CarData.Place): Double? {
+        val pts = route ?: return null
+        if (pts.isEmpty()) return null
+        val step = (pts.size / 600).coerceAtLeast(1)
+        var best = Double.MAX_VALUE
+        var i = 0
+        while (i < pts.size) {
+            val a = pts[i]
+            val x = Math.toRadians(a.longitude - p.lon) * Math.cos(Math.toRadians((a.latitude + p.lat) / 2))
+            val y = Math.toRadians(a.latitude - p.lat)
+            best = minOf(best, Math.sqrt(x * x + y * y) * 6371.0)
+            i += step
+        }
+        return best
+    }
+
+    fun search() {
+        if (q.isBlank() || busy) return
+        busy = true
+        focus.clearFocus()
+        scope.launch {
+            val found = withContext(Dispatchers.IO) { try { Places.search(q.trim(), null) } catch (_: Exception) { emptyList() } }
+            results = found.map { it to offRoute(it) }.sortedBy { it.second ?: 0.0 }
+            busy = false
+            if (results.isEmpty()) Toast.makeText(ctx, "Nic nie znaleziono", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    Column(modifier.clip(RoundedCornerShape(26.dp)).surface(RoundedCornerShape(26.dp), C.Card, border = C.Border)) {
+        Row(Modifier.fillMaxWidth().height(56.dp).padding(start = 4.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            CircleBtn(Icons.AutoMirrored.Rounded.ArrowBack, "Wróć", bg = Color.Transparent) { onBack() }
+            androidx.compose.foundation.text.BasicTextField(
+                q, { q = it }, singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, color = C.Text),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(C.Accent),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { search() }),
+                modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
+                decorationBox = { inner ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (q.isEmpty()) Text("Szukaj miejsca po drodze…", fontSize = 16.sp, color = C.Muted, maxLines = 1)
+                        inner()
+                    }
+                },
+            )
+            if (q.isNotEmpty() && !busy) Box(Modifier.size(40.dp).clip(CircleShape).clickable { q = ""; results = emptyList() }, contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.Close, "Wyczyść", tint = C.Muted, modifier = Modifier.size(20.dp))
+            }
+            Box(Modifier.size(44.dp).clip(CircleShape).background(C.Accent).clickable { search() }, contentAlignment = Alignment.Center) {
+                if (busy) CircularProgressIndicator(color = C.Bg, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                else Icon(Icons.Rounded.Search, "Szukaj", tint = C.Bg, modifier = Modifier.size(22.dp))
+            }
+        }
+        if (results.isNotEmpty()) {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(rememberScrollState()).padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                results.forEach { (p, km) ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { onPick(p) }.padding(horizontal = 10.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(Icons.Rounded.Place, null, tint = C.Accent, modifier = Modifier.size(22.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(p.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            val sub = listOfNotNull(
+                                km?.let { if (it < 1.0) "przy trasie" else "${if (it < 10) String.format(java.util.Locale("pl"), "%.1f", it) else it.roundToInt().toString()} km od trasy" },
+                                p.detail.ifBlank { null },
+                            ).joinToString(" · ")
+                            if (sub.isNotBlank()) Text(sub, fontSize = 12.sp, color = if ((km ?: 0.0) > 30) C.Orange else C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Icon(Icons.Rounded.Add, "Dodaj", tint = C.Accent, modifier = Modifier.size(22.dp))
+                    }
+                }
+            }
+        }
+    }
 }

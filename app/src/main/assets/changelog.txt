@@ -2,6 +2,11 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+- Trasa: stacje i postoje zapisane z planu podróży mają ikonę dystrybutora / filiżanki (na liście i na mapie), litery A, B, C… tylko Twoje punkty
+- „Dodaj punkt”: u góry wyszukiwarka (wyniki od najbliższych trasie, z odległością od trasy) – albo jak dotąd przytrzymaj palec na mapie
+- Nowy punkt wskakuje w najlepsze miejsce kolejności (najmniejszy objazd), a nie zawsze przed cel
+
 ## 2.0-beta.29 · 2026-11-24
 - Trasa: stacje i postoje z planu podróży bez limitu 8 – dodajesz, ile chcesz (do 100 punktów); ręcznie w planerze też już nie tylko 3
 - Dużo punktów: lista na górze planera się przewija (nie zasłania mapy), po literze Z kolejne punkty mają numery

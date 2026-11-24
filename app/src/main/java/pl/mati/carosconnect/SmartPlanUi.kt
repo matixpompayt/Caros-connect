@@ -355,9 +355,11 @@ private fun StopsPicker(
                 if (list.size + chosen.size > 8 && !CarData.carSupports(pl.mati.caros.core.Proto.Feat.STOPS_MANY)) {
                     Toast.makeText(ctx, "Zapisano – ale CAR OS w aucie przyjmie tylko 8 punktów, zaktualizuj go (2.0-beta.15 lub nowszy)", Toast.LENGTH_LONG).show()
                 }
+                // stacje i postoje pamiętają rodzaj – na liście i mapie ikona zamiast litery
+                val kindOf = st.groups.flatMap { g -> g.options.map { it to (if (g.kind == "fuel") "fuel" else "break") } }.toMap()
                 for (o in chosen.sortedBy { it.atKm }) {
                     val at = SmartPlan.insertIndex(r, list, o.atKm)
-                    list = list.take(at) + o.place + list.drop(at)
+                    list = list.take(at) + o.place.copy(kind = kindOf[o]) + list.drop(at)
                 }
                 onPoints(list + points.takeLast(1))
                 Toast.makeText(ctx, if (chosen.isEmpty()) "Postoje usunięte z trasy" else "Postoje dodane do trasy", Toast.LENGTH_SHORT).show()

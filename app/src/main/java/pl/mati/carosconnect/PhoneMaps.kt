@@ -1,5 +1,6 @@
 package pl.mati.carosconnect
 
+import androidx.compose.ui.graphics.asAndroidBitmap
 import pl.mati.caros.core.Model3D
 import android.Manifest
 import android.annotation.SuppressLint
@@ -765,6 +766,8 @@ fun RoutePlanMap(
     fitKey: Int = 0,
     /** Przytrzymanie palca na mapie (dodawanie punktu). */
     onLongPress: ((LatLng) -> Unit)? = null,
+    /** Rodzaj punktów po drodze ("fuel" / "break" → ikona zamiast litery). */
+    stopKinds: List<String?> = emptyList(),
 ) {
     if (androidx.compose.ui.platform.LocalInspectionMode.current) {
         RoutePlanSketch(start, dest, stops, route, modifier, padTop, padBottom)
@@ -773,6 +776,11 @@ fun RoutePlanMap(
     val ctx = LocalContext.current
     val lp = remember { arrayOfNulls<(LatLng) -> Unit>(1) }
     lp[0] = onLongPress
+    // ikony stacji i postoju na kropkach punktów (rysowane z ikon aplikacji)
+    val fuelP = androidx.compose.ui.graphics.vector.rememberVectorPainter(androidx.compose.material.icons.Icons.Rounded.LocalGasStation)
+    val cafeP = androidx.compose.ui.graphics.vector.rememberVectorPainter(androidx.compose.material.icons.Icons.Rounded.Coffee)
+    val dens = androidx.compose.ui.platform.LocalDensity.current
+    val stopIcons = remember { arrayOfNulls<android.graphics.Bitmap>(2) }
     val h = remember {
         MapHolder(ctx) { m, st ->
             val below = CarMapStyle.firstSymbolId(st)
@@ -800,7 +808,9 @@ fun RoutePlanMap(
                     PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                 ),
             )
-            // punkty po drodze: pomarańczowe kropki z literą jak na liście (A, B, C)
+            // punkty po drodze: pomarańczowe kropki z literą jak na liście (A, B, C), stacje i postoje z ikoną
+            stopIcons[0]?.let { st.addImage("caros-pl-ic-fuel", it) }
+            stopIcons[1]?.let { st.addImage("caros-pl-ic-break", it) }
             st.addSource(GeoJsonSource("caros-pl-stops"))
             st.addLayer(
                 CircleLayer("caros-pl-stops-dot", "caros-pl-stops").withProperties(
@@ -820,7 +830,15 @@ fun RoutePlanMap(
                     PropertyFactory.textAllowOverlap(true),
                     PropertyFactory.textIgnorePlacement(true),
                     PropertyFactory.textPitchAlignment(Property.TEXT_PITCH_ALIGNMENT_VIEWPORT),
-                ),
+                ).withFilter(Expression.eq(Expression.get("k"), Expression.literal(""))),
+            )
+            st.addLayer(
+                SymbolLayer("caros-pl-stops-ic", "caros-pl-stops").withProperties(
+                    PropertyFactory.iconImage(Expression.concat(Expression.literal("caros-pl-ic-"), Expression.get("k"))),
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(true),
+                    PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
+                ).withFilter(Expression.neq(Expression.get("k"), Expression.literal(""))),
             )
             // cel – czerwona pinezka
             st.addImage("caros-pl-dest-pin", destPin(ctx))
@@ -868,6 +886,16 @@ fun RoutePlanMap(
     }
     rememberMapLifecycle(h)
 
+    LaunchedEffect(h.ready) {
+        if (!h.ready) return@LaunchedEffect
+        val st = h.style ?: return@LaunchedEffect
+        val ink = androidx.compose.ui.graphics.Color(0xFF1A1205)
+        if (stopIcons[0] == null) stopIcons[0] = painterBitmap(fuelP, dens, 15.dp, ink)
+        if (stopIcons[1] == null) stopIcons[1] = painterBitmap(cafeP, dens, 15.dp, ink)
+        stopIcons[0]?.let { st.addImage("caros-pl-ic-fuel", it) }
+        stopIcons[1]?.let { st.addImage("caros-pl-ic-break", it) }
+    }
+
     // model auta jak w radiu
     val carBody by CarData.carBody.collectAsState()
     val carPaint by CarData.carPaint.collectAsState()
@@ -881,7 +909,7 @@ fun RoutePlanMap(
     }
 
     // trasa, warianty, korki, punkty
-    LaunchedEffect(h.ready, route, start, dest, stops) {
+    LaunchedEffect(h.ready, route, start, dest, stops, stopKinds) {
         if (!h.ready) return@LaunchedEffect
         val st = h.style ?: return@LaunchedEffect
         fun ls(p: List<LatLng>) = LineString.fromLngLats(p.map { Point.fromLngLat(it.longitude, it.latitude) })
@@ -908,7 +936,16 @@ fun RoutePlanMap(
             }),
         )
         st.getSourceAs<GeoJsonSource>("caros-pl-stops")?.setGeoJson(
-            FeatureCollection.fromFeatures(stops.mapIndexed { i, v -> Feature.fromGeometry(point(v.latitude, v.longitude)).also { it.addStringProperty("t", stopLabel(i)) } }),
+            stopLabels(stops.indices.map { stopKinds.getOrNull(it) }).let { labels ->
+                FeatureCollection.fromFeatures(
+                    stops.mapIndexed { i, v ->
+                        Feature.fromGeometry(point(v.latitude, v.longitude)).also {
+                            it.addStringProperty("t", labels[i])
+                            it.addStringProperty("k", stopKinds.getOrNull(i) ?: "")
+                        }
+                    },
+                )
+            },
         )
         st.getSourceAs<GeoJsonSource>("caros-pl-dest")?.setGeoJson(Feature.fromGeometry(point(dest.latitude, dest.longitude)))
         st.getSourceAs<GeoJsonSource>("caros-pl-start")?.setGeoJson(start?.let { FeatureCollection.fromFeatures(listOf(Feature.fromGeometry(point(it.latitude, it.longitude)))) } ?: none)
@@ -1161,4 +1198,20 @@ private fun PickPointMapView(
         FadingMap(h)
         HouseNumbers(h)
     }
+}
+
+/** Ikona aplikacji (wektor) jako bitmapa do mapy – [size] w dp, w kolorze [tint]. */
+private fun painterBitmap(
+    p: androidx.compose.ui.graphics.painter.Painter, d: androidx.compose.ui.unit.Density,
+    size: androidx.compose.ui.unit.Dp, tint: androidx.compose.ui.graphics.Color,
+): android.graphics.Bitmap {
+    val px = with(d) { size.roundToPx() }.coerceAtLeast(8)
+    val img = androidx.compose.ui.graphics.ImageBitmap(px, px)
+    androidx.compose.ui.graphics.drawscope.CanvasDrawScope().draw(
+        d, androidx.compose.ui.unit.LayoutDirection.Ltr, androidx.compose.ui.graphics.Canvas(img),
+        androidx.compose.ui.geometry.Size(px.toFloat(), px.toFloat()),
+    ) {
+        with(p) { draw(this@draw.size, colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(tint)) }
+    }
+    return img.asAndroidBitmap()
 }
