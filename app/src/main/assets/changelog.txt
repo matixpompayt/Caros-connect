@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 2.0-beta.28 · 2026-11-24
 Alarm: auto jedzie bez Ciebie
 - Gdy nie jesteś w aucie, telefon czuwa w tle (małe ciche powiadomienie „Czuwanie”) i dostaje pozycję auta na żywo – zamiast co 15 min
 - Auto ruszyło, a telefon nie jest połączony z radiem → po 45 s jeszcze raz sprawdza (mogłeś dopiero wsiąść) → głośny alarm jak budzik, na cały ekran, dzwoni aż dotkniesz
