@@ -1,5 +1,7 @@
 package pl.mati.carosconnect
 
+import androidx.compose.material.icons.rounded.Coffee
+import androidx.compose.material.icons.rounded.LocalGasStation
 import androidx.compose.ui.graphics.asAndroidBitmap
 import pl.mati.caros.core.Model3D
 import android.Manifest
