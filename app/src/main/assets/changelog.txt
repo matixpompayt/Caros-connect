@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 2.0-beta.29 · 2026-11-24
 - Trasa: stacje i postoje z planu podróży bez limitu 8 – dodajesz, ile chcesz (do 100 punktów); ręcznie w planerze też już nie tylko 3
 - Dużo punktów: lista na górze planera się przewija (nie zasłania mapy), po literze Z kolejne punkty mają numery
 - Duża trasa idzie do auta w częściach (przekaźnik przyjmuje do 4 KB) – potrzebny CAR OS 2.0-beta.15 lub nowszy; ze starszym telefon ostrzeże
