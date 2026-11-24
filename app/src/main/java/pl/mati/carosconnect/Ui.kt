@@ -442,6 +442,9 @@ fun ParkApp(perms: Perms, actions: Actions) {
         )
         share?.let { ShareDialog(it, actions) { Share.incoming.value = null } }
         WhatsNewDialog()
+        // „Udostępnij link” z alarmu „auto jedzie bez Ciebie”
+        val askShare by Guard.askShare.collectAsState()
+        if (askShare) LiveSharePicker { Guard.askShare.value = false }
         // nawigacja piesza do auta – na całym ekranie, nad wszystkim
         val walking by WalkNav.active.collectAsState()
         // wejście / wyjście: elementy wlatują po kolei (karta z góry, panel z dołu), przy końcu – odwrotnie

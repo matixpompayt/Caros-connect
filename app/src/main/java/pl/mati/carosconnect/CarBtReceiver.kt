@@ -20,10 +20,14 @@ class CarBtReceiver : BroadcastReceiver() {
             BluetoothDevice.ACTION_ACL_CONNECTED -> {
                 Store.linked.value = true
                 if (!DriveService.running) DriveService.start(ctx)
+                CarData.init(ctx)
+                Guard.sync(ctx)
             }
             BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
                 Store.linked.value = false
                 if (DriveService.running) return // usługa sama zapisze miejsce
+                CarData.init(ctx)
+                Guard.sync(ctx, leftCar = true)
                 Store.log(ctx, "Rozłączono z radiem (usługa jazdy nie działała) – zapis awaryjny")
                 val pending = goAsync()
                 val app = ctx.applicationContext

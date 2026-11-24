@@ -88,6 +88,7 @@ class DriveService : Service(), LocationListener {
         running = true
         Store.driving.value = true
         Store.linked.value = true
+        Guard.sync(this)
         ContextCompat.registerReceiver(
             this, btReceiver,
             IntentFilter().apply {
@@ -188,6 +189,8 @@ class DriveService : Service(), LocationListener {
         } else {
             Store.log(this, "Brak pozycji GPS – miejsce weźmie się z radia przy następnym odświeżeniu")
         }
+        // po zaparkowaniu czuwanie (włączane, póki usługa jazdy jeszcze działa – system na to pozwala)
+        Guard.sync(this, leftCar = true)
         stopSelf()
     }
 

@@ -79,7 +79,8 @@ class MainActivity : ComponentActivity(), Actions {
         LookSync.init(this)
         LastMile.init(this)
         SyncWorker.schedule(this)
-        if (savedInstanceState == null) { handleShare(intent); openTabFrom(intent); walkFrom(intent); widgetActionFrom(intent) }
+        Guard.channels(this)
+        if (savedInstanceState == null) { handleShare(intent); openTabFrom(intent); walkFrom(intent); widgetActionFrom(intent); guardFrom(intent) }
         setContent {
             androidx.compose.foundation.layout.Box {
                 ParkApp(perms.value, this@MainActivity)
@@ -94,6 +95,7 @@ class MainActivity : ComponentActivity(), Actions {
         matchCarByName()
         startIfCarConnected()
         refreshFromCar()
+        Guard.sync(this)
         // komendy, które czekały na internet
         lifecycleScope.launch { Outbox.flushAsync(this@MainActivity) }
         Updater.init(this)
@@ -148,6 +150,7 @@ class MainActivity : ComponentActivity(), Actions {
         openTabFrom(intent)
         walkFrom(intent)
         widgetActionFrom(intent)
+        guardFrom(intent)
     }
 
     /** Widżet „Skróty” → „Zapisz tu”: zapis miejsca parkowania w bieżącej pozycji. */
@@ -189,6 +192,15 @@ class MainActivity : ComponentActivity(), Actions {
     }
 
     /** Widżet może otworzyć konkretną zakładkę (np. ceny paliw → Auto). */
+    /** Z alarmu „auto jedzie bez Ciebie”: przestań dzwonić; „Udostępnij link” – panel jazdy na żywo. */
+    private fun guardFrom(i: Intent?) {
+        val a = i?.getStringExtra("guard_action") ?: return
+        i.removeExtra("guard_action")
+        Guard.quiet(this)
+        OpenTab.value = 0
+        if (a == "share") Guard.askShare.value = true
+    }
+
     private fun openTabFrom(i: Intent?) {
         val t = i?.getIntExtra("tab", -1) ?: -1
         if (t >= 0) OpenTab.value = t

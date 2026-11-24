@@ -153,6 +153,8 @@ object Sync {
      * (ktoś inny jedzie). Znika samo, gdy auto stanie.
      */
     fun checkLive(ctx: Context) {
+        // czuwanie na żywo samo alarmuje (od razu, głośno) – to jest tylko zapas co 15 min
+        if (GuardService.running) return
         val sp = CarData.prefs ?: return
         val l = CarData.live.value
         val fresh = l != null && l.moving && System.currentTimeMillis() - l.time < 10 * 60_000L

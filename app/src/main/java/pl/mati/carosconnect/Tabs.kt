@@ -1,5 +1,8 @@
 package pl.mati.carosconnect
 
+import androidx.compose.runtime.mutableIntStateOf
+import android.content.Intent
+import androidx.compose.material.icons.rounded.WarningAmber
 import pl.mati.caros.core.StationPrices
 import org.maplibre.android.geometry.LatLng
 import androidx.compose.ui.graphics.graphicsLayer
@@ -937,7 +940,12 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
     Label("Powiadomienia", Modifier.padding(top = 6.dp))
     ToggleRow("Przypomnienia serwisowe", "Olej, przegląd, ubezpieczenie – z danych CAR OS", nService) { CarData.setNotifService(it) }
     val nLive by CarData.notifLive.collectAsState()
-    ToggleRow("Auto ruszyło", "Gdy ktoś jedzie Twoim autem, a Ty nie (radio musi mieć internet; może przyjść do 15 min później)", nLive) { CarData.setNotifLive(it) }
+    ToggleRow(
+        "Alarm: auto jedzie bez Ciebie",
+        "Od razu, głośno jak budzik. Gdy nie jesteś w aucie, telefon czuwa w tle (małe stałe powiadomienie „Czuwanie”), w aucie czuwanie się wyłącza. Radio musi mieć internet",
+        nLive,
+    ) { CarData.setNotifLive(it); Guard.sync(ctx) }
+    if (nLive) GuardChecks()
     val nBat by CarData.notifBattery.collectAsState()
     ToggleRow("Słaby akumulator", "Gdy CAR OS zmierzy niskie napięcie albo słabe ładowanie", nBat) { CarData.setNotifBattery(it) }
     val nFuel by FuelPrices.notify.collectAsState()
@@ -1830,4 +1838,49 @@ private fun LookSyncSection() {
         },
         on,
     ) { LookSync.setEnabled(it) }
+}
+
+/** Czuwanie: czy działa i czego brakuje (oszczędzanie baterii, alarm na cały ekran). */
+@Composable
+private fun GuardChecks() {
+    val ctx = LocalContext.current
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(2_000); tick++ } }
+    val linked by Store.linked.collectAsState()
+    val pairing by Store.pairing.collectAsState()
+    @Suppress("UNUSED_VARIABLE") val t = tick
+    val pm = ctx.getSystemService(android.os.PowerManager::class.java)
+    val battery = pm?.isIgnoringBatteryOptimizations(ctx.packageName) ?: true
+    val nm = ctx.getSystemService(android.app.NotificationManager::class.java)
+    val fullScreen = if (android.os.Build.VERSION.SDK_INT >= 34) nm?.canUseFullScreenIntent() ?: true else true
+    val (txt, col) = when {
+        pairing == null -> "Nie czuwa – najpierw połącz z CAR OS kodem QR" to C.Orange
+        GuardService.running -> "Czuwa teraz – alarm przyjdzie kilka sekund po tym, jak auto ruszy" to C.Green
+        linked || DriveService.running -> "Nie czuwa – jesteś w aucie (włączy się samo po zaparkowaniu)" to C.Muted
+        else -> "Nie czuwa – system nie pozwolił włączyć; otwórz aplikację jeszcze raz" to C.Orange
+    }
+    Text(txt, fontSize = 13.sp, color = col, modifier = Modifier.padding(start = 4.dp, top = 2.dp))
+    if (!battery) GuardFix("Bez oszczędzania baterii", "Inaczej system może uśpić czuwanie i alarm przyjdzie z opóźnieniem – dotknij i zezwól") {
+        try { ctx.startActivity(Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + ctx.packageName))) }
+        catch (_: Exception) { try { ctx.startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } catch (_: Exception) {} }
+    }
+    if (!fullScreen) GuardFix("Alarm na cały ekran", "Żeby alarm pokazał się na zablokowanym ekranie jak budzik – dotknij i włącz") {
+        try { ctx.startActivity(Intent("android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENT", Uri.parse("package:" + ctx.packageName))) } catch (_: Exception) {}
+    }
+}
+
+@Composable
+private fun GuardFix(title: String, sub: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Orange.copy(alpha = 0.12f)).clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(Icons.Rounded.WarningAmber, null, tint = C.Orange, modifier = Modifier.size(22.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text)
+            Text(sub, fontSize = 12.sp, color = C.Text2)
+        }
+    }
 }
