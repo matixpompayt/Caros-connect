@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 2.0-beta.32 · 2026-11-25
 Liquid Glass: gładkie albo matowe szkło (jak w HyperOS)
 - Ustawienia → Wygląd → Glass → „Styl szkła” z podglądem: Gładkie szkło – przejrzyste karty, tapeta widać ostro, a przy krawędziach zagina się jak w soczewce (lekka tęcza, odblask od strony światła, przesuwa się przy przechylaniu telefonu); Matowe szkło – rozmyte i mleczne jak dotąd (też z załamaniem na krawędzi)
 - Gładkie domyślnie; panele i okna zostają na rozmytym tle (czytelność)
