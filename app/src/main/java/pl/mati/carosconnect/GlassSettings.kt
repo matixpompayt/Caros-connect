@@ -90,6 +90,18 @@ fun GlassSettings() {
         val tones = listOf("dark" to "Ciemne", "light" to "Jasne", "auto" to "Jak telefon")
         LiquidSegmented(tones.map { it.second }, tones.indexOfFirst { it.first == s.tone }, { i -> upd { it.copy(tone = tones[i].first) } })
 
+        SubTitle("Styl szkła")
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            GlassStyleTile("Gładkie szkło", sel = !s.frost, frost = false, Modifier.weight(1f)) { upd { it.copy(frost = false) } }
+            GlassStyleTile("Matowe szkło", sel = s.frost, frost = true, Modifier.weight(1f)) { upd { it.copy(frost = true) } }
+        }
+        Text(
+            if (s.frost) "Rozmyte, mleczne tło pod kartami – tekst zawsze czytelny"
+            else if (GlassRefraction.supported) "Przejrzyste – tło widać ostro, a przy krawędziach zagina się jak w soczewce"
+            else "Przejrzyste – tło widać ostro (załamanie na krawędziach od Androida 13)",
+            fontSize = 12.sp, color = C.Muted,
+        )
+
         SubTitle("Tło")
         val tabs = listOf("preset" to "Gotowe", "solid" to "Kolor", "mix" to "Mieszanka", "photo" to "Zdjęcie", "ai" to "AI")
         LiquidSegmented(tabs.map { it.second }, tabs.indexOfFirst { it.first == tab }, { i -> tab = tabs[i].first }, fontSize = 12.sp)
@@ -328,4 +340,21 @@ private fun AiPromptDialog(initial: String, onDismiss: () -> Unit, onGenerate: (
         confirmButton = { TextButton(enabled = t.isNotBlank(), onClick = { onGenerate(t.trim()); onDismiss() }) { Text("Generuj") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Anuluj") } },
     )
+}
+
+/** Podgląd stylu szkła jak w ustawieniach telefonu: okno na tapetę i szklana kapsuła na środku. */
+@Composable
+private fun GlassStyleTile(title: String, sel: Boolean, frost: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(22.dp)
+    Column(modifier.clip(RoundedCornerShape(22.dp)).clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(
+            Modifier.fillMaxWidth().height(118.dp)
+                .border(if (sel) 2.5.dp else 1.dp, if (sel) C.Accent else C.Border, shape)
+                .padding(4.dp).clip(RoundedCornerShape(18.dp)).wallpaperWindow(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(Modifier.fillMaxWidth(0.76f).height(44.dp).glassMaterial(RoundedCornerShape(22.dp), frostOverride = frost, top = true))
+        }
+        Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = if (sel) C.Accent else C.Text)
+    }
 }

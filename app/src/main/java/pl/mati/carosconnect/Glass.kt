@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.addOutline
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
@@ -145,11 +146,24 @@ fun Modifier.surface(shape: Shape, color: Color = C.Card, border: Color? = null,
                 else -> Modifier.border(borderWidth, border, shape)
             },
         )
-    } else composed {
-        val depth = LocalGlassDepth.current
+    } else glassMaterial(shape, color, border, borderWidth, heavy)
+
+/**
+ * Materiał szklany. [frostOverride] – wymuś styl (podgląd w ustawieniach), [top] – rysuj tapetę
+ * nawet w karcie w karcie (podgląd).
+ * Gładkie szkło: pod kartą ostra tapeta, przy krawędzi zagięta jak w soczewce (Android 13+: shader),
+ * matowe: rozmyta i mleczna. W obu – połysk u góry i jasna krawędź od strony światła.
+ */
+fun Modifier.glassMaterial(
+    shape: Shape, color: Color = C.Card, border: Color? = null, borderWidth: Dp = 1.dp, heavy: Boolean = false,
+    frostOverride: Boolean? = null, top: Boolean = false,
+): Modifier = composed {
+        val depth = if (top) 0 else LocalGlassDepth.current
         val light = C.isLight
         val raised = color == C.Raised
         val extraBorder = border?.takeIf { it != C.Border }
+        val gs by GlassTheme.spec.collectAsState()
+        val frost = frostOverride ?: gs.frost
         val pos = remember { mutableStateOf(Offset.Zero) }
         val view = LocalView.current
         // pozycja na ekranie (okna dialogowe mają własne okno – tapeta jest liczona od rogu ekranu)
@@ -161,17 +175,21 @@ fun Modifier.surface(shape: Shape, color: Color = C.Card, border: Color? = null,
             .drawWithCache {
                 val outline = shape.createOutline(size, layoutDirection, this)
                 val path = Path().apply { addOutline(outline) }
-                // odcień materiału (jak .regularMaterial / .thinMaterial w iOS)
+                // okna (heavy) zawsze na rozmytej tapecie – czytelność
+                val useBlur = frost || heavy
+                // odcień materiału (jak .regularMaterial / .thinMaterial w iOS); gładkie – prawie przezroczysty
                 val tint: List<Color> = when {
                     heavy && light -> listOf(Color.White.copy(alpha = 0.74f))
                     heavy -> listOf(Color.Black.copy(alpha = 0.40f), Color.White.copy(alpha = 0.08f))
                     depth > 0 && light -> listOf(Color.White.copy(alpha = if (raised) 0.42f else 0.30f))
                     depth > 0 -> listOf(Color.White.copy(alpha = if (raised) 0.10f else 0.07f))
+                    !frost && light -> listOf(Color.White.copy(alpha = 0.24f))
+                    !frost -> listOf(Color.Black.copy(alpha = 0.14f), Color.White.copy(alpha = 0.035f))
                     light -> listOf(Color.White.copy(alpha = 0.52f))
                     else -> listOf(Color.Black.copy(alpha = 0.22f), Color.White.copy(alpha = 0.07f))
                 }
                 val sheen = Brush.verticalGradient(
-                    0f to Color.White.copy(alpha = if (light) 0.30f else 0.11f),
+                    0f to Color.White.copy(alpha = if (light) 0.30f else if (!frost) 0.13f else 0.11f),
                     0.45f to Color.Transparent,
                     startY = 0f, endY = size.height,
                 )
@@ -179,21 +197,40 @@ fun Modifier.surface(shape: Shape, color: Color = C.Card, border: Color? = null,
                 val ld = GlassLight.dir
                 val c = Offset(size.width / 2f, size.height / 2f)
                 val rr = kotlin.math.hypot(size.width, size.height) / 2f
+                val clear = !frost
                 val rim = Brush.linearGradient(
-                    0f to Color.White.copy(alpha = if (light) 0.95f else 0.6f),
-                    0.45f to Color.White.copy(alpha = if (light) 0.35f else 0.06f),
-                    1f to Color.White.copy(alpha = if (light) 0.7f else 0.26f),
+                    0f to Color.White.copy(alpha = if (light) 0.95f else if (clear) 0.78f else 0.6f),
+                    0.45f to Color.White.copy(alpha = if (light) 0.35f else if (clear) 0.10f else 0.06f),
+                    1f to Color.White.copy(alpha = if (light) 0.7f else if (clear) 0.36f else 0.26f),
                     start = c + Offset(ld.x * rr, ld.y * rr), end = c - Offset(ld.x * rr, ld.y * rr),
                 )
-                val stroke = Stroke(borderWidth.toPx())
+                val stroke = Stroke(borderWidth.toPx() * if (clear) 1.25f else 1f)
+                // tapeta pod kartą i (Android 13+) shader z załamaniem światła na krawędzi
+                val wall = if (useBlur) GlassState.blurred else GlassState.sharp
+                val minDim = minOf(size.width, size.height)
+                val radius = when (outline) {
+                    is androidx.compose.ui.graphics.Outline.Rounded -> outline.roundRect.topLeftCornerRadius.x
+                    else -> 0f
+                }.coerceIn(0f, minDim / 2f)
+                val bevel = (radius * 1.1f).coerceIn(minOf(10.dp.toPx(), minDim / 2f), minOf(26.dp.toPx(), minDim / 2f).coerceAtLeast(1f))
+                val refr = (if (frost) 8.dp else 15.dp).toPx()
+                val fx = if (depth == 0 && wall != null && GlassRefraction.supported && android.os.Build.VERSION.SDK_INT >= 33) {
+                    try { GlassFx(wall) } catch (_: Throwable) { GlassRefraction.broken = true; null }
+                } else null
                 onDrawBehind {
                     clipPath(path) {
-                        val blurred = GlassState.blurred
                         val root = GlassState.size
-                        if (depth == 0 && blurred != null && root.width > 0) {
+                        if (depth == 0 && wall != null && root.width > 0) {
                             val p = pos.value
-                            drawImage(
-                                blurred,
+                            val done = fx != null && android.os.Build.VERSION.SDK_INT >= 33 && try {
+                                fx.draw(this, p, radius, bevel, refr, wall.width.toFloat() / root.width, GlassLight.dir)
+                                true
+                            } catch (_: Throwable) {
+                                GlassRefraction.broken = true
+                                false
+                            }
+                            if (!done) drawImage(
+                                wall,
                                 dstOffset = IntOffset(-p.x.roundToInt(), -p.y.roundToInt()),
                                 dstSize = root,
                                 filterQuality = FilterQuality.Low,
@@ -207,3 +244,98 @@ fun Modifier.surface(shape: Shape, color: Color = C.Card, border: Color? = null,
                 }
             }
     }
+
+/** Załamanie światła w szkle (Android 13+, AGSL). */
+object GlassRefraction {
+    @Volatile var broken = false
+    val supported get() = android.os.Build.VERSION.SDK_INT >= 33 && !broken
+
+    internal const val AGSL = """
+uniform shader wall;
+uniform float2 uOrigin;
+uniform float2 uSize;
+uniform float uRadius;
+uniform float uBevel;
+uniform float uRefr;
+uniform float uScale;
+uniform float2 uWall;
+uniform float2 uLightDir;
+
+float sdRR(float2 p, float2 b, float r) {
+    float2 q = abs(p) - b + float2(r, r);
+    return length(max(q, float2(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - r;
+}
+
+float sd(float2 p) { return sdRR(p - uSize * 0.5, uSize * 0.5, uRadius); }
+
+half4 tap(float2 rp) {
+    float2 q = clamp(rp * uScale, float2(0.5, 0.5), uWall - float2(1.5, 1.5));
+    return wall.eval(q);
+}
+
+half4 main(float2 p) {
+    float d = sd(p);
+    float e = 1.0;
+    float2 g = float2(sd(p + float2(e, 0.0)) - sd(p - float2(e, 0.0)), sd(p + float2(0.0, e)) - sd(p - float2(0.0, e)));
+    float2 n = g / (length(g) + 0.00001);
+    // 0 w środku karty, 1 na samej krawędzi – tam szkło jest „grube” i zagina obraz
+    float x = clamp(1.0 + d / uBevel, 0.0, 1.0);
+    float bend = x * x * x;
+    float2 off = n * (uRefr * bend);
+    float2 rp = uOrigin + p;
+    // lekka tęcza (aberracja) przy brzegu
+    float ca = 0.3 * bend;
+    half4 cr = tap(rp + off * (1.0 + ca));
+    half4 cg = tap(rp + off);
+    half4 cb = tap(rp + off * (1.0 - ca));
+    float3 rgb = float3(cr.r, cg.g, cb.b);
+    // światło na grubym brzegu: jaśniej od strony światła, ciemniej po drugiej
+    float ndl = dot(n, uLightDir);
+    float facing = clamp(ndl, 0.0, 1.0);
+    float away = clamp(-ndl, 0.0, 1.0);
+    rgb = rgb + float3((0.06 + 0.20 * facing) * bend);
+    rgb = rgb * (1.0 - 0.12 * away * bend);
+    return half4(half3(clamp(rgb, 0.0, 1.0)), 1.0);
+}
+"""
+}
+
+/** Shader jednej karty – tapeta jako wejście, parametry ustawiane przy każdym rysowaniu. */
+@androidx.annotation.RequiresApi(33)
+private class GlassFx(wall: androidx.compose.ui.graphics.ImageBitmap) {
+    private val shader = android.graphics.RuntimeShader(GlassRefraction.AGSL).apply {
+        val b = wall.asAndroidBitmap()
+        setInputShader("wall", android.graphics.BitmapShader(b, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP))
+        setFloatUniform("uWall", b.width.toFloat(), b.height.toFloat())
+    }
+    private val brush = androidx.compose.ui.graphics.ShaderBrush(shader)
+
+    fun draw(ds: androidx.compose.ui.graphics.drawscope.DrawScope, origin: Offset, radius: Float, bevel: Float, refr: Float, scale: Float, light: Offset) {
+        shader.setFloatUniform("uOrigin", origin.x, origin.y)
+        shader.setFloatUniform("uSize", ds.size.width, ds.size.height)
+        shader.setFloatUniform("uRadius", radius)
+        shader.setFloatUniform("uBevel", bevel)
+        shader.setFloatUniform("uRefr", refr)
+        shader.setFloatUniform("uScale", scale)
+        shader.setFloatUniform("uLightDir", light.x, light.y)
+        ds.drawRect(brush)
+    }
+}
+
+/** Okno na tapetę: rysuje kawałek ostrej tapety, który jest pod tym miejscem ekranu (podgląd szkła). */
+fun Modifier.wallpaperWindow(): Modifier = composed {
+    val pos = remember { mutableStateOf(Offset.Zero) }
+    val view = LocalView.current
+    this.onGloballyPositioned {
+        val loc = IntArray(2)
+        view.getLocationOnScreen(loc)
+        pos.value = it.positionInRoot() + Offset(loc[0].toFloat(), loc[1].toFloat())
+    }.drawBehind {
+        val s = GlassState.sharp
+        val root = GlassState.size
+        if (s != null && root.width > 0) {
+            val p = pos.value
+            drawImage(s, dstOffset = IntOffset(-p.x.roundToInt(), -p.y.roundToInt()), dstSize = root, filterQuality = FilterQuality.Medium)
+        } else drawRect(Color(0xFF0B1026))
+    }
+}

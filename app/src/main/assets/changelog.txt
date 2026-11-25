@@ -2,6 +2,12 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Liquid Glass: gładkie albo matowe szkło (jak w HyperOS)
+- Ustawienia → Wygląd → Glass → „Styl szkła” z podglądem: Gładkie szkło – przejrzyste karty, tapeta widać ostro, a przy krawędziach zagina się jak w soczewce (lekka tęcza, odblask od strony światła, przesuwa się przy przechylaniu telefonu); Matowe szkło – rozmyte i mleczne jak dotąd (też z załamaniem na krawędzi)
+- Gładkie domyślnie; panele i okna zostają na rozmytym tle (czytelność)
+- Styl szkła synchronizuje się z radiem (CAR OS 2.0-beta.16+)
+
 ## 2.0-beta.31 · 2026-11-24
 - Trasa: stacje i postoje zapisane z planu podróży mają ikonę dystrybutora / filiżanki (na liście i na mapie), litery A, B, C… tylko Twoje punkty
 - „Dodaj punkt”: u góry wyszukiwarka (wyniki od najbliższych trasie, z odległością od trasy) – albo jak dotąd przytrzymaj palec na mapie

@@ -52,7 +52,7 @@ object LookSync {
         val tone = if (glass) spec.tone.takeIf { it in Look.TONES } ?: "dark" else when (theme) { "light" -> "light"; "dark" -> "dark"; else -> "auto" }
         val acc = if (glass) spec.accent?.toInt() ?: GlassState.autoAccent?.toArgb() ?: GlassTheme.DEFAULT_ACCENT.toArgb()
         else accent.value ?: DEFAULT
-        return Look(glass, tone, acc, spec.anim, time())
+        return Look(glass, tone, acc, spec.anim, time(), spec.frost)
     }
 
     fun setEnabled(v: Boolean) {
@@ -124,13 +124,15 @@ object LookSync {
         if (l.glass) {
             if (Store.theme.value != "glass") Store.setTheme("glass")
             GlassTheme.update(ctx) { s ->
-                s.copy(tone = l.tone, accent = l.accent?.toLong()?.and(0xFFFFFFFFL) ?: s.accent, anim = l.anim)
+                s.copy(tone = l.tone, accent = l.accent?.toLong()?.and(0xFFFFFFFFL) ?: s.accent, anim = l.anim, frost = l.frost ?: s.frost)
             }
         } else {
             val t = when (l.tone) { "light" -> "light"; "dark" -> "dark"; else -> "auto" }
             if (Store.theme.value != t) Store.setTheme(t)
             l.accent?.let { setAccent(if (it == DEFAULT) null else it) }
-            if (GlassTheme.spec.value.anim != l.anim) GlassTheme.update(ctx) { s -> s.copy(anim = l.anim) }
+            if (GlassTheme.spec.value.anim != l.anim || (l.frost != null && GlassTheme.spec.value.frost != l.frost)) {
+                GlassTheme.update(ctx) { s -> s.copy(anim = l.anim, frost = l.frost ?: s.frost) }
+            }
         }
         // „zsynchronizowany” stan – nasłuch zmian nie wyśle tego z powrotem do auta
         sp?.edit()?.putString("c", current().content)?.putLong("t", l.t)?.apply()
