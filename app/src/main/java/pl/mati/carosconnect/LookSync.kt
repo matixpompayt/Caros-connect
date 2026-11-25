@@ -135,8 +135,9 @@ object LookSync {
             val t = when (l.tone) { "light" -> "light"; "dark" -> "dark"; else -> "auto" }
             if (Store.theme.value != t) Store.setTheme(t)
             l.accent?.let { setAccent(if (it == DEFAULT) null else it) }
-            if (l.frost != null && GlassTheme.spec.value.frost != l.frost) {
-                GlassTheme.update(ctx) { s -> s.copy(frost = l.frost) }
+            val f = l.frost
+            if (f != null && GlassTheme.spec.value.frost != f) {
+                GlassTheme.update(ctx) { s -> s.copy(frost = f) }
             }
         }
         // „zsynchronizowany” stan – nasłuch zmian nie wyśle tego z powrotem do auta
