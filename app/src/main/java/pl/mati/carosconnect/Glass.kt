@@ -31,6 +31,8 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.addOutline
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -183,7 +185,8 @@ fun Modifier.glassMaterial(
                     heavy && light -> listOf(Color.White.copy(alpha = 0.74f))
                     heavy -> listOf(Color.Black.copy(alpha = 0.40f), Color.White.copy(alpha = 0.08f))
                     depth > 0 && light -> listOf(Color.White.copy(alpha = if (raised) 0.42f else 0.30f))
-                    depth > 0 -> listOf(Color.White.copy(alpha = if (raised) 0.10f else 0.07f))
+                    // kafelki na szkle (jak przełączniki w centrum sterowania) – wyraźnie jaśniejsze od tła
+                    depth > 0 -> listOf(Color.White.copy(alpha = if (raised) 0.14f else 0.10f))
                     !frost && light -> listOf(Color.White.copy(alpha = 0.24f))
                     !frost -> listOf(Color.Black.copy(alpha = 0.14f), Color.White.copy(alpha = 0.035f))
                     light -> listOf(Color.White.copy(alpha = 0.52f))
@@ -392,7 +395,8 @@ object MapBackdrop {
         origin = Offset(loc[0].toFloat(), loc[1].toFloat())
         size = IntSize(tv.width, tv.height)
         image = b.asImageBitmap()
-        blurred = if (frost) blur(b) else null
+        // Android 12+: rozmycie na karcie graficznej (RenderEffect), starsze – na procesorze
+        blurred = if (android.os.Build.VERSION.SDK_INT < 31) blur(b) else null
     }
 
     fun clear() {
@@ -444,70 +448,71 @@ object MapBackdrop {
 }
 
 /**
- * Szkło nad mapą (panel na Starcie). Gładkie: prawie przezroczyste – mapę widać na żywo, a przy
- * krawędzi zagina się (shader na zrzucie mapy); matowe: rozmyta mapa pod spodem.
+ * Tło szklanego panelu nad mapą (jak centrum sterowania HyperOS): mocno rozmyta mapa na żywo,
+ * przyciemnienie, połysk u góry i jasna krawędź. Gładkie/matowe – matowe trochę bardziej mleczne.
+ * Karty na panelu to jaśniejsze szklane kafelki (LocalGlassDepth = 1).
  */
-fun Modifier.mapGlass(shape: Shape): Modifier = composed {
+@Composable
+fun MapGlassBackground(shape: Shape, modifier: Modifier) {
     val gs by GlassTheme.spec.collectAsState()
     val frost = gs.frost
     val light = C.isLight
     val pos = remember { mutableStateOf(Offset.Zero) }
     val view = LocalView.current
-    this.onGloballyPositioned {
-        val loc = IntArray(2)
-        view.getLocationOnScreen(loc)
-        pos.value = it.positionInRoot() + Offset(loc[0].toFloat(), loc[1].toFloat())
-    }.drawWithCache {
-        val outline = shape.createOutline(size, layoutDirection, this)
-        val path = Path().apply { addOutline(outline) }
-        val radius = when (outline) {
-            is androidx.compose.ui.graphics.Outline.Rounded -> outline.roundRect.topLeftCornerRadius.x
-            else -> 0f
-        }.coerceIn(0f, minOf(size.width, size.height) / 2f)
-        val bevel = 24.dp.toPx()
-        val refr = (if (frost) 10.dp else 18.dp).toPx()
-        val fx = if (GlassRefraction.supported && android.os.Build.VERSION.SDK_INT >= 33) {
-            try { GlassFx(null) } catch (_: Throwable) { GlassRefraction.broken = true; null }
-        } else null
-        val tint: List<Color> = when {
-            !frost && light -> listOf(Color.White.copy(alpha = 0.58f))
-            !frost -> listOf(Color.Black.copy(alpha = 0.46f), Color.White.copy(alpha = 0.03f))
-            light -> listOf(Color.White.copy(alpha = 0.50f))
-            else -> listOf(Color.Black.copy(alpha = 0.26f), Color.White.copy(alpha = 0.05f))
-        }
-        val sheen = Brush.verticalGradient(
-            0f to Color.White.copy(alpha = if (light) 0.30f else 0.12f),
-            0.12f to Color.Transparent,
-            startY = 0f, endY = size.height,
-        )
-        val rim = Brush.horizontalGradient(
-            0f to Color.White.copy(alpha = if (light) 0.9f else 0.55f),
-            0.5f to Color.White.copy(alpha = if (light) 0.5f else 0.18f),
-            1f to Color.White.copy(alpha = if (light) 0.85f else 0.42f),
-        )
-        val stroke = Stroke(1.3.dp.toPx())
-        onDrawBehind {
-            clipPath(path) {
-                val img = if (frost) MapBackdrop.blurred else MapBackdrop.image
-                val ms = MapBackdrop.size
-                val mo = MapBackdrop.origin
-                val p = pos.value
-                if (img != null && ms.width > 0) {
-                    if (frost) drawImage(
+    val blurPx = with(androidx.compose.ui.platform.LocalDensity.current) { 34.dp.toPx() }
+    Box(
+        modifier.onGloballyPositioned {
+            val loc = IntArray(2)
+            view.getLocationOnScreen(loc)
+            pos.value = it.positionInRoot() + Offset(loc[0].toFloat(), loc[1].toFloat())
+        }.clip(shape),
+    ) {
+        // rozmyta mapa pod panelem
+        Box(
+            Modifier.matchParentSize()
+                .graphicsLayer {
+                    if (android.os.Build.VERSION.SDK_INT >= 31) {
+                        renderEffect = androidx.compose.ui.graphics.BlurEffect(blurPx, blurPx, androidx.compose.ui.graphics.TileMode.Clamp)
+                    }
+                }
+                .drawBehind {
+                    val ms = MapBackdrop.size
+                    val mo = MapBackdrop.origin
+                    val p = pos.value
+                    val img = if (android.os.Build.VERSION.SDK_INT >= 31) MapBackdrop.image else MapBackdrop.blurred
+                    if (img != null && ms.width > 0) drawImage(
                         img, dstOffset = IntOffset((mo.x - p.x).roundToInt(), (mo.y - p.y).roundToInt()), dstSize = ms,
                         filterQuality = FilterQuality.Low,
-                    )
-                    if (fx != null && android.os.Build.VERSION.SDK_INT >= 33) try {
-                        fx.setWall(img)
-                        fx.draw(this, p - mo, radius, bevel, refr, img.width.toFloat() / ms.width, GlassLight.dir, band = if (frost) 0.6f else 1f)
-                    } catch (_: Throwable) {
-                        GlassRefraction.broken = true
-                    }
-                } else if (frost) drawRect(C.Dialog)
-                tint.forEach { drawRect(it) }
-                drawRect(sheen)
-            }
-            drawOutline(outline, rim, style = stroke)
-        }
+                    ) else drawRect(C.Dialog)
+                },
+        )
+        // przyciemnienie, połysk, krawędź
+        Box(
+            Modifier.matchParentSize().drawWithCache {
+                val outline = shape.createOutline(size, layoutDirection, this)
+                val tint: List<Color> = when {
+                    light && frost -> listOf(Color.White.copy(alpha = 0.55f))
+                    light -> listOf(Color.White.copy(alpha = 0.42f))
+                    frost -> listOf(Color.Black.copy(alpha = 0.26f), Color.White.copy(alpha = 0.09f))
+                    else -> listOf(Color.Black.copy(alpha = 0.34f), Color.White.copy(alpha = 0.04f))
+                }
+                val sheen = Brush.verticalGradient(
+                    0f to Color.White.copy(alpha = if (light) 0.28f else 0.10f),
+                    0.10f to Color.Transparent,
+                    startY = 0f, endY = size.height,
+                )
+                val rim = Brush.horizontalGradient(
+                    0f to Color.White.copy(alpha = if (light) 0.9f else 0.42f),
+                    0.5f to Color.White.copy(alpha = if (light) 0.5f else 0.14f),
+                    1f to Color.White.copy(alpha = if (light) 0.85f else 0.32f),
+                )
+                val stroke = Stroke(1.2.dp.toPx())
+                onDrawBehind {
+                    tint.forEach { drawRect(it) }
+                    drawRect(sheen)
+                    drawOutline(outline, rim, style = stroke)
+                }
+            },
+        )
     }
 }

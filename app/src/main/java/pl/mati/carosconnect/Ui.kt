@@ -518,16 +518,20 @@ private fun MapShell(perms: Perms, actions: Actions, tab: Int, onTab: (Int) -> U
             sheetContent = {
                 val scroll = remember(tab) { ScrollState(0) }
                 if (C.isGlass) {
-                    Column(Modifier.fillMaxWidth().mapGlass(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))) {
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Box(Modifier.padding(top = 10.dp, bottom = 8.dp).size(42.dp, 5.dp).clip(RoundedCornerShape(3.dp)).background(C.Text.copy(alpha = 0.40f)))
-                        }
-                        // karty w panelu: lekki odcień, nie kawałek tapety (pod panelem jest mapa)
-                        androidx.compose.runtime.CompositionLocalProvider(LocalGlassDepth provides 1) {
-                            Column(
-                                Modifier.fillMaxWidth().height(sheetH).verticalScroll(scroll).padding(horizontal = 18.dp).padding(bottom = 112.dp),
-                                verticalArrangement = Arrangement.spacedBy(14.dp),
-                            ) { content() }
+                    Box(Modifier.fillMaxWidth()) {
+                        // rozmyta mapa pod panelem (jak tło centrum sterowania w telefonie)
+                        MapGlassBackground(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp), Modifier.matchParentSize())
+                        Column(Modifier.fillMaxWidth()) {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Box(Modifier.padding(top = 10.dp, bottom = 8.dp).size(42.dp, 5.dp).clip(RoundedCornerShape(3.dp)).background(C.Text.copy(alpha = 0.40f)))
+                            }
+                            // karty na panelu: jaśniejsze szklane kafelki (nie kawałek tapety – pod panelem jest mapa)
+                            androidx.compose.runtime.CompositionLocalProvider(LocalGlassDepth provides 1) {
+                                Column(
+                                    Modifier.fillMaxWidth().height(sheetH).verticalScroll(scroll).padding(horizontal = 18.dp).padding(bottom = 112.dp),
+                                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                                ) { content() }
+                            }
                         }
                     }
                 } else Column(

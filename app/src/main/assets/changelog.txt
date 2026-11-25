@@ -2,6 +2,9 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+- Glass: panel nad mapą jak centrum sterowania w telefonie – mapa pod nim mocno rozmyta (na żywo), przyciemniona, tekst czytelny; karty na panelu to jaśniejsze szklane kafelki
+
 ## 2.0-beta.33 · 2026-11-25
 - Glass: panel na Starcie (auto, zasięg, przyciski) jest teraz szklany nad mapą – gładkie szkło: mapę widać przez panel na żywo, a przy górnej krawędzi zagina się jak w soczewce; matowe: rozmyta mapa pod panelem
 - Karty w panelu mają lekki odcień zamiast kawałka tapety (pod panelem jest mapa)
