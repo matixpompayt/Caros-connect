@@ -1835,7 +1835,7 @@ private fun LookSyncSection() {
         when {
             Store.pairing.collectAsState().value == null -> "Po połączeniu z CAR OS: Glass, jasny / ciemny i kolor akcentu zmieniają się razem w telefonie i w radiu"
             car != null && !supported -> "CAR OS w aucie jest za stary – zaktualizuj radio do wersji testowej 2.0"
-            on -> "Glass, jasny / ciemny i kolor akcentu zmieniają się razem w telefonie i w radiu"
+            on -> "Glass (gładkie / matowe), jasny / ciemny i kolor akcentu zmieniają się razem w telefonie i w radiu – animacje każde ma swoje"
             else -> "Wyłączone – telefon i radio mają osobny wygląd"
         },
         on,

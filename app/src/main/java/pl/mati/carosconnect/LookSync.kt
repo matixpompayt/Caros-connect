@@ -18,7 +18,8 @@ import pl.mati.caros.core.Look
 import pl.mati.caros.core.Proto
 
 /**
- * Ten sam wygląd w telefonie i w CAR OS: Glass, jasny / ciemny, kolor akcentu, animacja kropli.
+ * Ten sam wygląd w telefonie i w CAR OS: Glass (gładkie / matowe), jasny / ciemny, kolor akcentu.
+ * Animacje NIE – telefon jest mocniejszy od radia, każde ma swoje ustawienie.
  * Zmiana w telefonie idzie do auta komendą „look”, zmiana w radiu przychodzi w statusie – nowsza wygrywa.
  * Przy pierwszym połączeniu wygrywa wygląd z telefonu.
  */
@@ -68,11 +69,14 @@ object LookSync {
         sp?.edit()?.putLong("accent", c?.toLong()?.and(0xFFFFFFFFL) ?: 0L)?.apply()
     }
 
+    /** Do porównań „czy coś się zmieniło” – bez animacji (nie są wspólne). */
+    private fun key(l: Look) = l.copy(anim = true).content
+
     @OptIn(FlowPreview::class)
     private fun start() {
         scope.launch {
             delay(2000)
-            combine(Store.theme, GlassTheme.spec, accent) { _, _, _ -> current().content }
+            combine(Store.theme, GlassTheme.spec, accent) { _, _, _ -> key(current()) }
                 .debounce(2000)
                 .collect { c ->
                     val p = sp ?: return@collect
@@ -116,7 +120,7 @@ object LookSync {
         val mine = current()
         when {
             car.t > mine.t -> scope.launch(Dispatchers.Main) { apply(ctx, car) }
-            mine.t > car.t && mine.content != car.content -> push()
+            mine.t > car.t && key(mine) != key(car) -> push()
         }
     }
 
@@ -124,18 +128,19 @@ object LookSync {
         if (l.glass) {
             if (Store.theme.value != "glass") Store.setTheme("glass")
             GlassTheme.update(ctx) { s ->
-                s.copy(tone = l.tone, accent = l.accent?.toLong()?.and(0xFFFFFFFFL) ?: s.accent, anim = l.anim, frost = l.frost ?: s.frost)
+                // animacja zostaje telefonu (radio jest słabsze – tam może być wyłączona)
+                s.copy(tone = l.tone, accent = l.accent?.toLong()?.and(0xFFFFFFFFL) ?: s.accent, frost = l.frost ?: s.frost)
             }
         } else {
             val t = when (l.tone) { "light" -> "light"; "dark" -> "dark"; else -> "auto" }
             if (Store.theme.value != t) Store.setTheme(t)
             l.accent?.let { setAccent(if (it == DEFAULT) null else it) }
-            if (GlassTheme.spec.value.anim != l.anim || (l.frost != null && GlassTheme.spec.value.frost != l.frost)) {
-                GlassTheme.update(ctx) { s -> s.copy(anim = l.anim, frost = l.frost ?: s.frost) }
+            if (l.frost != null && GlassTheme.spec.value.frost != l.frost) {
+                GlassTheme.update(ctx) { s -> s.copy(frost = l.frost) }
             }
         }
         // „zsynchronizowany” stan – nasłuch zmian nie wyśle tego z powrotem do auta
-        sp?.edit()?.putString("c", current().content)?.putLong("t", l.t)?.apply()
+        sp?.edit()?.putString("c", key(current()))?.putLong("t", l.t)?.apply()
         EventLog.add(EventLog.Cat.CAR, "Wygląd z auta: ${l.describe()}")
     }
 }
