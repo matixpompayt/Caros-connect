@@ -506,17 +506,31 @@ private fun MapShell(perms: Perms, actions: Actions, tab: Int, onTab: (Int) -> U
             scaffoldState = scaffold,
             sheetPeekHeight = peek,
             sheetShape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
-            sheetContainerColor = if (C.isGlass) C.Dialog else C.Bg,
+            // Glass: panel ze szkła nad mapą (gładkie – mapa widoczna na żywo, matowe – rozmyta)
+            sheetContainerColor = if (C.isGlass) Color.Transparent else C.Bg,
             sheetContentColor = C.Text,
-            sheetShadowElevation = 18.dp,
+            sheetShadowElevation = if (C.isGlass) 0.dp else 18.dp,
             sheetTonalElevation = 0.dp,
-            sheetDragHandle = {
+            sheetDragHandle = if (C.isGlass) null else ({
                 Box(Modifier.padding(top = 10.dp, bottom = 8.dp).size(42.dp, 5.dp).clip(RoundedCornerShape(3.dp)).background(C.Muted.copy(alpha = 0.45f)))
-            },
+            }),
             containerColor = C.Bg,
             sheetContent = {
                 val scroll = remember(tab) { ScrollState(0) }
-                Column(
+                if (C.isGlass) {
+                    Column(Modifier.fillMaxWidth().mapGlass(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))) {
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Box(Modifier.padding(top = 10.dp, bottom = 8.dp).size(42.dp, 5.dp).clip(RoundedCornerShape(3.dp)).background(C.Text.copy(alpha = 0.40f)))
+                        }
+                        // karty w panelu: lekki odcień, nie kawałek tapety (pod panelem jest mapa)
+                        androidx.compose.runtime.CompositionLocalProvider(LocalGlassDepth provides 1) {
+                            Column(
+                                Modifier.fillMaxWidth().height(sheetH).verticalScroll(scroll).padding(horizontal = 18.dp).padding(bottom = 112.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp),
+                            ) { content() }
+                        }
+                    }
+                } else Column(
                     Modifier.fillMaxWidth().height(sheetH).verticalScroll(scroll).padding(horizontal = 18.dp).padding(bottom = 112.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) { content() }
@@ -525,7 +539,7 @@ private fun MapShell(perms: Perms, actions: Actions, tab: Int, onTab: (Int) -> U
             Box(Modifier.fillMaxSize()) {
                 val lc = liveCar
                 val s = spot ?: lc?.let { Store.Spot(it.lat, it.lon, it.time, 0f, src = Store.SRC_CAR) }
-                if (s != null) ParkMap(s, me, Modifier.fillMaxSize(), bottomInset = if (hidden) 150.dp else peek + 4.dp, liveCar = lc, hideMe = driving && lc != null)
+                if (s != null) ParkMap(s, me, Modifier.fillMaxSize(), bottomInset = if (hidden) 150.dp else peek + 4.dp, liveCar = lc, hideMe = driving && lc != null, backdrop = C.isGlass)
                 else Box(
                     Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(C.Accent.copy(alpha = 0.16f), C.Bg))),
                     contentAlignment = Alignment.TopCenter,

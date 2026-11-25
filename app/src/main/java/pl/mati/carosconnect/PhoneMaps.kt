@@ -187,6 +187,8 @@ private fun personBitmap(ctx: Context) = Model3D.personIcon(0xFF2FD3F0.toInt(), 
 fun ParkMap(
     s: Store.Spot, me: android.location.Location?, modifier: Modifier, live: Boolean = false, bottomInset: androidx.compose.ui.unit.Dp = 0.dp,
     liveCar: CarData.Live? = null, hideMe: Boolean = false,
+    /** Zrzuty mapy dla szklanego panelu nad nią (motyw Glass na Starcie). */
+    backdrop: Boolean = false,
 ) {
     val ctx = LocalContext.current
     var is3d by remember { mutableStateOf(true) }
@@ -243,6 +245,7 @@ fun ParkMap(
         }
     }
     rememberMapLifecycle(h)
+    if (backdrop) MapBackdropCapture(h)
 
     // model auta z CAR OS (typ nadwozia i kolor) – zmienia się razem z ustawieniem w radiu
     val carBody by CarData.carBody.collectAsState()
@@ -1216,4 +1219,33 @@ private fun painterBitmap(
         with(p) { draw(this@draw.size, colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(tint)) }
     }
     return img.asAndroidBitmap()
+}
+
+/** Zrzuty mapy pod szklany panel: przy ruchu kamery (ok. 10/s), po dorysowaniu i co 1,5 s. */
+@Composable
+private fun MapBackdropCapture(h: MapHolder) {
+    val gs by GlassTheme.spec.collectAsState()
+    val frost by androidx.compose.runtime.rememberUpdatedState(gs.frost)
+    DisposableEffect(h, h.ready) {
+        val m = h.map
+        if (!h.ready || m == null) return@DisposableEffect onDispose {}
+        val move = MapLibreMap.OnCameraMoveListener { MapBackdrop.capture(h.view, frost) }
+        val idle = MapLibreMap.OnCameraIdleListener { h.view.postDelayed({ MapBackdrop.capture(h.view, frost, force = true) }, 150) }
+        val done = MapView.OnDidFinishRenderingMapListener { _ -> MapBackdrop.capture(h.view, frost, force = true) }
+        m.addOnCameraMoveListener(move)
+        m.addOnCameraIdleListener(idle)
+        h.view.addOnDidFinishRenderingMapListener(done)
+        onDispose {
+            m.removeOnCameraMoveListener(move)
+            m.removeOnCameraIdleListener(idle)
+            h.view.removeOnDidFinishRenderingMapListener(done)
+            MapBackdrop.clear()
+        }
+    }
+    LaunchedEffect(h.ready, gs.frost) {
+        while (h.ready) {
+            MapBackdrop.capture(h.view, gs.frost, force = true)
+            kotlinx.coroutines.delay(1500)
+        }
+    }
 }

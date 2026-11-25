@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.addOutline
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
@@ -260,6 +261,7 @@ uniform float uRefr;
 uniform float uScale;
 uniform float2 uWall;
 uniform float2 uLightDir;
+uniform float uBand;
 
 float sdRR(float2 p, float2 b, float r) {
     float2 q = abs(p) - b + float2(r, r);
@@ -295,22 +297,33 @@ half4 main(float2 p) {
     float away = clamp(-ndl, 0.0, 1.0);
     rgb = rgb + float3((0.06 + 0.20 * facing) * bend);
     rgb = rgb * (1.0 - 0.12 * away * bend);
-    return half4(half3(clamp(rgb, 0.0, 1.0)), 1.0);
+    // uBand = 1: tylko pas przy krawędzi (w środku przezroczyste – widać żywą mapę pod spodem)
+    float a = mix(1.0, smoothstep(0.0, 0.45, x), uBand);
+    return half4(half3(clamp(rgb, 0.0, 1.0) * a), half(a));
 }
 """
 }
 
 /** Shader jednej karty – tapeta jako wejście, parametry ustawiane przy każdym rysowaniu. */
 @androidx.annotation.RequiresApi(33)
-private class GlassFx(wall: androidx.compose.ui.graphics.ImageBitmap) {
-    private val shader = android.graphics.RuntimeShader(GlassRefraction.AGSL).apply {
-        val b = wall.asAndroidBitmap()
-        setInputShader("wall", android.graphics.BitmapShader(b, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP))
-        setFloatUniform("uWall", b.width.toFloat(), b.height.toFloat())
-    }
+private class GlassFx(wall: androidx.compose.ui.graphics.ImageBitmap?) {
+    private val shader = android.graphics.RuntimeShader(GlassRefraction.AGSL)
     private val brush = androidx.compose.ui.graphics.ShaderBrush(shader)
+    private var cur: android.graphics.Bitmap? = null
 
-    fun draw(ds: androidx.compose.ui.graphics.drawscope.DrawScope, origin: Offset, radius: Float, bevel: Float, refr: Float, scale: Float, light: Offset) {
+    init { wall?.let { setWall(it) } }
+
+    /** Nowy obraz pod szkłem (np. świeży zrzut mapy). */
+    fun setWall(img: androidx.compose.ui.graphics.ImageBitmap) {
+        val b = img.asAndroidBitmap()
+        if (b === cur) return
+        cur = b
+        shader.setInputShader("wall", android.graphics.BitmapShader(b, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP))
+        shader.setFloatUniform("uWall", b.width.toFloat(), b.height.toFloat())
+    }
+
+    fun draw(ds: androidx.compose.ui.graphics.drawscope.DrawScope, origin: Offset, radius: Float, bevel: Float, refr: Float, scale: Float, light: Offset, band: Float = 0f) {
+        shader.setFloatUniform("uBand", band)
         shader.setFloatUniform("uOrigin", origin.x, origin.y)
         shader.setFloatUniform("uSize", ds.size.width, ds.size.height)
         shader.setFloatUniform("uRadius", radius)
@@ -337,5 +350,164 @@ fun Modifier.wallpaperWindow(): Modifier = composed {
             val p = pos.value
             drawImage(s, dstOffset = IntOffset(-p.x.roundToInt(), -p.y.roundToInt()), dstSize = root, filterQuality = FilterQuality.Medium)
         } else drawRect(Color(0xFF0B1026))
+    }
+}
+
+// ======================= szkło nad mapą (panel na Starcie) =======================
+
+/**
+ * Zrzut mapy pod szkłem: mapa jest w TextureView, więc co chwilę (przy ruchu kamery ok. 10 razy na
+ * sekundę, w spoczynku co 1,5 s) kopiujemy jej obraz w 1/3 rozdzielczości. Matowe szkło – dodatkowo rozmyty.
+ */
+object MapBackdrop {
+    var image by mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null)
+    var blurred by mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null)
+    /** Położenie i rozmiar mapy na ekranie (px). */
+    var origin by mutableStateOf(Offset.Zero)
+    var size by mutableStateOf(IntSize.Zero)
+    private val bufs = arrayOfNulls<android.graphics.Bitmap>(2)
+    private var flip = 0
+    private var last = 0L
+
+    private fun texture(v: android.view.View): android.view.TextureView? = when (v) {
+        is android.view.TextureView -> v
+        is android.view.ViewGroup -> (0 until v.childCount).firstNotNullOfOrNull { texture(v.getChildAt(it)) }
+        else -> null
+    }
+
+    fun capture(view: android.view.View, frost: Boolean, force: Boolean = false) {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (!force && now - last < 90) return
+        last = now
+        val tv = texture(view) ?: return
+        if (!tv.isAvailable || tv.width <= 0 || tv.height <= 0) return
+        val w = (tv.width / 3).coerceAtLeast(8)
+        val h = (tv.height / 3).coerceAtLeast(8)
+        flip = 1 - flip
+        val b = bufs[flip]?.takeIf { it.width == w && it.height == h }
+            ?: android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888).also { bufs[flip] = it }
+        try { tv.getBitmap(b) } catch (_: Throwable) { return }
+        val loc = IntArray(2)
+        tv.getLocationOnScreen(loc)
+        origin = Offset(loc[0].toFloat(), loc[1].toFloat())
+        size = IntSize(tv.width, tv.height)
+        image = b.asImageBitmap()
+        blurred = if (frost) blur(b) else null
+    }
+
+    fun clear() {
+        image = null
+        blurred = null
+    }
+
+    /** Mocno rozmyta mała kopia (1/4 zrzutu, 3× rozmycie pudełkowe). */
+    private fun blur(src: android.graphics.Bitmap): androidx.compose.ui.graphics.ImageBitmap? = try {
+        val sw = (src.width / 4).coerceAtLeast(4)
+        val sh = (src.height / 4).coerceAtLeast(4)
+        val small = android.graphics.Bitmap.createScaledBitmap(src, sw, sh, true)
+        val px = IntArray(sw * sh)
+        small.getPixels(px, 0, sw, 0, 0, sw, sh)
+        repeat(3) { boxBlur(px, sw, sh, 3) }
+        small.setPixels(px, 0, sw, 0, 0, sw, sh)
+        small.asImageBitmap()
+    } catch (_: Throwable) {
+        null
+    }
+
+    private fun boxBlur(px: IntArray, w: Int, h: Int, r: Int) {
+        val tmp = IntArray(px.size)
+        fun pass(src: IntArray, dst: IntArray, horizontal: Boolean) {
+            val outer = if (horizontal) h else w
+            val inner = if (horizontal) w else h
+            for (o in 0 until outer) {
+                var ra = 0; var ga = 0; var ba = 0
+                val n = 2 * r + 1
+                fun at(i: Int): Int {
+                    val c = i.coerceIn(0, inner - 1)
+                    return if (horizontal) src[o * w + c] else src[c * w + o]
+                }
+                for (i in -r..r) { val c = at(i); ra += (c shr 16) and 255; ga += (c shr 8) and 255; ba += c and 255 }
+                for (i in 0 until inner) {
+                    val idx = if (horizontal) o * w + i else i * w + o
+                    dst[idx] = (0xFF shl 24) or ((ra / n) shl 16) or ((ga / n) shl 8) or (ba / n)
+                    val add = at(i + r + 1)
+                    val rem = at(i - r)
+                    ra += ((add shr 16) and 255) - ((rem shr 16) and 255)
+                    ga += ((add shr 8) and 255) - ((rem shr 8) and 255)
+                    ba += (add and 255) - (rem and 255)
+                }
+            }
+        }
+        pass(px, tmp, true)
+        pass(tmp, px, false)
+    }
+}
+
+/**
+ * Szkło nad mapą (panel na Starcie). Gładkie: prawie przezroczyste – mapę widać na żywo, a przy
+ * krawędzi zagina się (shader na zrzucie mapy); matowe: rozmyta mapa pod spodem.
+ */
+fun Modifier.mapGlass(shape: Shape): Modifier = composed {
+    val gs by GlassTheme.spec.collectAsState()
+    val frost = gs.frost
+    val light = C.isLight
+    val pos = remember { mutableStateOf(Offset.Zero) }
+    val view = LocalView.current
+    this.onGloballyPositioned {
+        val loc = IntArray(2)
+        view.getLocationOnScreen(loc)
+        pos.value = it.positionInRoot() + Offset(loc[0].toFloat(), loc[1].toFloat())
+    }.drawWithCache {
+        val outline = shape.createOutline(size, layoutDirection, this)
+        val path = Path().apply { addOutline(outline) }
+        val radius = when (outline) {
+            is androidx.compose.ui.graphics.Outline.Rounded -> outline.roundRect.topLeftCornerRadius.x
+            else -> 0f
+        }.coerceIn(0f, minOf(size.width, size.height) / 2f)
+        val bevel = 24.dp.toPx()
+        val refr = (if (frost) 10.dp else 18.dp).toPx()
+        val fx = if (GlassRefraction.supported && android.os.Build.VERSION.SDK_INT >= 33) {
+            try { GlassFx(null) } catch (_: Throwable) { GlassRefraction.broken = true; null }
+        } else null
+        val tint: List<Color> = when {
+            !frost && light -> listOf(Color.White.copy(alpha = 0.58f))
+            !frost -> listOf(Color.Black.copy(alpha = 0.46f), Color.White.copy(alpha = 0.03f))
+            light -> listOf(Color.White.copy(alpha = 0.50f))
+            else -> listOf(Color.Black.copy(alpha = 0.26f), Color.White.copy(alpha = 0.05f))
+        }
+        val sheen = Brush.verticalGradient(
+            0f to Color.White.copy(alpha = if (light) 0.30f else 0.12f),
+            0.12f to Color.Transparent,
+            startY = 0f, endY = size.height,
+        )
+        val rim = Brush.horizontalGradient(
+            0f to Color.White.copy(alpha = if (light) 0.9f else 0.55f),
+            0.5f to Color.White.copy(alpha = if (light) 0.5f else 0.18f),
+            1f to Color.White.copy(alpha = if (light) 0.85f else 0.42f),
+        )
+        val stroke = Stroke(1.3.dp.toPx())
+        onDrawBehind {
+            clipPath(path) {
+                val img = if (frost) MapBackdrop.blurred else MapBackdrop.image
+                val ms = MapBackdrop.size
+                val mo = MapBackdrop.origin
+                val p = pos.value
+                if (img != null && ms.width > 0) {
+                    if (frost) drawImage(
+                        img, dstOffset = IntOffset((mo.x - p.x).roundToInt(), (mo.y - p.y).roundToInt()), dstSize = ms,
+                        filterQuality = FilterQuality.Low,
+                    )
+                    if (fx != null && android.os.Build.VERSION.SDK_INT >= 33) try {
+                        fx.setWall(img)
+                        fx.draw(this, p - mo, radius, bevel, refr, img.width.toFloat() / ms.width, GlassLight.dir, band = if (frost) 0.6f else 1f)
+                    } catch (_: Throwable) {
+                        GlassRefraction.broken = true
+                    }
+                } else if (frost) drawRect(C.Dialog)
+                tint.forEach { drawRect(it) }
+                drawRect(sheen)
+            }
+            drawOutline(outline, rim, style = stroke)
+        }
     }
 }
