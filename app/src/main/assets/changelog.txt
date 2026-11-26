@@ -2,7 +2,7 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
-## next
+## 2.0-beta.37 · 2026-11-26
 Kilka aut z CAR OS
 - Ustawienia → Połączenie → „Moje auta”: dodaj kolejne auto (kod QR z radia CAR OS w tym aucie), zmień nazwę, usuń
 - Na Starcie dotknij nazwy auta (strzałka ▾), żeby wybrać inne – cała aplikacja pokazuje wtedy jego miejsce, dane z radia, trasy i komendy
