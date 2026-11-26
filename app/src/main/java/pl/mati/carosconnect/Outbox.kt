@@ -57,7 +57,17 @@ object Outbox {
 
     fun init(ctx: Context) {
         if (sp != null) return
-        val p = ctx.applicationContext.getSharedPreferences("outbox", Context.MODE_PRIVATE)
+        load(Garage.prefs(ctx, "outbox"))
+    }
+
+    /** Inne auto wybrane – jego kolejka komend (komendy jednego auta nie trafią do drugiego). */
+    fun reload(ctx: Context) {
+        watchers.values.forEach { it.cancel() }
+        watchers.clear()
+        load(Garage.prefs(ctx, "outbox"))
+    }
+
+    private fun load(p: SharedPreferences) {
         sp = p
         items.value = try {
             val a = JSONArray(p.getString("items", "[]"))

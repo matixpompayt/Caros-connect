@@ -130,12 +130,52 @@ object CarData {
     /** Kontekst aplikacji – do powiadomień ze statusu (np. link jazdy na żywo z radia). */
     private var appCtx: Context? = null
 
+    /** Ustawienia powiadomień – wspólne dla wszystkich aut. */
+    private var g: SharedPreferences? = null
+    private val GLOBAL = setOf("n_service", "n_battery", "n_live", "n_frost", "n_work", "n_depart", "frost_hour")
+
     fun init(ctx: Context) {
         if (sp != null) return
+        Garage.init(ctx)
         appCtx = ctx.applicationContext
-        val p = ctx.applicationContext.getSharedPreferences("car", Context.MODE_PRIVATE)
-        sp = p
         dir = ctx.applicationContext.filesDir
+        val gp = ctx.applicationContext.getSharedPreferences("car", Context.MODE_PRIVATE)
+        g = gp
+        notifService.value = gp.getBoolean("n_service", true)
+        notifBattery.value = gp.getBoolean("n_battery", true)
+        notifLive.value = gp.getBoolean("n_live", true)
+        notifFrost.value = gp.getBoolean("n_frost", true)
+        notifWork.value = gp.getBoolean("n_work", true)
+        notifDepart.value = gp.getBoolean("n_depart", true)
+        frostHour.value = gp.getInt("frost_hour", 6)
+        loadCar(Garage.prefs(ctx, "car"))
+    }
+
+    /** Inne auto wybrane – wczytaj jego dane. */
+    fun reload(ctx: Context) {
+        if (g == null) { init(ctx); return }
+        live.value = null
+        weather.value = null
+        nack.value = null
+        car.value = null
+        loadCar(Garage.prefs(ctx, "car"))
+    }
+
+    /** Usunięcie auta z pierwszego pliku: dane auta precz, ustawienia powiadomień zostają. */
+    fun clearCarKeys(p: SharedPreferences) {
+        val ed = p.edit()
+        p.all.keys.filter { it !in GLOBAL }.forEach { ed.remove(it) }
+        ed.apply()
+    }
+
+    /** Plik kopii ustawień radia danego auta. */
+    fun backupName(id: String) = if (id == Garage.FIRST) "caros-backup.json" else "caros-backup@$id.json"
+
+    /** Status z radia (tekst JSON) → dane do wyświetlenia (też dla innych aut, w tle). */
+    fun parse(raw: String): Status? = parseStatus(raw)
+
+    private fun loadCar(p: SharedPreferences) {
+        sp = p
         status.value = p.getString("status", null)?.let { parseStatus(it) }
         p.getString("status", null)?.let { raw -> try { car.value = Proto.carFromStatus(JSONObject(raw)) } catch (_: Exception) {} }
         nack.value = p.getString("nack", null)?.ifBlank { null }
@@ -150,13 +190,6 @@ object CarData {
         lastSync.value = p.getLong("last_sync", 0L)
         meterEnd.value = p.getLong("meter_end", 0L)
         meterStart.value = p.getLong("meter_start", 0L)
-        notifService.value = p.getBoolean("n_service", true)
-        notifBattery.value = p.getBoolean("n_battery", true)
-        notifLive.value = p.getBoolean("n_live", true)
-        notifFrost.value = p.getBoolean("n_frost", true)
-        notifWork.value = p.getBoolean("n_work", true)
-        notifDepart.value = p.getBoolean("n_depart", true)
-        frostHour.value = p.getInt("frost_hour", 6)
         carBody.value = p.getString("car_body", null)
         carPaint.value = if (p.contains("car_paint")) p.getInt("car_paint", 0) else null
         p.getString("weather", null)?.let {
@@ -414,8 +447,29 @@ object CarData {
         o.optString("p").ifBlank { null },
     )
 
-    private fun tripJson(t: Trip): JSONObject = JSONObject()
+    fun tripJson(t: Trip): JSONObject = JSONObject()
         .put("s", t.start).put("e", t.end).put("d", t.distanceM).put("m", t.movingS).put("v", t.maxSpeed).put("p", t.path ?: "")
+
+    /** Trasy innego auta (w tle) – prosto do jego pliku. */
+    fun mergeTripsInto(p: SharedPreferences, incoming: List<Trip>) {
+        if (incoming.isEmpty()) return
+        val map = LinkedHashMap<Long, Trip>()
+        try {
+            val a = JSONArray(p.getString("trips", "[]"))
+            for (i in 0 until a.length()) tripFrom(a.getJSONObject(i)).let { map[it.start] = it }
+        } catch (_: Exception) {
+        }
+        var changed = false
+        for (t in incoming) {
+            val old = map[t.start]
+            val merged = if (old == null) t else t.copy(path = t.path ?: old.path)
+            if (old != merged) { map[t.start] = merged; changed = true }
+        }
+        if (!changed) return
+        val a = JSONArray()
+        map.values.sortedByDescending { it.start }.take(200).forEach { a.put(tripJson(it)) }
+        p.edit().putString("trips", a.toString()).apply()
+    }
 
     fun mergeTrips(incoming: List<Trip>) {
         if (incoming.isEmpty()) return
@@ -437,7 +491,7 @@ object CarData {
 
     // ---------- kopia ustawień ----------
 
-    private fun backupFile() = dir?.let { File(it, "caros-backup.json") }
+    private fun backupFile() = dir?.let { File(it, backupName(Garage.active.value)) }
 
     fun setBackup(text: String, created: Long, car: String) {
         if (created <= backupTime.value) return
@@ -479,11 +533,11 @@ object CarData {
         sp?.edit()?.putLong("meter_start", start)?.putLong("meter_end", end)?.apply()
     }
 
-    fun setNotifLive(v: Boolean) { notifLive.value = v; sp?.edit()?.putBoolean("n_live", v)?.apply() }
-    fun setNotifBattery(v: Boolean) { notifBattery.value = v; sp?.edit()?.putBoolean("n_battery", v)?.apply() }
-    fun setNotifService(v: Boolean) { notifService.value = v; sp?.edit()?.putBoolean("n_service", v)?.apply() }
-    fun setNotifWork(v: Boolean) { notifWork.value = v; sp?.edit()?.putBoolean("n_work", v)?.apply() }
-    fun setNotifDepart(v: Boolean) { notifDepart.value = v; sp?.edit()?.putBoolean("n_depart", v)?.apply() }
-    fun setNotifFrost(v: Boolean) { notifFrost.value = v; sp?.edit()?.putBoolean("n_frost", v)?.apply() }
-    fun setFrostHour(v: Int) { frostHour.value = (v + 24) % 24; sp?.edit()?.putInt("frost_hour", frostHour.value)?.apply() }
+    fun setNotifLive(v: Boolean) { notifLive.value = v; g?.edit()?.putBoolean("n_live", v)?.apply() }
+    fun setNotifBattery(v: Boolean) { notifBattery.value = v; g?.edit()?.putBoolean("n_battery", v)?.apply() }
+    fun setNotifService(v: Boolean) { notifService.value = v; g?.edit()?.putBoolean("n_service", v)?.apply() }
+    fun setNotifWork(v: Boolean) { notifWork.value = v; g?.edit()?.putBoolean("n_work", v)?.apply() }
+    fun setNotifDepart(v: Boolean) { notifDepart.value = v; g?.edit()?.putBoolean("n_depart", v)?.apply() }
+    fun setNotifFrost(v: Boolean) { notifFrost.value = v; g?.edit()?.putBoolean("n_frost", v)?.apply() }
+    fun setFrostHour(v: Int) { frostHour.value = (v + 24) % 24; g?.edit()?.putInt("frost_hour", frostHour.value)?.apply() }
 }

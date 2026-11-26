@@ -92,8 +92,51 @@ object Sync {
             }
         }
         try { updateWeather() } catch (_: Exception) {}
+        // pozostałe auta: miejsce, status, trasy, powiadomienia (serwis, akumulator)
+        try { runOthers(ctx) } catch (_: Exception) {}
         Widgets.updateAll(ctx)
         msg
+    }
+
+    /** Auta inne niż wybrane – wiadomości z ich radia prosto do ich plików (bez przełączania aplikacji). */
+    private fun runOthers(ctx: Context) {
+        val active = Garage.active.value
+        for ((car, p) in Garage.paired(ctx)) {
+            if (car.id == active) continue
+            try {
+                val inbox = Link.fetchInbox(p)
+                val ps = Garage.prefs(ctx, "parking", car.id)
+                val cs = Garage.prefs(ctx, "car", car.id)
+                // miejsce parkowania z radia (nowsze niż zapisane)
+                inbox.park?.let { s ->
+                    val cur = ps.getString("spot", null)?.let { Store.decode(it) }
+                    if (cur == null || cur.time < s.time) {
+                        val hist = try {
+                            val a = org.json.JSONArray(ps.getString("history", "[]"))
+                            (0 until a.length()).mapNotNull { Store.decode(a.getString(it)) }
+                        } catch (_: Exception) { emptyList() }
+                        val a = org.json.JSONArray()
+                        (listOf(s) + hist.filterNot { it.time == s.time }).take(20).forEach { a.put(Store.encode(it)) }
+                        ps.edit().putString("spot", Store.encode(s)).putString("history", a.toString()).apply()
+                        EventLog.add(EventLog.Cat.CAR, "${Garage.label(ctx, car.id)}: nowe miejsce parkowania z radia")
+                    }
+                }
+                inbox.status?.let { raw ->
+                    val t = try { JSONObject(raw).optLong("t") } catch (_: Exception) { 0L }
+                    val oldT = try { ps.let { cs.getString("status", null)?.let { JSONObject(it).optLong("t") } } ?: 0L } catch (_: Exception) { 0L }
+                    if (t >= oldT) cs.edit().putString("status", raw).putLong("last_sync", System.currentTimeMillis()).apply()
+                }
+                CarData.mergeTripsInto(cs, inbox.trips)
+                inbox.live?.let { l ->
+                    cs.edit().putString("live", JSONObject().put("lat", l.lat).put("lon", l.lon).put("spd", l.speed).put("t", l.time).put("m", l.moving).toString()).apply()
+                }
+                val st = cs.getString("status", null)?.let { CarData.parse(it) } ?: continue
+                checkServiceFor(ctx, car.id, st, cs)
+                checkBatteryFor(ctx, car.id, st, cs)
+            } catch (e: Exception) {
+                EventLog.add(EventLog.Cat.SYNC, "${Garage.label(ctx, car.id)}: brak połączenia z przekaźnikiem", throttleKey = "inbox_${car.id}", throttleMs = 30 * 60_000L)
+            }
+        }
     }
 
     /** Temperatura przy aucie i ryzyko szronu (Open-Meteo), najwyżej co 30 min. */
@@ -129,11 +172,16 @@ object Sync {
 
     /** Serwis: najwyżej raz na 3 dni dla danej pozycji i stanu (zbliża się / po terminie). */
     fun checkService(ctx: Context) {
-        if (!CarData.notifService.value) return
         val st = CarData.status.value ?: return
+        val sp = CarData.prefs ?: return
+        checkServiceFor(ctx, null, st, sp)
+    }
+
+    /** Serwis dla auta [car] (null = wybrane). */
+    private fun checkServiceFor(ctx: Context, car: String?, st: CarData.Status, sp: android.content.SharedPreferences) {
+        if (!CarData.notifService.value) return
         val urgent = st.serviceList.filter { it.known && (it.overdue || it.soon) }
         if (urgent.isEmpty()) return
-        val sp = CarData.prefs ?: return
         val now = System.currentTimeMillis()
         val fresh = urgent.filter { s ->
             val key = "svcn_" + s.name + (if (s.overdue) "_o" else "_s")
@@ -145,7 +193,7 @@ object Sync {
         ed.apply()
         val first = urgent.first()
         val more = if (urgent.size > 1) " (+${urgent.size - 1})" else ""
-        Notifs.service(ctx, if (first.overdue) "Serwis po terminie" else "Zbliża się serwis", "${first.name}: ${first.text}$more")
+        Notifs.service(ctx, if (first.overdue) "Serwis po terminie" else "Zbliża się serwis", "${first.name}: ${first.text}$more", car)
     }
 
     /**
@@ -174,13 +222,18 @@ object Sync {
 
     /** Akumulator: powiadomienie o każdym nowym pomiarze „uwaga” / „słaby” z CAR OS (raz na pomiar). */
     fun checkBattery(ctx: Context) {
-        if (!CarData.notifBattery.value) return
-        val b = CarData.status.value?.bat ?: return
-        if (b.level < 1 || System.currentTimeMillis() - b.time > 2 * 86_400_000L) return
+        val st = CarData.status.value ?: return
         val sp = CarData.prefs ?: return
+        checkBatteryFor(ctx, null, st, sp)
+    }
+
+    private fun checkBatteryFor(ctx: Context, car: String?, st: CarData.Status, sp: android.content.SharedPreferences) {
+        if (!CarData.notifBattery.value) return
+        val b = st.bat ?: return
+        if (b.level < 1 || System.currentTimeMillis() - b.time > 2 * 86_400_000L) return
         if (sp.getLong("bat_notified", 0L) >= b.time) return
         sp.edit().putLong("bat_notified", b.time).apply()
-        Notifs.battery(ctx, if (b.level >= 2) "Słaby akumulator" else "Akumulator – uwaga", b.msg)
+        Notifs.battery(ctx, if (b.level >= 2) "Słaby akumulator" else "Akumulator – uwaga", b.msg, car)
     }
 
     /** Szron / mróz: rano o wybranej godzinie (okno 3 h), raz dziennie. */

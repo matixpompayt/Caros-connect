@@ -1457,13 +1457,13 @@ fun SecondaryButton(text: String, icon: ImageVector, modifier: Modifier = Modifi
 fun carPin(): Bitmap = pinBitmap("P")
 
 /** Pinezka z literą / znakiem (P – auto, ⚑ – cel pieszo). */
-fun pinBitmap(label: String): Bitmap {
+fun pinBitmap(label: String, color: Int = android.graphics.Color.rgb(47, 211, 240)): Bitmap {
     val w = 84
     val h = 104
     val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
     val c = Canvas(b)
     val p = Paint(Paint.ANTI_ALIAS_FLAG)
-    p.color = android.graphics.Color.rgb(47, 211, 240)
+    p.color = color
     val path = android.graphics.Path().apply {
         moveTo(w / 2f, h.toFloat())
         lineTo(w / 2f - 16, 70f)

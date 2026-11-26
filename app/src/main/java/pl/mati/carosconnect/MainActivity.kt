@@ -50,6 +50,8 @@ interface Actions {
     fun refreshFromCar()
     /** Pełne odświeżenie (pociągnięcie w dół). Zwraca krótki komunikat dla użytkownika. */
     suspend fun syncNow(): String
+    /** Kolejne auto: nowe, puste auto + skanowanie kodu QR z jego radia. */
+    fun addCar() {}
 }
 
 class MainActivity : ComponentActivity(), Actions {
@@ -80,7 +82,7 @@ class MainActivity : ComponentActivity(), Actions {
         LastMile.init(this)
         SyncWorker.schedule(this)
         Guard.channels(this)
-        if (savedInstanceState == null) { handleShare(intent); openTabFrom(intent); walkFrom(intent); widgetActionFrom(intent); guardFrom(intent) }
+        if (savedInstanceState == null) { carFrom(intent); handleShare(intent); openTabFrom(intent); walkFrom(intent); widgetActionFrom(intent); guardFrom(intent) }
         setContent {
             androidx.compose.foundation.layout.Box {
                 ParkApp(perms.value, this@MainActivity)
@@ -113,13 +115,29 @@ class MainActivity : ComponentActivity(), Actions {
     }
 
     private fun onScanned(text: String?) {
-        if (text == null) return
+        val adding = addingFrom
+        addingFrom = null
+        val newCar = Garage.active.value
+        if (text == null) {
+            adding?.let { Garage.dropIfEmpty(this, newCar, it) }
+            return
+        }
         val p = Link.parse(text)
         if (p == null) {
             Toast.makeText(this, "To nie jest kod CAR OS. W radiu: Ustawienia → Połączenia → CAR OS Connect", Toast.LENGTH_LONG).show()
+            adding?.let { Garage.dropIfEmpty(this, newCar, it) }
+            return
+        }
+        // to radio już jest na liście – wybierz tamto auto zamiast dublować
+        val dup = Garage.paired(this).firstOrNull { (c, cp) -> c.id != newCar && cp.key.contentEquals(p.key) }
+        if (dup != null) {
+            Garage.select(this, dup.first.id)
+            if (adding != null) Garage.remove(this, newCar)
+            Toast.makeText(this, "${Garage.label(this, dup.first.id)} już jest na liście – wybrano je", Toast.LENGTH_LONG).show()
             return
         }
         Store.setPairing(p)
+        Guard.sync(this)
         matchCarByName()
         Toast.makeText(this, "Połączono z ${p.car ?: "CAR OS"}", Toast.LENGTH_LONG).show()
         refreshFromCar()
@@ -146,6 +164,7 @@ class MainActivity : ComponentActivity(), Actions {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        carFrom(intent)
         handleShare(intent)
         openTabFrom(intent)
         walkFrom(intent)
@@ -196,9 +215,24 @@ class MainActivity : ComponentActivity(), Actions {
     private fun guardFrom(i: Intent?) {
         val a = i?.getStringExtra("guard_action") ?: return
         i.removeExtra("guard_action")
-        Guard.quiet(this)
+        Guard.quiet(this, Garage.active.value)
         OpenTab.value = 0
         if (a == "share") Guard.askShare.value = true
+    }
+
+    /** Powiadomienie innego auta (alarm, serwis…) – wybierz to auto. */
+    private fun carFrom(i: Intent?) {
+        val id = i?.getStringExtra("car") ?: return
+        i.removeExtra("car")
+        Garage.select(this, id)
+    }
+
+    /** Dodawanie auta: do którego wrócić, gdy skanowanie anulowano. */
+    private var addingFrom: String? = null
+
+    override fun addCar() {
+        addingFrom = Garage.add(this)
+        scanQr()
     }
 
     private fun openTabFrom(i: Intent?) {

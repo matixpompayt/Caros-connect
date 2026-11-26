@@ -15,7 +15,14 @@ class CarBtReceiver : BroadcastReceiver() {
         Store.init(ctx)
         @Suppress("DEPRECATION")
         val d: BluetoothDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE) ?: return
-        if (!Store.isCar(d.address)) return
+        if (!Store.isCar(d.address)) {
+            // radio innego auta z listy: wsiadasz do niego – aplikacja przełącza się na to auto
+            val other = Garage.carForMac(ctx, d.address) ?: return
+            if (intent.action != BluetoothDevice.ACTION_ACL_CONNECTED || DriveService.running) return
+            CarData.init(ctx)
+            Garage.select(ctx, other)
+            Store.log(ctx, "Połączono z radiem: ${Garage.label(ctx, other)} – wybrano to auto")
+        }
         when (intent.action) {
             BluetoothDevice.ACTION_ACL_CONNECTED -> {
                 Store.linked.value = true

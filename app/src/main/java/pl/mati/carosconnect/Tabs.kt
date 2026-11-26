@@ -883,6 +883,7 @@ fun SettingsTab(perms: Perms, actions: Actions, onPickCar: () -> Unit, onUnpair:
     var busy by remember { mutableStateOf(false) }
 
     Label("Połączenie")
+    CarsSettingItem(actions)
     SettingItem(
         Icons.Rounded.QrCode2, "Połączenie z CAR OS",
         pairing?.let { "Połączono: ${it.car ?: "CAR OS"} – dotknij, aby rozłączyć" } ?: "Niepołączono – zeskanuj kod z radia",

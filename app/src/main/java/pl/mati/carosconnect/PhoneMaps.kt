@@ -72,6 +72,9 @@ import kotlin.math.roundToInt
 import org.maplibre.android.style.expressions.Expression
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 /** Wspólne: MapView MapLibre w trybie TextureView (zaokrąglone rogi, animacje) + cykl życia. */
 private class MapHolder(ctx: Context, onStyle: (MapLibreMap, Style) -> Unit) {
@@ -201,6 +204,8 @@ fun ParkMap(
         MapHolder(ctx) { m, st ->
             val below = CarMapStyle.firstSymbolId(st)
             CarMapStyle.add3dBuildings(st, below)
+            // pozostałe auta z listy – szare pinezki z nazwą (dotknij, żeby wybrać to auto)
+            addOtherCars(st)
             // auto 3D (jak w radiu) + pinezka „P” nad nim
             st.addImage("caros-car-pin", carPin())
             st.addSource(GeoJsonSource("caros-car"))
@@ -246,6 +251,7 @@ fun ParkMap(
     }
     rememberMapLifecycle(h)
     if (backdrop) MapBackdropCapture(h)
+    OtherCars(h)
 
     // model auta z CAR OS (typ nadwozia i kolor) – zmienia się razem z ustawieniem w radiu
     val carBody by CarData.carBody.collectAsState()
@@ -320,6 +326,76 @@ fun ParkMap(
             MapBtn({
                 me?.let { l -> h.map?.animateCamera(CameraUpdateFactory.newLatLng(LatLng(l.latitude, l.longitude)), 700) }
             }) { Icon(Icons.Rounded.MyLocation, "Moja pozycja", tint = C.Text, modifier = Modifier.size(22.dp)) }
+        }
+    }
+}
+
+/** Warstwa pinezek pozostałych aut (pod wybranym autem). */
+private fun addOtherCars(st: Style) {
+    st.addImage("caros-other-pin", pinBitmap("P", android.graphics.Color.rgb(150, 160, 172)))
+    st.addSource(GeoJsonSource("caros-others"))
+    st.addLayer(
+        SymbolLayer("caros-others-layer", "caros-others").withProperties(
+            PropertyFactory.iconImage("caros-other-pin"),
+            PropertyFactory.iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+            PropertyFactory.iconSize(0.62f),
+            PropertyFactory.iconAllowOverlap(true),
+            PropertyFactory.iconIgnorePlacement(true),
+            PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
+            PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
+            PropertyFactory.textField(Expression.get("n")),
+            PropertyFactory.textSize(12f),
+            PropertyFactory.textColor(android.graphics.Color.WHITE),
+            PropertyFactory.textHaloColor(android.graphics.Color.argb(220, 10, 12, 15)),
+            PropertyFactory.textHaloWidth(1.6f),
+            PropertyFactory.textFont(arrayOf("Noto Sans Bold")),
+            PropertyFactory.textAnchor(Property.TEXT_ANCHOR_TOP),
+            PropertyFactory.textOffset(arrayOf(0f, 0.3f)),
+            PropertyFactory.textAllowOverlap(true),
+            PropertyFactory.textIgnorePlacement(true),
+            PropertyFactory.textPitchAlignment(Property.TEXT_PITCH_ALIGNMENT_VIEWPORT),
+        ),
+    )
+}
+
+/** Gdzie są pozostałe auta: jadą (pozycja na żywo z ostatnich 10 min) albo stoją (miejsce parkowania). */
+private fun otherCarFeatures(ctx: Context): List<Feature> {
+    val now = System.currentTimeMillis()
+    return Garage.cars.value.filter { it.id != Garage.active.value }.mapNotNull { c ->
+        val live = Garage.prefs(ctx, "car", c.id).getString("live", null)?.let {
+            try {
+                val o = org.json.JSONObject(it)
+                if (o.optBoolean("m") && now - o.optLong("t") < 10 * 60_000L) o.getDouble("lat") to o.getDouble("lon") else null
+            } catch (_: Exception) { null }
+        }
+        val pos = live ?: Garage.spotOf(ctx, c.id)?.let { it.lat to it.lon } ?: return@mapNotNull null
+        Feature.fromGeometry(point(pos.first, pos.second)).apply {
+            addStringProperty("n", Garage.label(ctx, c.id))
+            addStringProperty("id", c.id)
+        }
+    }
+}
+
+@Composable
+private fun OtherCars(h: MapHolder) {
+    val ctx = LocalContext.current
+    val active by Garage.active.collectAsState()
+    val ver by Garage.version.collectAsState()
+    LaunchedEffect(h.ready, active, ver) {
+        if (!h.ready) return@LaunchedEffect
+        while (true) {
+            val f = withContext(Dispatchers.IO) { otherCarFeatures(ctx) }
+            h.style?.getSourceAs<GeoJsonSource>("caros-others")?.setGeoJson(FeatureCollection.fromFeatures(f))
+            delay(30_000)
+        }
+    }
+    LaunchedEffect(h.ready) {
+        if (!h.ready) return@LaunchedEffect
+        val m = h.map ?: return@LaunchedEffect
+        m.addOnMapClickListener { ll ->
+            val hit = m.queryRenderedFeatures(m.projection.toScreenLocation(ll), "caros-others-layer").firstOrNull()
+            val id = hit?.getStringProperty("id")
+            if (id != null) { Garage.select(ctx, id); true } else false
         }
     }
 }

@@ -81,33 +81,45 @@ object Store {
     val spotNote = MutableStateFlow("")
     val spotPhoto = MutableStateFlow<String?>(null)
 
+    /** Dane aktywnego auta (pierwsze auto – „parking”, kolejne – „parking@id”, patrz [Garage]). */
     private var sp: SharedPreferences? = null
+    /** Ustawienia aplikacji – wspólne dla wszystkich aut (wygląd, ekran główny, dziennik). */
+    private var g: SharedPreferences? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Klucze wspólne (nie należą do auta) – zostają przy usuwaniu pierwszego auta. */
+    private val GLOBAL = setOf("theme", "layout", "min_range", "park_log", "skip_pair")
 
     fun init(ctx: Context) {
         if (sp != null) return
-        val p = ctx.applicationContext.getSharedPreferences("parking", Context.MODE_PRIVATE)
-        sp = p
-        carMac.value = p.getString("car_mac", null)
+        Garage.init(ctx)
+        val gp = ctx.applicationContext.getSharedPreferences("parking", Context.MODE_PRIVATE)
+        g = gp
         loadLog()
         EventLog.init(ctx)
         EventLog.importOld(parkLog.value)
+        theme.value = gp.getString("theme", "auto") ?: "auto"
+        layout.value = gp.getString("layout", "car") ?: "car"
+        minRange.value = gp.getInt("min_range", 100)
+        skippedPairing.value = gp.getBoolean("skip_pair", false)
+        loadCar(Garage.prefs(ctx, "parking"))
+    }
+
+    /** Inne auto wybrane – wczytaj jego dane. */
+    fun reload(ctx: Context) {
+        if (g == null) { init(ctx); return }
+        driving.value = false
+        linked.value = false
+        loadCar(Garage.prefs(ctx, "parking"))
+    }
+
+    private fun loadCar(p: SharedPreferences) {
+        sp = p
+        carMac.value = p.getString("car_mac", null)
         carName.value = p.getString("car_name", null)
-        theme.value = p.getString("theme", "auto") ?: "auto"
-        layout.value = p.getString("layout", "car") ?: "car"
-        minRange.value = p.getInt("min_range", 100)
         spotNote.value = p.getString("spot_note", "") ?: ""
         spotPhoto.value = p.getString("spot_photo", null)
-        skippedPairing.value = p.getBoolean("skip_pair", false)
-        pairing.value = p.getString("pairing", null)?.let { raw ->
-            try {
-                val o = JSONObject(raw)
-                Link.Pairing(
-                    android.util.Base64.decode(o.getString("k"), android.util.Base64.NO_WRAP),
-                    o.optString("bt").ifBlank { null }, o.optString("car").ifBlank { null }, o.optString("drv").ifBlank { null },
-                )
-            } catch (_: Exception) { null }
-        }
+        pairing.value = decodePairing(p.getString("pairing", null))
         spot.value = p.getString("spot", null)?.let { decode(it) }
         history.value = try {
             val a = JSONArray(p.getString("history", "[]"))
@@ -115,6 +127,23 @@ object Store {
         } catch (_: Exception) {
             emptyList()
         }
+    }
+
+    /** Usunięcie auta z pierwszego pliku: dane auta precz, ustawienia aplikacji zostają. */
+    fun clearCarKeys(p: SharedPreferences) {
+        val ed = p.edit()
+        p.all.keys.filter { it !in GLOBAL }.forEach { ed.remove(it) }
+        ed.apply()
+    }
+
+    fun decodePairing(raw: String?): Link.Pairing? = raw?.let {
+        try {
+            val o = JSONObject(it)
+            Link.Pairing(
+                android.util.Base64.decode(o.getString("k"), android.util.Base64.NO_WRAP),
+                o.optString("bt").ifBlank { null }, o.optString("car").ifBlank { null }, o.optString("drv").ifBlank { null },
+            )
+        } catch (_: Exception) { null }
     }
 
     fun setCar(mac: String, name: String) {
@@ -127,7 +156,8 @@ object Store {
         pairing.value = p
         val ed = sp?.edit() ?: return
         if (p == null) {
-            ed.remove("pairing").putBoolean("skip_pair", false)
+            ed.remove("pairing")
+            g?.edit()?.putBoolean("skip_pair", false)?.apply()
             skippedPairing.value = false
         } else {
             ed.putString(
@@ -142,17 +172,17 @@ object Store {
     fun setMinRange(v: Int) {
         val x = v.coerceIn(20, 300)
         minRange.value = x
-        sp?.edit()?.putInt("min_range", x)?.apply()
+        g?.edit()?.putInt("min_range", x)?.apply()
     }
 
     fun setTheme(v: String) {
         theme.value = v
-        sp?.edit()?.putString("theme", v)?.apply()
+        g?.edit()?.putString("theme", v)?.apply()
     }
 
     fun setLayout(v: String) {
         layout.value = v
-        sp?.edit()?.putString("layout", v)?.apply()
+        g?.edit()?.putString("layout", v)?.apply()
     }
 
     fun setNote(text: String) {
@@ -199,7 +229,7 @@ object Store {
 
     fun skipPairing() {
         skippedPairing.value = true
-        sp?.edit()?.putBoolean("skip_pair", true)?.apply()
+        g?.edit()?.putBoolean("skip_pair", true)?.apply()
     }
 
     /** Pozycja wysłana przez radio – przyjmij, jeśli nowsza niż zapisana. */
@@ -237,14 +267,14 @@ object Store {
         val line = LOG_FMT.format(java.util.Date()) + "  " + msg
         val list = (listOf(line) + parkLog.value).take(50)
         parkLog.value = list
-        sp?.edit()?.putString("park_log", JSONArray(list).toString())?.apply()
+        g?.edit()?.putString("park_log", JSONArray(list).toString())?.apply()
         android.util.Log.i("CarOsConnect", msg)
         EventLog.add(EventLog.catOfParkLine(msg), msg, EventLog.isErrorText(msg))
         if (msg.startsWith("Połączono z radiem")) EventLog.bump(EventLog.Metric.DRIVES)
     }
 
     fun loadLog() {
-        val raw = sp?.getString("park_log", null) ?: return
+        val raw = g?.getString("park_log", null) ?: return
         parkLog.value = try { JSONArray(raw).let { a -> List(a.length()) { a.getString(it) } } } catch (_: Exception) { emptyList() }
     }
 
@@ -261,8 +291,11 @@ object Store {
         val app = ctx.applicationContext
         Widgets.updateAll(app)
         if (!s.manual) Notifs.parked(app, s)
+        val file = sp
         scope.launch {
             val addr = Locator.address(app, s.lat, s.lon) ?: return@launch
+            // w międzyczasie wybrano inne auto – adres nie dla niego
+            if (sp !== file) return@launch
             val cur = spot.value
             val updated = s.copy(address = addr)
             if (cur != null && cur.time == s.time) spot.value = updated
@@ -287,12 +320,12 @@ object Store {
             ?.apply()
     }
 
-    private fun encode(s: Spot): String = JSONObject()
+    fun encode(s: Spot): String = JSONObject()
         .put("lat", s.lat).put("lon", s.lon).put("t", s.time).put("acc", s.accuracy.toDouble())
         .put("a", s.address ?: "").put("m", s.manual).put("src", s.src)
         .toString()
 
-    private fun decode(raw: String): Spot? = try {
+    fun decode(raw: String): Spot? = try {
         val o = JSONObject(raw)
         Spot(
             o.getDouble("lat"), o.getDouble("lon"), o.getLong("t"), o.optDouble("acc", 0.0).toFloat(),

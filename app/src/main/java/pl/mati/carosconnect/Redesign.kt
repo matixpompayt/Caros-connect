@@ -381,7 +381,7 @@ fun HomeHero(perms: Perms, actions: Actions, spot: Store.Spot?, me: Location?, d
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("CAR OS", fontSize = 12.sp, color = C.Accent, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
-                Text(pairing?.car ?: "Moje auto", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                CarTitle(30.sp, actions)
                 Text(statusLine(spot, me, driving), fontSize = 14.sp, color = C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             StatusPill(driving, carName)
@@ -399,7 +399,7 @@ fun MapSheetHeader(perms: Perms, actions: Actions, spot: Store.Spot?, me: Locati
     val pairing by Store.pairing.collectAsState()
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Column {
-            Text(pairing?.car ?: "Moje auto", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            CarTitle(24.sp, actions)
             Text(statusLine(spot, me, driving), fontSize = 14.sp, color = C.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         RangeLine(center = false)
@@ -447,7 +447,7 @@ fun MiniSheetBar(onOpen: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Icon(Icons.Rounded.KeyboardArrowUp, "Wysuń", tint = C.Accent, modifier = Modifier.size(26.dp))
-        Text(pairing?.car ?: "Moje auto", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(activeCarLabel(), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         if (range != null) Text("$range km", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Accent)
     }
 }

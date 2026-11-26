@@ -2,6 +2,16 @@
 # "## next" = wersja w przygotowaniu: GitHub Actions przy budowaniu wstawia numer wersji i datę.
 # Pierwsza linia pod nagłówkiem = tytuł, linie z "- " = punkty.
 
+## next
+Kilka aut z CAR OS
+- Ustawienia → Połączenie → „Moje auta”: dodaj kolejne auto (kod QR z radia CAR OS w tym aucie), zmień nazwę, usuń
+- Na Starcie dotknij nazwy auta (strzałka ▾), żeby wybrać inne – cała aplikacja pokazuje wtedy jego miejsce, dane z radia, trasy i komendy
+- Wsiadasz do innego auta (Bluetooth jego radia) – aplikacja sama przełącza się na to auto i jak zawsze zapisuje parkowanie
+- Na mapie szare pinezki z nazwą pozostałych aut (stoją albo jadą); dotknij pinezki, żeby wybrać to auto
+- Alarm „auto jedzie bez Ciebie” czuwa nad wszystkimi autami naraz (jedno połączenie), też gdy jedziesz innym; w powiadomieniu nazwa auta
+- W tle synchronizują się wszystkie auta: miejsce parkowania, status, trasy, przypomnienia o serwisie i akumulatorze (z nazwą auta)
+- Pierwsze auto zostaje z dotychczasowymi danymi – nic nie trzeba parować od nowa
+
 ## 2.0-beta.36 · 2026-11-25
 - Wspólny wygląd: animacje (kropla w menu) już się nie synchronizują między telefonem a radiem – każde urządzenie ma swoje ustawienie (telefon mocniejszy, radio słabsze); Glass, styl szkła, jasny / ciemny i kolor akcentu dalej wspólne
 

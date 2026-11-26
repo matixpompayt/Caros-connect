@@ -83,11 +83,15 @@ object Notifs {
         )
     }
 
-    private fun openApp(ctx: Context): PendingIntent = PendingIntent.getActivity(
-        ctx, 0,
-        Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+    private fun openApp(ctx: Context, car: String? = null): PendingIntent = PendingIntent.getActivity(
+        ctx, if (car == null) 0 else 400 + Garage.index(car),
+        Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .apply { if (car != null) putExtra("car", car) },
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
+
+    /** Osobny numer powiadomienia dla każdego auta (drugie auto nie zastąpi pierwszego). */
+    fun carId(base: Int, car: String?): Int = if (car == null || car == Garage.FIRST) base else base + 1000 * (Garage.index(car) + 1)
 
     fun walkIntent(s: Store.Spot): Intent =
         Intent(Intent.ACTION_VIEW, Uri.parse(String.format(Locale.US, "google.navigation:q=%.6f,%.6f&mode=w", s.lat, s.lon)))
@@ -157,22 +161,24 @@ object Notifs {
         try { nm.notify(ID_PARK, n) } catch (_: SecurityException) {}
     }
 
-    private fun simple(ctx: Context, ch: String, id: Int, icon: Int, title: String, text: String) {
+    private fun simple(ctx: Context, ch: String, id: Int, icon: Int, title: String, text: String, car: String? = null) {
         channels(ctx)
         val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
+        // przy kilku autach – z nazwą auta, a dotknięcie wybiera to auto
+        val t = if (car != null && Garage.cars.value.size > 1) "${Garage.label(ctx, car)}: $title" else title
         val n = Notification.Builder(ctx, ch)
             .setSmallIcon(icon)
-            .setContentTitle(title)
+            .setContentTitle(t)
             .setContentText(text)
             .setStyle(Notification.BigTextStyle().bigText(text))
-            .setContentIntent(openApp(ctx))
+            .setContentIntent(openApp(ctx, car))
             .setAutoCancel(true)
             .build()
-        try { nm.notify(id, n) } catch (_: SecurityException) {}
+        try { nm.notify(carId(id, car), n) } catch (_: SecurityException) {}
     }
 
-    fun service(ctx: Context, title: String, text: String) =
-        simple(ctx, CH_SERVICE, ID_SERVICE, android.R.drawable.ic_dialog_info, title, text)
+    fun service(ctx: Context, title: String, text: String, car: String? = null) =
+        simple(ctx, CH_SERVICE, ID_SERVICE, android.R.drawable.ic_dialog_info, title, text, car)
 
     fun weather(ctx: Context, title: String, text: String) =
         simple(ctx, CH_WEATHER, ID_WEATHER, android.R.drawable.ic_dialog_alert, title, text)
@@ -187,8 +193,8 @@ object Notifs {
         try { ctx.getSystemService(NotificationManager::class.java)?.cancel(ID_LIVE) } catch (_: Exception) {}
     }
 
-    fun battery(ctx: Context, title: String, text: String) =
-        simple(ctx, CH_BATTERY, ID_BATTERY, android.R.drawable.ic_dialog_alert, title, text)
+    fun battery(ctx: Context, title: String, text: String, car: String? = null) =
+        simple(ctx, CH_BATTERY, ID_BATTERY, android.R.drawable.ic_dialog_alert, title, text, car)
 
     fun fuel(ctx: Context, title: String, text: String) =
         simple(ctx, CH_FUEL, ID_FUEL, android.R.drawable.ic_dialog_info, title, text)
